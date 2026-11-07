@@ -1,0 +1,183 @@
+service: settings
+tutorials:
+  - {title: Add settings, path: /develop/settings/}
+layer: core
+acts_on: game
+lifetime: process
+brief: "Reads and changes your mod's settings, and reports when they change."
+description: |
+  You declare your mod's settings in its manifest under `settings`. Each
+  setting has a key, a kind, a default value, and any options that its kind
+  needs:
+
+  | Kind | Value | Options in the manifest |
+  | --- | --- | --- |
+  | `toggle` | `true` or `false` | |
+  | `integer` | A whole number | `min` and `max`, both optional |
+  | `number` | A number | `min` and `max`, both optional |
+  | `text` | Text | `max_length` in bytes, optional |
+  | `choice` | One word from a list | `choices`, the list |
+  | `set` | Any number of words from a list | `choices`, the list |
+
+  A setting can also have a `name` and a `description` for the settings
+  screen, and `"public": true` if other mods should be able to read it. Players
+  change settings in the game's Settings tabs or on your mod's page.
+
+  Tsuchi stores the player's values in the save data, next to your mod's saved
+  data. It reads them before your mod starts if the save data is available,
+  and as soon as possible otherwise. Each value that arrives late is reported
+  as a change. A value is written to the save data shortly after it changes.
+  If the save data has a value that the manifest no longer allows, then it is
+  ignored and the setting uses its default.
+
+  Your mod reads and changes its own settings by key. To read another mod's
+  public setting, use `<mod id>:<key>`. You can't change another mod's
+  settings.
+
+functions:
+  - name: toggle
+    doc: "A toggle's value."
+    owns: true
+    params:
+      - {name: key, type: text, doc: "The setting's key."}
+    returns: {type: bool, doc: The value.}
+    fails:
+      not_found: "The setting or the mod doesn't exist."
+      invalid: "The setting is a different kind."
+      denied: "The setting belongs to another mod and isn't public."
+    users: [groink, online-coop]
+
+  - name: integer
+    doc: "An integer's value."
+    owns: true
+    params:
+      - {name: key, type: text, doc: "The setting's key."}
+    returns: {type: i64, doc: The value.}
+    fails:
+      not_found: "The setting or the mod doesn't exist."
+      invalid: "The setting is a different kind."
+      denied: "The setting belongs to another mod and isn't public."
+    users: [groink, online-coop]
+
+  - name: number
+    doc: "A number's value."
+    owns: true
+    params:
+      - {name: key, type: text, doc: "The setting's key."}
+    returns: {type: f32, doc: The value.}
+    fails:
+      not_found: "The setting or the mod doesn't exist."
+      invalid: "The setting is a different kind."
+      denied: "The setting belongs to another mod and isn't public."
+    users: [groink, online-coop]
+
+  - name: text
+    doc: "The value of a `text` setting, or the word that a `choice` setting is set to."
+    owns: true
+    params:
+      - {name: key, type: text, doc: "The setting's key."}
+    returns: {type: text, doc: The value.}
+    fails:
+      not_found: "The setting or the mod doesn't exist."
+      invalid: "The setting is a different kind."
+      denied: "The setting belongs to another mod and isn't public."
+    users: [groink, online-coop]
+
+  - name: has
+    doc: "Checks if a `set` setting contains one of its words."
+    owns: true
+    params:
+      - {name: key, type: text, doc: "The setting's key."}
+      - {name: word, type: text, doc: "One of the setting's choices."}
+    returns: {type: bool, doc: "`true` if the set contains it."}
+    fails:
+      not_found: "The setting or the mod doesn't exist."
+      invalid: "The setting is a different kind, or the word isn't one of its choices."
+      denied: "The setting belongs to another mod and isn't public."
+    users: [groink, online-coop]
+
+  - name: set_toggle
+    doc: "Changes a toggle."
+    owns: true
+    params:
+      - {name: key, type: text, doc: "The setting's key."}
+      - {name: value, type: bool, doc: The new value.}
+    fails:
+      not_found: "Your mod has no setting with that key."
+      invalid: "The setting is a different kind."
+      denied: "The setting belongs to another mod."
+    users: [groink, online-coop]
+
+  - name: set_integer
+    doc: "Changes an integer."
+    owns: true
+    params:
+      - {name: key, type: text, doc: "The setting's key."}
+      - {name: value, type: i64, doc: The new value.}
+    fails:
+      not_found: "Your mod has no setting with that key."
+      invalid: "The setting is a different kind, or the value is below its `min` or above its `max`."
+      denied: "The setting belongs to another mod."
+    users: [groink, online-coop]
+
+  - name: set_number
+    doc: "Changes a number."
+    owns: true
+    params:
+      - {name: key, type: text, doc: "The setting's key."}
+      - {name: value, type: f32, doc: The new value.}
+    fails:
+      not_found: "Your mod has no setting with that key."
+      invalid: "The setting is a different kind, or the value is below its `min` or above its `max`."
+      denied: "The setting belongs to another mod."
+    users: [groink, online-coop]
+
+  - name: set_text
+    doc: "Changes a `text` setting, or sets a `choice` setting to another one of its words."
+    owns: true
+    params:
+      - {name: key, type: text, doc: "The setting's key."}
+      - {name: value, type: text, doc: "The new text, or the word to set it to."}
+    fails:
+      not_found: "Your mod has no setting with that key."
+      invalid: "The setting is a different kind, the text is longer than its `max_length`, or the word isn't one of its choices."
+      no_memory: "The game is out of memory."
+      denied: "The setting belongs to another mod."
+    users: [groink, online-coop]
+
+  - name: set_has
+    doc: "Adds one of its words to a `set` setting, or removes it."
+    owns: true
+    params:
+      - {name: key, type: text, doc: "The setting's key."}
+      - {name: word, type: text, doc: "One of the setting's choices."}
+      - {name: value, type: bool, doc: "`true` to add it, or `false` to remove it."}
+    fails:
+      not_found: "Your mod has no setting with that key."
+      invalid: "The setting is a different kind, or the word isn't one of its choices."
+      denied: "The setting belongs to another mod."
+    users: [groink, online-coop]
+
+  - name: reset
+    doc: "Resets a setting to its default value."
+    owns: true
+    params:
+      - {name: key, type: text, doc: "The setting's key."}
+    fails:
+      not_found: "Your mod has no setting with that key."
+      no_memory: "The game is out of memory."
+      denied: "The setting belongs to another mod."
+    users: [groink, online-coop]
+
+events:
+  - name: changed
+    doc: |
+      Emitted when a setting's value has changed, either from a call or because the
+      value in the save data arrived after your mod started. Setting a value to what
+      it already is doesn't change anything. Your handler is called at the start of
+      the next world step. Every listener receives every mod's changes, so use `mod` to
+      check which mod the setting belongs to.
+    fields:
+      - {name: mod, type: text, doc: "The ID of the mod that the setting belongs to."}
+      - {name: key, type: text, doc: "The setting's key."}
+    users: [groink, online-coop]

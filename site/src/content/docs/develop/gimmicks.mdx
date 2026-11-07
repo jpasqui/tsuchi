@@ -1,0 +1,81 @@
+---
+title: Change work objects
+description: Inspect gates, builds, switches, doors, and other work objects.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+Start with [your first mod](/develop/first-mod/). Wait for a world before you call
+[`gimmicks.list`](/reference/gimmicks/#list), then inspect each actor with
+[`gimmicks.describe`](/reference/gimmicks/#describe).
+
+## Changes
+
+Choose the call that matches the object. Use `break_gate` for a gate and `build`
+for a clay build. Use `press` for a switch, and `open` or `close` for a trigger
+door. Use `finish` for a pot, planter, dirt mound, drain plug, push-down wall,
+vent, crush jelly, or warp-carry tunnel.
+
+These changes are permanent. Stopping your mod doesn't revert them, and the game
+can keep them in the area's save. Test changes on an isolated save.
+
+An object can return `busy` during a cutscene or while it moves. Retry on a later
+world step. A repeatable switch changes sides when you press it again. A one-shot
+switch cannot be released. A clay build's progress can only increase.
+
+## Events
+
+Subscribe to [`gimmicks.changed`](/reference/gimmicks/#changed) before making a
+change. Tsuchi compares the state once per world step. The first observation is
+the baseline, so a newly listed actor doesn't emit an event. Changes made by the
+game and by your mod use the same event.
+
+For example, log when a work object reaches completion.
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua title="main.lua"
+gimmicks.on_changed(function(event)
+    if event.done and not event.previous_done then
+        mod.log(event.kind .. " finished")
+    end
+end)
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```js title="main.js"
+gimmicks.on("changed", (event) => {
+    if (event.done && !event.previous_done) {
+        mod.log(event.kind + " finished");
+    }
+});
+```
+
+</TabItem>
+<TabItem label="C">
+
+```c title="source/main.c"
+#include <tsuchi/tsuchi.h>
+static const TSUCHI_Host *host;
+static TSUCHI_Mod *owner;
+
+static void changed(void *user, const TSUCHI_GimmicksChanged *event) {
+    (void)user;
+    if (event->done && !event->previous_done) {
+        host->mod->log(owner, event->kind);
+    }
+}
+
+TSUCHI_Result tsuchi_mod_start(const TSUCHI_Host *api, TSUCHI_Mod *mod) {
+    host = api;
+    owner = mod;
+    TSUCHI_Subscription subscription;
+    return host->gimmicks->on_changed(mod, changed, 0, &subscription);
+}
+```
+
+</TabItem>
+</Tabs>

@@ -1,0 +1,122 @@
+service: effects
+layer: engine
+acts_on: effect
+lifetime: world
+brief: "Plays particle effects and stops them when your mod stops."
+description: |
+  An effect is one playback of a loaded particle asset. The catalog is built once
+  after a world starts. Asset names are IDs. Names shared by several loaded assets
+  are refused with `busy`, so an effect never selects an arbitrary asset.
+  Each playback belongs to your mod. Effects end when your mod stops, the world
+  unloads, or their parent leaves play. Loops continue until you stop them.
+enums:
+  EffectKind:
+    open: true
+    doc: "A loaded particle asset's name."
+  EffectParameter:
+    open: true
+    doc: "The name of a particle parameter."
+  ParameterKind:
+    open: false
+    doc: "The shape of a particle parameter."
+    values:
+      - {name: scalar, value: 0, doc: "One number in x."}
+      - {name: vector, value: 1, doc: "Three numbers in x, y, and z."}
+      - {name: color, value: 2, doc: "Linear red, green, blue, and alpha in x, y, z, and w."}
+  EffectEnd:
+    open: false
+    doc: "Why an effect ended."
+    values:
+      - {name: natural, value: 0, doc: "The particles finished."}
+      - {name: stopped, value: 1, doc: "Your mod stopped the effect."}
+      - {name: parent_lost, value: 2, doc: "The parent left play or changed its root."}
+      - {name: world_unloaded, value: 3, doc: "The world unloaded."}
+      - {name: lost, value: 4, doc: "The emitter no longer exists."}
+structs:
+  ParticleValue:
+    doc: "A particle parameter's value. Unused lanes are zero."
+    fields:
+      - {name: x, type: f32, doc: "The first number."}
+      - {name: y, type: f32, doc: "The second number."}
+      - {name: z, type: f32, doc: "The third number."}
+      - {name: w, type: f32, doc: "The fourth number."}
+functions:
+  - name: list
+    doc: "Lists the particle asset IDs loaded when this world started."
+    returns: {type: list<text>, doc: "The effect IDs."}
+    fails:
+      not_ready: "No world has started, or the catalog is not ready."
+    users: [groink, online-coop]
+  - name: play
+    owns: true
+    doc: "Plays an effect at a world position in centimeters. Your mod holds it until it ends or you stop it."
+    params:
+      - {name: kind, type: enum<EffectKind>, doc: "An ID from list."}
+      - {name: location, type: vec3, doc: "The world position, with z up."}
+    returns: {type: handle<effect>, doc: "The playback."}
+    fails:
+      invalid: "The ID is malformed, or the position is not finite."
+      not_found: "The asset no longer exists, or the ID names no loaded asset."
+      busy: "Several loaded assets have this name."
+      not_ready: "The world or effect manager is not ready."
+      unsupported: "The asset requires the game's special water or single-emitter handling."
+    users: [groink, online-coop]
+  - name: play_on
+    owns: true
+    doc: "Plays an effect attached to an actor's root. The offset is relative to the root, in centimeters. The effect stops before the parent is pooled or destroyed."
+    params:
+      - {name: kind, type: enum<EffectKind>, doc: "An ID from list."}
+      - {name: parent, type: handle<actor>, doc: "The parent actor."}
+      - {name: offset, type: vec3, doc: "The offset from the actor's root."}
+    returns: {type: handle<effect>, doc: "The playback."}
+    fails:
+      invalid: "The ID is malformed, the object is not an actor, or the offset is not finite."
+      not_found: "The actor or asset no longer exists, or the ID names no loaded asset."
+      busy: "Several loaded assets have this name."
+      not_ready: "The world, actor root, or effect manager is not ready."
+      unsupported: "The asset requires special handling, or the actor's lifecycle cannot be observed."
+    users: [groink, online-coop]
+  - name: parameter
+    owns: true
+    doc: "Reads a parameter your mod set on this effect. This does not read defaults inside the particle asset."
+    params:
+      - {name: effect, type: handle<effect>, doc: "Your playback."}
+      - {name: name, type: enum<EffectParameter>, doc: "The parameter ID."}
+      - {name: kind, type: enum<ParameterKind>, doc: "The parameter's shape."}
+    returns: {type: struct<ParticleValue>, doc: "The last value you set."}
+    fails:
+      invalid: "The ID or shape is invalid."
+      not_found: "The playback has ended, or this parameter has not been set."
+      denied: "Another mod owns the playback."
+    users: [groink, online-coop]
+  - name: set_parameter
+    owns: true
+    doc: "Sets a particle parameter. The asset must use the parameter for the change to appear."
+    params:
+      - {name: effect, type: handle<effect>, doc: "Your playback."}
+      - {name: name, type: enum<EffectParameter>, doc: "The parameter ID."}
+      - {name: kind, type: enum<ParameterKind>, doc: "The parameter's shape."}
+      - {name: value, type: struct<ParticleValue>, doc: "Finite numbers in the lanes the shape uses."}
+    fails:
+      invalid: "The ID, shape, or value is invalid."
+      not_found: "The playback has ended, or the parameter ID has no engine name."
+      denied: "Another mod owns the playback."
+      not_ready: "The particle component is not ready."
+      busy: "A parameter change on this playback is still running."
+    users: [groink, online-coop]
+  - name: stop
+    owns: true
+    doc: "Stops your effect immediately and releases its hold."
+    params:
+      - {name: effect, type: handle<effect>, doc: "Your playback."}
+    fails:
+      not_found: "The playback has ended."
+      denied: "Another mod owns the playback."
+    users: [groink, online-coop]
+events:
+  - name: finished
+    doc: "Emitted at the next world step when an effect ends, including effects stopped by a mod or parent loss. The handle no longer works. A stopped mod receives no events."
+    fields:
+      - {name: effect, type: handle<effect>, doc: "The ended playback."}
+      - {name: reason, type: enum<EffectEnd>, doc: "Why it ended."}
+    users: [groink, online-coop]

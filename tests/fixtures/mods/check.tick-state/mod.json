@@ -1,0 +1,20 @@
+{
+  "id": "check.tick-state",
+  "name": "Requested tick restoration",
+  "version": "1.0.0",
+  "meta": {
+    "check": "tick-state",
+    "check_explicit": true,
+    "checks": [
+      "locator",
+      "components",
+      "all_disabled",
+      "ai_disabled",
+      "mover_disabled",
+      "movement_disabled",
+      "early_release",
+      "halt_release",
+      "removed"
+    ]
+  }
+}

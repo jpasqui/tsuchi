@@ -1,0 +1,8 @@
+{
+  "id": "check.app",
+  "name": "Check app",
+  "version": "2.0.0",
+  "framework": 0,
+  "requires": {"check.library": "1.2.0"},
+  "optional": {"check.absent": "*"}
+}

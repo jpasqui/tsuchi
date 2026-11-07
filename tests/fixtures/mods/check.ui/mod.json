@@ -1,0 +1,59 @@
+{
+  "id": "check.ui",
+  "name": "Check UI",
+  "version": "1.0.0",
+  "requires": {
+    "check.library": "1.0.0"
+  },
+  "meta": {
+    "check": "ui",
+    "check_explicit": true,
+    "checks": [
+      "calls",
+      "code-input",
+      "data-input"
+    ]
+  },
+  "settings": {
+    "loud": {
+      "type": "toggle",
+      "default": true,
+      "name": "Loud",
+      "description": "Whether the check is loud."
+    },
+    "runs": {
+      "type": "integer",
+      "default": 0,
+      "min": 0
+    },
+    "speed": {
+      "type": "number",
+      "default": 1.5,
+      "min": 0,
+      "max": 4
+    },
+    "mode": {
+      "type": "choice",
+      "default": "calm",
+      "choices": [
+        "calm",
+        "wild"
+      ]
+    },
+    "extras": {
+      "type": "set",
+      "default": [
+        "hats"
+      ],
+      "choices": [
+        "hats",
+        "boots"
+      ]
+    },
+    "greeting": {
+      "type": "text",
+      "default": "hello",
+      "max_length": 16
+    }
+  }
+}

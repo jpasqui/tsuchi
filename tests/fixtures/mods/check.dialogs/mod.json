@@ -1,0 +1,17 @@
+{
+  "id": "check.dialogs",
+  "name": "The check of queued dialogs",
+  "version": "1.0.0",
+  "meta": {
+    "check": "dialogs",
+    "checks": [
+      "listened",
+      "queued",
+      "ordered",
+      "answered",
+      "cancelled",
+      "refused"
+    ],
+    "check_explicit": true
+  }
+}

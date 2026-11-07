@@ -1,0 +1,16 @@
+{
+  "id": "check.presenter",
+  "name": "The check of the presenter",
+  "version": "1.0.0",
+  "meta": {
+    "check": "presenter",
+    "check_explicit": true,
+    "checks": [
+      "time",
+      "frames",
+      "rate",
+      "ratio",
+      "taps"
+    ]
+  }
+}

@@ -1,0 +1,291 @@
+service: game
+tutorials:
+  - {title: Measure game time, path: /develop/time/}
+  - {title: Travel to an area, path: /develop/story-and-travel/}
+layer: game
+acts_on: game
+lifetime: process
+brief: "Reads the game mode, current stage, and loaded world, and controls pauses and the random stream."
+description: |
+  The game is always in one mode: the title screen, the story, Olimar's
+  Shipwreck Tale, a Dandori Challenge, or a Dandori Battle. Each mode moves
+  through stages, and a stage can run inside of another stage. For example,
+  the story is in `StoryInGame` during a day, `DayEnd` at sunset, and `Save`
+  while it saves. Use this service to check the current mode and stage, pause
+  parts of the game, and return to the title screen.
+
+  The stage names are the game's own.
+
+enums:
+  World:
+    open: true
+    doc: "A world that the game loads, like an area, a cave floor, or the title screen. The game's own worlds use their level's name, like `Area001_P`. A mod's map uses `<mod id>:<name>`."
+
+  Mode:
+    open: false
+    classified: true
+    doc: "The mode that the game is in."
+    values:
+      - {name: none, value: 0, doc: "No mode yet, as the game is still starting."}
+      - {name: title, value: 1, doc: The title screen and its menus.}
+      - {name: story, value: 2, doc: The story.}
+      - {name: olimar, value: 3, doc: "Olimar's Shipwreck Tale."}
+      - {name: challenge, value: 4, doc: A Dandori Challenge or a trial.}
+      - {name: battle, value: 5, doc: A Dandori Battle.}
+      - {name: other, value: 6, doc: "A mode that Tsuchi has no name for."}
+
+flags:
+  Pause:
+    doc: "The things that the game can pause. A hold can combine any of them."
+    values:
+      - {name: timer, value: 1, doc: "The day's clock or a battle's clock."}
+      - {name: actors, value: 2, doc: Actors stop.}
+      - {name: controller, value: 4, doc: "Controllers aren't read."}
+      - {name: player, value: 8, doc: "Captains ignore input."}
+      - {name: pikmin, value: 16, doc: Pikmin stop.}
+      - {name: creatures, value: 32, doc: Creatures stop.}
+      - {name: events, value: 960, doc: "Scripted events are paused. This covers four kinds of events together."}
+      - {name: flow, value: 1024, doc: Stages stop advancing.}
+      - {name: demo, value: 2048, doc: Cutscenes stop.}
+      - {name: render, value: 4096, doc: "The screen stops updating."}
+      - {name: ui, value: 8192, doc: Menus stop.}
+      - {name: hud, value: 16384, doc: "The HUD stops."}
+
+structs:
+  RandomState:
+    doc: "The four numbers of the random stream that gameplay uses. Two games with the same four numbers generate the same random numbers from that point on."
+    fields:
+      - {name: a, type: u32, doc: The first number.}
+      - {name: b, type: u32, doc: The second number.}
+      - {name: c, type: u32, doc: The third number.}
+      - {name: d, type: u32, doc: The fourth number.}
+  PreviewSceneInfo:
+    doc: A temporary area's reserved names and currently admitted generation.
+    fields:
+      - {name: area, type: u32, doc: The reserved area number.}
+      - {name: world_name, type: text, doc: "The required world leaf name, such as Area005_P."}
+      - {name: scene_name, type: text, doc: "The required scene leaf name, such as SD_Area005."}
+      - {name: admitted, type: bool, doc: Whether a payload has been successfully admitted.}
+      - {name: generation, type: u32, doc: "The successful payload generation, from one, or zero before admission."}
+      - {name: world_package, type: text, doc: "The current world's package path, or empty before admission."}
+      - {name: scene_object, type: text, doc: "The current scene's object path, or empty before admission."}
+
+functions:
+  - name: mode
+    doc: "The mode that the game is in."
+    returns: {type: enum<Mode>, doc: The mode.}
+    users: [groink, online-coop]
+
+  - name: rule
+    doc: "The game's number for the current rule set, which distinguishes variants of the same mode. `1` is the story, and `6` and `8` are Dandori Battles."
+    returns: {type: i32, doc: The rule number.}
+    fails:
+      not_ready: "The game hasn't set one yet."
+    users: [groink, online-coop]
+
+  - name: stage
+    doc: "The current stages, from the outermost to the innermost, joined by `/`, like `Story/StoryInGame`. Empty while the game is starting."
+    returns: {type: text, doc: The stages.}
+    users: [groink, online-coop]
+
+  - name: world
+    doc: "The loaded world, like `Area001_P`. Empty if no world is loaded or one is still loading."
+    returns: {type: enum<World>, doc: The world.}
+    users: [groink, online-coop]
+
+  - name: paused
+    doc: "The things that are currently paused, either by the game or by a mod."
+    returns: {type: flags<Pause>, doc: "The paused things."}
+    fails:
+      not_ready: "The game isn't ready."
+    users: [groink, online-coop]
+
+  - name: has_control
+    doc: "Checks if the player has control. This means that a world is loaded, a gameplay stage is running, and nothing that stops the captains is paused."
+    returns: {type: bool, doc: "`true` while the player has control."}
+    users: [groink, online-coop]
+
+  - name: hold_pause
+    doc: |
+      Pauses things until you release the hold. Holds are counted together with the
+      game's own pauses, so a thing stays paused while anything is holding it. The
+      hold also ends when your mod stops. The game applies a change on its next
+      update, so `paused` shows it one world step later.
+    owns: true
+    params:
+      - {name: kinds, type: flags<Pause>, doc: "The things to pause."}
+    returns: {type: handle<pause_hold>, doc: "The hold, to pass to `release_pause`."}
+    fails:
+      invalid: "You didn't pass anything to pause."
+      not_ready: "The game isn't ready."
+    users: [groink, online-coop]
+
+  - name: release_pause
+    doc: "Ends a hold that was created with `hold_pause`."
+    owns: true
+    params:
+      - {name: hold, type: handle<pause_hold>, doc: The hold.}
+    fails:
+      not_found: "The mod has no such hold."
+    users: [groink, online-coop]
+
+  - name: return_to_title
+    doc: |
+      Returns the game to the title screen, the same way that the game does when a
+      save fails. Nothing is saved first. This only works from the story.
+    fails:
+      not_ready: "The game isn't in the story."
+      busy: "The game is saving, loading, or already changing scenes."
+    users: [groink, online-coop]
+
+  - name: random
+    doc: "Reads the random stream that gameplay uses."
+    returns: {type: struct<RandomState>, doc: Its four numbers.}
+    users: [groink, online-coop]
+
+  - name: set_random
+    doc: "Sets the random stream that gameplay uses, so that what happens next can be reproduced. The game uses it constantly, so set it on the same world step everywhere that it has to match."
+    params:
+      - {name: state, type: struct<RandomState>, doc: "The four numbers, in the same format that `random` returns. They can't all be zero."}
+    fails:
+      invalid: All four numbers are zero.
+    users: [groink, online-coop]
+
+  - name: reserve_preview
+    doc: |
+      Reserves one of the game's four unused area names before a tool cooks a
+      temporary world. Existing mod maps and other previews keep their names.
+      At most 1024 reservation handles can be issued in one process.
+      Use preview_scene to obtain the required world and scene leaf names.
+      The game must already be playing a loaded story world. Mod pause holds
+      are allowed. This does not change the story or load another world.
+    owns: true
+    returns: {type: handle<preview_scene>, doc: Your reservation.}
+    fails:
+      capacity: No unused area name or preview handle is available.
+      busy: The game is saving or changing scenes, or another admission is in progress.
+      not_ready: A loaded story world or the scene manager is unavailable.
+      unsupported: The matching native scene support is unavailable.
+      io: Existing area claims could not be read.
+      denied: The owner stopped during reservation.
+    users: [kadan, remote-content-tools]
+
+  - name: preview_scene
+    doc: |
+      Returns the reservation's required leaf names and current payload paths.
+      Compare the paths when reusing a cached generation; a reservation can
+      have admitted another payload since that cache entry was made.
+    owns: true
+    params:
+      - {name: preview, type: handle<preview_scene>, doc: Your reservation.}
+    returns: {type: struct<PreviewSceneInfo>, doc: The current reservation.}
+    fails:
+      not_found: The reservation has ended.
+      denied: The reservation belongs to another mod.
+    users: [kadan, remote-content-tools]
+
+  - name: admit_preview
+    doc: |
+      Registers a cooked temporary world and scene from your mounted bundle.
+      The world, scene and placement counts must be new packages in that same
+      bundle. The scene must use the reserved leaf name, name the exact world,
+      and inherit from the game's standard area parent. All native references
+      and the stable first-base row stay retained until process exit.
+      A new generation can replace only this reservation's scene, while its
+      area is inactive and no scene change or save is pending. Old objects stay
+      retained. Repeating the current bundle and paths succeeds without changes.
+      This neither changes StorySave nor loads the world. Call prepare_preview
+      after capturing or restoring your disposable baseline and before travel.
+    owns: true
+    waits: true
+    params:
+      - {name: preview, type: handle<preview_scene>, doc: Your reservation.}
+      - {name: bundle, type: handle<asset_bundle>, doc: Your mounted cooked bundle.}
+      - {name: world, type: text, doc: "The world's canonical package path, without an object suffix."}
+      - {name: scene, type: text, doc: "The scene's canonical full object path."}
+    fails:
+      invalid: A path or scene is malformed or names content outside the bundle.
+      not_found: A reservation or bundle has ended, or a required asset is absent.
+      denied: A resource belongs to another mod, or its owner stopped during admission.
+      busy: The target area is current, a save or scene change is pending, or admission is in progress.
+      not_ready: A bundle is unmounted, or the loaded story or scene manager is unavailable.
+      unsupported: The matching native scene or reflection support is unavailable.
+      capacity: A native scene or generation limit was reached.
+      io: A bundle could not be read.
+    users: [kadan, remote-content-tools]
+
+  - name: prepare_preview
+    doc: |
+      Prepares this admitted area's record and first open base in the current
+      in-memory story. Call after capturing or restoring your disposable save
+      baseline and before requesting travel. It does not write the framework's
+      permanent area-allocation record, change the scene list, or load a world.
+      Repeating it succeeds, including while its area is current or mod pauses
+      are held. The caller restores the original story baseline after testing,
+      and before the game can save: a save made while the area is prepared keeps
+      its record, and a new map given that area later starts from it.
+    owns: true
+    params:
+      - {name: preview, type: handle<preview_scene>, doc: Your admitted reservation.}
+    fails:
+      not_found: The reservation has ended.
+      denied: The reservation belongs to another mod, or its owner stopped during preparation.
+      busy: The game is saving or changing scenes, or admission is in progress.
+      not_ready: No payload has been admitted, or no loaded story is available.
+      unsupported: The matching native story support is unavailable.
+    users: [kadan, remote-content-tools]
+
+  - name: release_preview
+    doc: |
+      Ends your reservation. Its area name is free again only if no native
+      references have been retained. After admission, or an admission error
+      following native retention, the area name and old objects stay reserved
+      until process exit. The same cleanup runs when your mod stops.
+    owns: true
+    params:
+      - {name: preview, type: handle<preview_scene>, doc: Your reservation.}
+    fails:
+      not_found: The reservation has ended.
+      denied: The reservation belongs to another mod.
+      busy: Admission is in progress.
+    users: [kadan, remote-content-tools]
+
+events:
+  - name: mode_changed
+    doc: "Emitted when the game changes from one mode to another. Like every event in this service, it is detected by checking once per world step while a mod is listening, and the first check doesn't report anything."
+    fields:
+      - {name: mode, type: enum<Mode>, doc: "The current mode."}
+      - {name: previous, type: enum<Mode>, doc: "The previous mode."}
+    users: [groink, online-coop]
+
+  - name: stage_changed
+    doc: "Emitted when the current stages change. A stage that starts and ends within one world step isn't reported."
+    fields:
+      - {name: stage, type: text, doc: "The current stages, in the same format that `stage` returns."}
+      - {name: previous, type: text, doc: "The previous stages."}
+    users: [groink, online-coop]
+
+  - name: world_loaded
+    doc: "Emitted when a world has loaded and updated for the first time."
+    fields:
+      - {name: world, type: enum<World>, doc: The world.}
+    users: [groink, online-coop]
+
+  - name: world_unloaded
+    doc: "Emitted when the loaded world is unloaded. Every actor handle from that world has stopped working."
+    fields:
+      - {name: world, type: enum<World>, doc: "The world that was unloaded."}
+    users: [groink, online-coop]
+
+  - name: pause_changed
+    doc: "Emitted when the things that are paused change."
+    fields:
+      - {name: paused, type: flags<Pause>, doc: "The things that are paused now."}
+      - {name: previous, type: flags<Pause>, doc: "The things that were paused before."}
+    users: [groink, online-coop]
+
+  - name: control_changed
+    doc: Emitted when the player gains or loses control.
+    fields:
+      - {name: control, type: bool, doc: "`true` if the player now has control."}
+    users: [groink, online-coop]

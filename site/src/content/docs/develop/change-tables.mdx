@@ -1,0 +1,222 @@
+---
+title: Change a table
+description: Change values, add rows, and change array lengths in the game's data tables.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+The game keeps most of its stats in data tables, like how much health each creature has. To
+change a value, you'll need the table's path, the name of the row, and the name of the field.
+
+You'll also need a mod with a manifest. If you don't have one yet, see
+[Write your first mod](/develop/first-mod/).
+
+## Manifest
+
+If the value doesn't need to change while the game is running, then you can set it in your
+manifest without writing any code. Add a `tables` key with the table's path, the row that you
+want to change, and the new value for the field:
+
+```json title="mod.json"
+{
+  "id": "olimar.tougher",
+  "name": "Tougher Bulborbs",
+  "version": "1.0.0",
+  "tables": {
+    "/Game/Carrot4/Core/GActor/DT_TekiParameter.DT_TekiParameter": {
+      "KOCHAPPY": {"MaxLife": 1500}
+    }
+  }
+}
+```
+
+In this example, we're giving the Dwarf Bulborb 1500 health. `KOCHAPPY` is the name of the
+Dwarf Bulborb's row in the creature table.
+
+You can set numbers, `true` or `false`, and text this way. If the field that you want is
+inside of a struct or an array, then write the path to it, like `"DayParams[0].ActorName"`.
+
+If the row or the field doesn't exist, then the mod won't load, and the log will tell you
+which table, row, and field caused the problem.
+
+## New rows
+
+:::caution[WIP]
+New rows haven't been tested in the game yet.
+:::
+
+To add a row, give it a name that starts with your mod's ID and a colon, and add a `from`
+key with the name of the row to copy. Tsuchi copies that row, then sets the fields that you
+listed. For example, this copies the first loading-screen tip and shows the copy on the
+loading screens of night expeditions:
+
+```json title="mod.json"
+"tables": {
+  "/Game/Carrot4/Core/UI/DT_TipsMessage.DT_TipsMessage": {
+    "olimar.tips:night_tip": {"from": "NewRow_1", "TipsTypeBitFlags": 8}
+  }
+}
+```
+
+The part after the colon is up to you. Use 1 to 47 lowercase letters, digits, `.`, `_`, and
+`-`, and start and end with a letter or digit. Since the name starts with your mod's ID,
+it won't clash with a row from another mod. To
+change the row from code, or from another mod's manifest, use the whole name, like
+`"olimar.tips:night_tip"`.
+
+`from` can name one of the game's rows, a row that another mod added, or a row that you added
+further up in the same table. If the donor doesn't exist, or an unrelated row already
+has your new row's name, then the mod won't load. If your mod starts again in the same
+game run, Tsuchi reuses the row it left behind.
+
+You can't add treasures, creatures, or Pikmin types this way, as each of those needs rows in
+several tables, along with text and a class. To add one, use `content` in your manifest.
+
+When your mod stops, Tsuchi undoes the changes to your row, but the row itself stays in the
+table, because the game might still be using it. If your mod starts again, then it uses the
+same row.
+
+## Array lengths
+
+:::caution[WIP]
+Array length changes haven't been tested in the game yet.
+:::
+
+To change how many elements an array has, set the array's path to `{"length": n}`,
+using a whole number from 0 to 1,000,000. New elements start empty, which is `0`,
+`false`, empty text, or no asset. You can set them with
+more paths in the same row. For example, this makes the Sun-Speckled Terrace show three types
+of Pikmin in the area list, with Ice Pikmin as the third:
+
+```json title="mod.json"
+"tables": {
+  "/Game/Carrot4/Core/UI/FastTravel/DT_FastTravelInfo.DT_FastTravelInfo": {
+    "Area001": {"TargetPikminColor": {"length": 3}, "TargetPikminColor[2]": 7}
+  }
+}
+```
+
+Tsuchi sets the lengths in a row before its other fields, so the order that you write them in
+doesn't matter. An array of structs can't change length, and a mod that tries won't load.
+
+When your mod stops, the array gets its original length and elements back.
+
+## Code
+
+If you need to change a value while the game is running, then you can use the
+[`datatable`](/reference/datatable/) service. You'll have to load the table with
+[`asset.load`](/reference/asset/#load) first.
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua title="main.lua"
+local creatures = asset.load("/Game/Carrot4/Core/GActor/DT_TekiParameter.DT_TekiParameter")
+
+datatable.override(creatures, "KOCHAPPY", "MaxLife", 1500)
+print("Dwarf Bulborb health: " .. datatable.get(creatures, "KOCHAPPY", "MaxLife"))
+
+-- Undo the change when you no longer need it.
+datatable.restore(creatures, "KOCHAPPY", "MaxLife")
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript title="main.js"
+const creatures = await asset.load(
+    "/Game/Carrot4/Core/GActor/DT_TekiParameter.DT_TekiParameter");
+
+datatable.override(creatures, "KOCHAPPY", "MaxLife", 1500);
+print("Dwarf Bulborb health: " + datatable.get(creatures, "KOCHAPPY", "MaxLife"));
+
+// Undo the change when you no longer need it.
+datatable.restore(creatures, "KOCHAPPY", "MaxLife");
+```
+
+</TabItem>
+<TabItem label="C">
+
+```c title="main.c"
+TSUCHI_Object creatures;
+TSUCHI_Result loaded = host->asset->load(
+    self, "/Game/Carrot4/Core/GActor/DT_TekiParameter.DT_TekiParameter", &creatures);
+if (loaded != TSUCHI_OK) return loaded;
+
+TSUCHI_Value life = {.kind = TSUCHI_VALUE_INTEGER, .as.integer = 1500};
+host->datatable->override(self, creatures, "KOCHAPPY", "MaxLife", &life);
+
+/* Undo the change when you no longer need it. */
+host->datatable->restore(self, creatures, "KOCHAPPY", "MaxLife");
+```
+
+</TabItem>
+</Tabs>
+
+To add a row from code, use [`datatable.add_row`](/reference/datatable/#add_row). To change an
+array's length, use [`datatable.resize`](/reference/datatable/#resize), and undo it with
+`datatable.restore` and the array's path. Changes to single elements are undone one at a time,
+the same as any other field.
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua title="main.lua"
+local areas = asset.load("/Game/Carrot4/Core/UI/FastTravel/DT_FastTravelInfo.DT_FastTravelInfo")
+
+datatable.resize(areas, "Area001", "TargetPikminColor", 3)
+datatable.override(areas, "Area001", "TargetPikminColor[2]", 7)
+
+-- Put the array back the way it was.
+datatable.restore(areas, "Area001", "TargetPikminColor[2]")
+datatable.restore(areas, "Area001", "TargetPikminColor")
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript title="main.js"
+const areas = await asset.load(
+    "/Game/Carrot4/Core/UI/FastTravel/DT_FastTravelInfo.DT_FastTravelInfo");
+
+datatable.resize(areas, "Area001", "TargetPikminColor", 3);
+datatable.override(areas, "Area001", "TargetPikminColor[2]", 7);
+
+// Put the array back the way it was.
+datatable.restore(areas, "Area001", "TargetPikminColor[2]");
+datatable.restore(areas, "Area001", "TargetPikminColor");
+```
+
+</TabItem>
+<TabItem label="C">
+
+```c title="main.c"
+TSUCHI_Object areas;
+TSUCHI_Result loaded = host->asset->load(
+    self, "/Game/Carrot4/Core/UI/FastTravel/DT_FastTravelInfo.DT_FastTravelInfo", &areas);
+if (loaded != TSUCHI_OK) return loaded;
+
+host->datatable->resize(self, areas, "Area001", "TargetPikminColor", 3);
+TSUCHI_Value ice = {.kind = TSUCHI_VALUE_INTEGER, .as.integer = 7};
+host->datatable->override(self, areas, "Area001", "TargetPikminColor[2]", &ice);
+
+/* Put the array back the way it was. */
+host->datatable->restore(self, areas, "Area001", "TargetPikminColor[2]");
+host->datatable->restore(self, areas, "Area001", "TargetPikminColor");
+```
+
+</TabItem>
+</Tabs>
+
+## Conflicts
+
+If two mods change the same field, or the length of the same array, then the game will use
+the value from the mod that loaded last. If that mod stops or undoes its change, then the
+other mod's value will take effect again.
+
+## Unloading
+
+Load a table with `asset.load` to keep it loaded until you release the asset hold or
+your mod stops. Keeping the handle alone doesn't keep the table loaded. Tsuchi holds
+tables changed in your manifest while your mod runs. If the engine destroys a table,
+its hold ends and its changes are lost.

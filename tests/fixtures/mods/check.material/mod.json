@@ -1,0 +1,16 @@
+{
+  "id": "check.material",
+  "name": "The check of material",
+  "version": "1.0.0",
+  "meta": {
+    "check": "material",
+    "checks": [
+      "found",
+      "held",
+      "read",
+      "restored",
+      "ended",
+      "refused"
+    ]
+  }
+}

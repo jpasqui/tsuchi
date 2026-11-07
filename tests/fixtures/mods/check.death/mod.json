@@ -1,0 +1,26 @@
+{
+  "id": "check.death",
+  "name": "The isolated check of counted Pikmin death",
+  "version": "1.0.0",
+  "meta": {
+    "check": "death",
+    "check_explicit": true,
+    "checks": [
+      "found",
+      "made",
+      "info",
+      "listened",
+      "quiet_removed",
+      "quiet_gone",
+      "no_death",
+      "killed",
+      "reported",
+      "credited",
+      "location",
+      "gone",
+      "refused",
+      "cancelled",
+      "originals"
+    ]
+  }
+}

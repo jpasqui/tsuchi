@@ -1,0 +1,17 @@
+{
+  "id": "check.actors",
+  "name": "The check of actors",
+  "version": "1.0.0",
+  "meta": {
+    "check": "actors",
+    "checks": [
+      "listed",
+      "described",
+      "transform",
+      "class",
+      "placed",
+      "compared",
+      "refused"
+    ]
+  }
+}

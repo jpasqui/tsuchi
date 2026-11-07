@@ -1,0 +1,105 @@
+service: storage
+tutorials:
+  - {title: Save your mod data, path: /develop/save-data/}
+layer: core
+acts_on: game
+lifetime: process
+brief: "Saves your mod's data between game sessions."
+description: |
+  Your mod's saved data is a set of named entries, and each entry is a block
+  of bytes in whatever format you choose. It is stored in the player's save
+  data, next to the game's files and separate from every other mod's data. The
+  data belongs to the player and not to a save slot, so your mod finds the
+  same data no matter which slot is played.
+
+  An entry is named like a file, with forward slashes, like `progress.json` or
+  `best/area1.bin`. Saving replaces the whole entry. On a console, a write is
+  atomic, so after a failure or a power cut the entry is either the old
+  version or the new one. An emulator's save data is a normal folder and
+  doesn't guarantee that. The save data can only be open for one purpose at a
+  time, so every function here fails while the game is reading or writing its
+  own save.
+
+functions:
+  - name: write
+    doc: "Saves an entry under a name, replacing any entry that already has that name."
+    owns: true
+    params:
+      - {name: name, type: text, doc: "The entry's name."}
+      - {name: data, type: bytes, doc: "The data to save. It can be empty."}
+    fails:
+      invalid: "The name is empty, or it points outside of your mod's data."
+      not_ready: "The save data isn't available yet."
+      busy: The game is reading or writing its save.
+      no_memory: "The game is out of memory."
+      io: "The save data couldn't be opened, or the entry couldn't be written. The save data might be full."
+    users: [groink, online-coop]
+
+  - name: read
+    doc: "Reads part of an entry."
+    owns: true
+    params:
+      - {name: name, type: text, doc: "The entry's name."}
+      - {name: offset, type: u64, doc: "The offset in the entry to start at, from `0`."}
+    returns: {type: bytes, doc: "The bytes starting at `offset`. You get fewer than requested at the end of the entry, and none past it."}
+    fails:
+      invalid: "The name is empty, or it points outside of your mod's data."
+      not_found: "There is no entry with that name."
+      not_ready: "The save data isn't available yet."
+      busy: The game is reading or writing its save.
+      no_memory: "The game is out of memory."
+      io: "The save data couldn't be opened, or reading it failed."
+    users: [groink, online-coop]
+
+  - name: exists
+    doc: "Checks if there is an entry with a name."
+    owns: true
+    params:
+      - {name: name, type: text, doc: "The entry's name."}
+    returns: {type: bool, doc: "`true` if there is an entry with that name."}
+    fails:
+      invalid: "The name is empty, or it points outside of your mod's data."
+      not_ready: "The save data isn't available yet."
+      busy: The game is reading or writing its save.
+      no_memory: "The game is out of memory."
+      io: "The save couldn't be opened."
+    users: [groink, online-coop]
+
+  - name: size
+    doc: "The size of an entry, in bytes."
+    owns: true
+    params:
+      - {name: name, type: text, doc: "The entry's name."}
+    returns: {type: u64, doc: The size.}
+    fails:
+      invalid: "The name is empty, or it points outside of your mod's data."
+      not_found: "There is no entry with that name."
+      not_ready: "The save data isn't available yet."
+      busy: The game is reading or writing its save.
+      no_memory: "The game is out of memory."
+      io: "The save couldn't be opened."
+    users: [groink, online-coop]
+
+  - name: remove
+    doc: "Forgets an entry."
+    owns: true
+    params:
+      - {name: name, type: text, doc: "The entry's name."}
+    fails:
+      invalid: "The name is empty, or it points outside of your mod's data."
+      not_found: "There is no entry with that name."
+      not_ready: "The save data isn't available yet."
+      busy: The game is reading or writing its save.
+      no_memory: "The game is out of memory."
+      io: "The save data couldn't be opened, or the entry couldn't be removed."
+    users: [groink, online-coop]
+
+  - name: list
+    doc: "The names of all of your mod's entries, in no particular order."
+    owns: true
+    returns: {type: list<text>, doc: "The names. Empty if your mod has no entries."}
+    fails:
+      not_ready: "The save data isn't available yet."
+      busy: The game is reading or writing its save.
+      io: "The save couldn't be opened."
+    users: [groink, online-coop]

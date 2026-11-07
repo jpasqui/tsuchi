@@ -1,0 +1,16 @@
+{
+  "id": "check.ground",
+  "name": "The isolated check of physical ground contact",
+  "version": "1.0.0",
+  "requires": {"check.library": "1.0.0"},
+  "meta": {
+    "check": "ground",
+    "check_explicit": true,
+    "checks": [
+      "ready", "made", "quiet", "body", "first", "standing",
+      "launched", "pending", "rising", "apex", "falling", "airborne", "landed",
+      "held", "lifted", "suspended", "hover", "resumed", "resume_pending",
+      "falling_again", "landed_again", "removed", "gone", "stale"
+    ]
+  }
+}

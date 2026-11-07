@@ -1,0 +1,15 @@
+{
+  "id": "check.files",
+  "name": "Check files",
+  "version": "1.0.0",
+  "meta": {
+    "check": "files",
+    "checks": [
+      "read",
+      "parts",
+      "exists",
+      "listed",
+      "refused"
+    ]
+  }
+}

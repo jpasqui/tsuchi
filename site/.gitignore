@@ -1,0 +1,7 @@
+dist/
+.astro/
+# Generated from the schema by scripts/reference.mjs. The index page is written by hand.
+src/content/docs/reference/*.mdx
+!src/content/docs/reference/index.mdx
+
+/public/tsuchi.d.ts

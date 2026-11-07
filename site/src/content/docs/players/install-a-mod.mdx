@@ -1,0 +1,78 @@
+---
+title: Install a mod
+description: How to install a mod for Tsuchi.
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+If you haven't [installed Tsuchi](/players/install-tsuchi/) yet, you'll need to do that first,
+as mods won't load without it.
+
+For console paths, use [Install on a console](/players/install-console/).
+
+## Steps
+
+<Steps>
+
+1. Download the mod and extract it. You should now have a folder named `romfs`.
+2. Open the same mod folder that you installed Tsuchi in.
+3. Create a new folder for the mod. You can name it whatever you want.
+4. Move the mod's `romfs` folder into the folder that you created.
+
+</Steps>
+
+For example, if you installed a mod called Clock, your mod folder should now look like this:
+
+```text
+Tsuchi/
+  exefs/
+Clock/
+  romfs/
+    tsuchi/
+      mods/
+        olimar.clock/
+          mod.json
+          main.lua
+```
+
+Make sure not to rename anything inside of the `romfs` folder, as Tsuchi won't be able to
+find the mod if you do. Everything the mod has is inside its ID folder, including its
+assets, such as the `.pak`, `.ucas`, and `.utoc` files of a map, so deleting the folder you
+created removes the whole mod.
+
+## Loading
+
+Open **Settings > Mods** in the game to see every installed mod, including blocked
+mods and their reasons. Enable or disable mods there, and set your load order.
+Dependencies start first, then Tsuchi uses your order. If you haven't chosen an
+order, it uses mod IDs. See [Manage mods](/players/mod-list/).
+
+A *claim* declares what a mod changes. Added content uses the mod's ID and can
+run together with other additions. Table fields, text, hooks, and replaced game assets
+stack in load order. If two mods replace the same asset, the game uses the one from the
+mod that loads later. An exclusive claim, such as a replacement for one of the game's
+areas, needs one winner.
+
+:::note[Coming soon]
+The **Mods** page will show the mods that change the same thing, and it will ask you to
+choose the winner of an exclusive claim.
+:::
+
+If a mod fails to load, Tsuchi skips it and loads the rest. Mods that require a
+blocked mod are blocked too. See [Troubleshooting](/players/troubleshooting/) for
+missing dependencies and incompatible versions.
+
+## Uninstalling
+
+Before removing a map or content mod, follow the author's save instructions.
+Leave an added area and finish the day before removing it. Then close the
+game and delete the folder that you created for the mod.
+
+A save keeps content IDs and Piklopedia progress after removal. Those records
+don't prevent loading: absent catalog entries are hidden or use donor data, and
+reinstalling the mod restores its entries with their progress.
+
+A saved journey into an absent added map can't load that destination. Loading a save
+made inside that map returns to the title screen without changing the save. Saved
+placements that need the mod's class also need the mod installed. Reinstall the mod
+to use those destinations or placements.

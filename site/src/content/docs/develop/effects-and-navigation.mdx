@@ -1,0 +1,63 @@
+---
+title: Place effects and find paths
+description: Play particles and query the world's walkable surfaces.
+---
+
+Wait for a world to load before you query navigation or play an effect. If a call
+returns `not_ready`, try again on a later world step.
+
+## Play an effect
+
+Call [`effects.list`](/reference/effects/#list) to see the loaded particle asset
+IDs. The catalog is built once when the world starts, so playing an effect does
+not search the engine's object table. If two assets have the same name, playing
+that ID returns `busy`.
+
+Some assets need the game's special single-emitter or water handling. Playing
+those assets returns `unsupported`. Choose another ID from the catalog.
+
+Pass an ID and a position to `effects.play`, or pass an actor and a relative
+offset to `effects.play_on`. Keep the returned playback handle. You can use it
+to change a particle parameter or stop the effect.
+
+```lua
+local playback, result = effects.play_on("Spark", captain, {x = 0, y = 0, z = 50})
+if playback then
+    effects.set_parameter(playback, "Size", "scalar", {x = 2, y = 0, z = 0, w = 0})
+end
+```
+
+Use an ID from the catalog in place of `Spark`. The asset must use `Size` for
+that parameter to change its appearance. `effects.parameter` reads values your
+mod set. It does not read the asset's default parameter values.
+
+Listen to `effects.finished` to learn when a playback ends. A loop continues
+until you stop it. An attached effect stops when its parent leaves play. Every
+effect your mod plays stops when your mod stops or the world unloads.
+
+## Find walkable ground
+
+Call [`world.ground`](/reference/world/#ground) with a point and the half widths
+of a search box. The result is the nearest walkable position inside the box.
+Read `z` for its height. The result can move sideways from your point.
+
+```lua
+local ground, result = world.ground(position, {x = 50, y = 50, z = 200})
+if ground then
+    mod.log("Walkable height: " .. ground.z)
+end
+```
+
+Navigation only covers surfaces the game marks as walkable. A shelf, a wall, or
+scenery outside the navigation mesh can have no ground result. Use reflection
+to call the engine's collision traces when you need collision surfaces.
+
+## Find a path
+
+Call [`world.path`](/reference/world/#path) with the starting point and the
+destination. You get a list of world positions in travel order. `not_found`
+means the game found no complete route. Partial routes are refused.
+
+The query uses the game's default navigation filter. It does not test a
+particular creature's size or movement abilities. Recheck a route after a gate
+closes or the level changes, as a route can become blocked after the query.

@@ -1,0 +1,191 @@
+service: hook
+tutorials:
+  - {title: Hook game functions, path: /develop/hooks/}
+layer: core
+acts_on: game
+lifetime: process
+native_only: true
+brief: "Replaces one of the game's functions with your own."
+description: |
+  The game calls many of its functions through function tables. A hook
+  replaces one table entry with your function. From then on, your function
+  runs whenever the game calls that entry, with the same arguments, and it
+  decides if and when to call the original function.
+
+  Multiple mods can hook the same entry. The newest hook runs first, and each
+  hook continues to the next one by calling its `original`. A hook ends when
+  you remove it or when your mod stops, and the other hooks keep working.
+  Calls that are already running finish normally. Those calls can still use a
+  removed hook's `original` until they return, but your mod must not use it
+  after that.
+
+  Hook storage is reused after the running calls return. Table entries keep
+  their replacement functions until the game closes, because other wrappers might
+  still call them. If too many hooked calls are running at once, the next call
+  goes straight to the game's original function.
+
+  The game calls some of its functions on threads other than the game thread,
+  and a hook on one of those functions runs on that thread. Every Tsuchi call
+  fails with `invalid` on those threads, so a hook like that can only use its
+  arguments and its `original`, and it has to leave everything else for the
+  next step.
+
+structs:
+  InlineContext:
+    doc: "The register frame at an inline hook. The pointers are valid only during the handler."
+    fields:
+      - {name: registers, type: pointer, doc: "31 writable uint64_t values, x0 through x30."}
+      - {name: vectors, type: pointer, doc: "64 writable uint64_t values, low and high halves of q0 through q31."}
+      - {name: sp, type: u64, doc: "The game's stack pointer. Changing this field has no effect."}
+      - {name: nzcv, type: u64, doc: "The condition flags in bits 31 through 28. Other bits are ignored."}
+      - {name: fpcr, type: u64, doc: "The floating-point control register."}
+      - {name: fpsr, type: u64, doc: "The floating-point status register."}
+  Hook:
+    doc: "An installed hook."
+    fields:
+      - {name: id, type: handle<hook_id>, doc: "The value to pass to `remove`."}
+      - {name: original, type: pointer, doc: "The function that your hook calls to continue, which is either the next hook or the game's original function. It takes the same arguments and returns the same value as the game's function."}
+
+functions:
+  - name: wrap_slot
+    doc: |
+      Hooks an entry that the game table has a name for. Your function has to take
+      the same arguments and return the same value as the game's function.
+    owns: true
+    params:
+      - {name: slot, type: text, doc: "The entry's name in the game table, like `engine_tick`."}
+      - {name: wrapper, type: pointer, doc: "Your mod's function."}
+    returns: {type: struct<Hook>, doc: The hook.}
+    fails:
+      not_found: "The game table has no entry with that name."
+      not_ready: "The entry can't be read or written, or it doesn't hold a function."
+      capacity: "The hook, entry thunk, or continuation tables are full."
+      unsupported: "The running build of the game doesn't have this entry."
+    users: [gyro-aim, dog-coop]
+
+  - name: wrap_address
+    doc: |
+      Hooks an entry that the game table has no name for, by its offset. Pass the
+      function that the game stores there, so that the hook can check if something
+      else changed the entry first.
+    owns: true
+    params:
+      - {name: address, type: u64, doc: "The entry's offset from the start of the game's code."}
+      - {name: stock, type: u64, doc: "The offset of the function that the game stores there, or `0` if it isn't known."}
+      - {name: wrapper, type: pointer, doc: "Your mod's function."}
+    returns: {type: struct<Hook>, doc: The hook.}
+    fails:
+      not_ready: "The entry can't be read or written, or it doesn't hold a function."
+      capacity: "The hook, entry thunk, or continuation tables are full."
+    users: [gyro-aim, dog-coop]
+
+  - name: remove
+    doc: "Removes one of your mod's hooks. New calls skip it, and calls that are already running finish normally."
+    owns: true
+    params:
+      - {name: id, type: handle<hook_id>, doc: The hook's `id`.}
+    fails:
+      not_found: "Your mod has no hook with that handle."
+    users: [gyro-aim, dog-coop]
+
+  - name: wrap_site
+    doc: |
+      Hooks a function that the game calls directly, at a site that the game table
+      has a name for. This needs the Tsuchi patch to be installed, as the game's
+      code has to be changed for the call to reach Tsuchi. The patch has to be the
+      one that came with the running version of Tsuchi. If your mod requests this
+      while it starts and is refused because of the patch, your mod is blocked, and
+      the mod list shows whether the patch is missing or from a different version.
+    owns: true
+    params:
+      - {name: site, type: text, doc: "The site's name in the game table, like `engine_tick_function`."}
+      - {name: wrapper, type: pointer, doc: "Your mod's function."}
+    returns: {type: struct<Hook>, doc: The hook.}
+    fails:
+      not_found: "The game table has no site with that name."
+      unsupported: "The running build of the game doesn't have this site."
+      not_ready: "The Tsuchi patch isn't installed in the running game, or it is from a different version of Tsuchi."
+      capacity: "The hook, entry thunk, or continuation tables are full."
+    users: [gyro-aim, dog-coop]
+
+  - name: wrap_function
+    doc: |
+      Hooks a function entry by its offset from the start of the game's code.
+      The expected instruction must match the stock instruction at that entry.
+      The first instruction must be position-independent. Your wrapper must match
+      the game's function signature. Handlers chain through `Hook.original`.
+      Requires the matching Tsuchi patch and writable code-alias support. The
+      gateway stays assigned to this entry until the game closes. Reusing the
+      entry after removing a hook does not consume another gateway.
+      An existing named function-entry site reuses its chain without a gateway.
+    owns: true
+    params:
+      - {name: address, type: u64, doc: "An aligned function-entry offset within the game's main code."}
+      - {name: expected, type: u32, doc: "The stock 32-bit instruction at the entry."}
+      - {name: wrapper, type: pointer, doc: "Your mod's function, with the game's signature."}
+    returns: {type: struct<Hook>, doc: The hook.}
+    fails:
+      invalid: "The offset is outside main code, or the displaced instruction needs relocation."
+      busy: "The instruction differs, or another kind of code change owns the location."
+      not_ready: "The matching patch or code-alias support is unavailable."
+      capacity: "No gateway or hook record remains."
+    completes: wrap_site
+
+  - name: wrap_inline
+    doc: |
+      Hooks one instruction by its main-code offset. The handler has the C
+      signature `void handler(TSUCHI_InlineContext *context)`. Call its
+      `Hook.original` with that context to continue to older handlers. The stock
+      instruction runs once after the handler chain returns. The context offers
+      no SP write or program-counter override. Requires the matching
+      Tsuchi patch and writable code-alias support. Inline handlers run on the
+      thread that executes the instruction, and must preserve that code's contract.
+    owns: true
+    params:
+      - {name: address, type: u64, doc: "An aligned instruction offset within the game's main code."}
+      - {name: expected, type: u32, doc: "The stock 32-bit instruction at the location."}
+      - {name: handler, type: pointer, doc: "Your mod's inline handler."}
+    returns: {type: struct<Hook>, doc: The hook.}
+    fails:
+      invalid: "The offset is outside main code, or its instruction cannot be replayed at the gateway."
+      busy: "The instruction differs, or another kind of code change owns the location."
+      not_ready: "The matching patch or code-alias support is unavailable."
+      capacity: "No gateway or hook record remains."
+    completes: wrap_site
+
+  - name: patch_instruction
+    doc: |
+      Replaces one aligned instruction after checking its original word. The
+      patch is exclusive with hooks and patches at that location. Remove it
+      with `remove`; it also ends when the mod stops. Restoration only writes
+      when the location still holds the replacement. A foreign change is left
+      in place. The caller must choose a location where one instruction can be
+      replaced while other threads run. Requires writable code-alias support.
+    owns: true
+    params:
+      - {name: address, type: u64, doc: "An aligned instruction offset within the game's main code."}
+      - {name: expected, type: u32, doc: "The stock instruction."}
+      - {name: replacement, type: u32, doc: "The replacement instruction."}
+    returns: {type: handle<hook_id>, doc: The owned patch.}
+    fails:
+      invalid: "The offset is outside main code, or the replacement equals the original."
+      busy: "The instruction differs, or another code change owns the location."
+      not_ready: "Writable code-alias support is unavailable."
+      capacity: "No patch record remains."
+    completes: wrap_site
+
+  - name: check_code
+    doc: |
+      Compares the running game's code with expected bytes before installing
+      hooks. This call changes nothing and needs no code-write permissions.
+      Check every location before installing the first hook when a mod needs
+      several hooks together. Comparisons read the running bytes, including
+      patches already installed by Tsuchi or another mod.
+    params:
+      - {name: address, type: u64, doc: "An aligned offset within the game's main code."}
+      - {name: expected, type: bytes, doc: "Between 4 and 4096 expected bytes, in whole instructions."}
+    fails:
+      invalid: "The offset, length, or alignment is outside the allowed range."
+      busy: "At least one byte differs from the expected code."
+      not_ready: "The code cannot be read."
+    completes: wrap_site

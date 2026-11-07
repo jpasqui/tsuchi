@@ -1,0 +1,4 @@
+CHAPPY
+/Game/Carrot4/Characters/Teki/Chappy/Animation/AS_Chappy_Wait.AS_Chappy_Wait
+0
+1

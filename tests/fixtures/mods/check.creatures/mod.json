@@ -1,0 +1,14 @@
+{
+  "id": "check.creatures",
+  "name": "The check of creatures",
+  "version": "1.0.0",
+  "meta": {
+    "check": "creatures",
+    "checks": [
+      "listed",
+      "state",
+      "alive",
+      "refused"
+    ]
+  }
+}

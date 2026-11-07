@@ -1,0 +1,28 @@
+{
+  "id": "check.fight",
+  "name": "The check of an owned creature taking damage",
+  "version": "1.0.0",
+  "meta": {
+    "check": "fight",
+    "checks": [
+      "found",
+      "made",
+      "life",
+      "listened",
+      "intercepted",
+      "lowered",
+      "drop",
+      "healed",
+      "quiet_heal",
+      "hit",
+      "credited",
+      "knock",
+      "defeated",
+      "order",
+      "cancelled",
+      "removed",
+      "gone"
+    ],
+    "check_explicit": true
+  }
+}

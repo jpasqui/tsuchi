@@ -1,0 +1,25 @@
+{
+  "id": "route.new-pikmin",
+  "name": "Added Pikmin acceptance route",
+  "version": "1.0.0",
+  "content": {
+    "pikmin": {
+      "amber": {
+        "from": "red",
+        "values": {
+          "LeafSpeed": 117,
+          "BudSpeed": 117,
+          "FlowerSpeed": 117
+        }
+      },
+      "azure": {
+        "from": "blue",
+        "values": {
+          "LeafSpeed": 223,
+          "BudSpeed": 223,
+          "FlowerSpeed": 223
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "id": "check.anim",
+  "name": "The check of an owned mesh animation",
+  "version": "1.0.0",
+  "meta": {
+    "check": "anim",
+    "checks": [
+      "found",
+      "asset",
+      "made",
+      "mesh",
+      "held",
+      "seek",
+      "rate",
+      "engine",
+      "restored",
+      "ended",
+      "removed",
+      "gone"
+    ]
+  }
+}

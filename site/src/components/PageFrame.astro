@@ -1,0 +1,46 @@
+---
+// Starlight gives a page without a sidebar, like the first page, no menu on a narrow screen,
+// and the links at the top of the page are hidden there. This gives such a page Starlight's
+// own menu, holding the same links. A wide screen is unchanged: the page is still laid out
+// without a sidebar, and the rule below keeps the menu's pane away.
+import Default from '@astrojs/starlight/components/PageFrame.astro';
+import SidebarSublist from '@astrojs/starlight/components/SidebarSublist.astro';
+import MobileMenuFooter from 'virtual:starlight/components/MobileMenuFooter';
+
+const route = Astro.locals.starlightRoute;
+const bare = !route.hasSidebar;
+route.hasSidebar = true;
+const links = Astro.locals.starlightSidebarTopics.topics.map((topic) => ({
+  type: 'link' as const,
+  label: topic.label,
+  href: topic.link,
+  isCurrent: false,
+  badge: topic.badge,
+  attrs: topic.attrs ?? {},
+}));
+---
+
+<Default>
+  <slot name="header" slot="header" />
+  {
+    bare ? (
+      <Fragment slot="sidebar">
+        <SidebarSublist sublist={links} />
+        <div class="md:sl-hidden">
+          <MobileMenuFooter />
+        </div>
+      </Fragment>
+    ) : (
+      <slot name="sidebar" slot="sidebar" />
+    )
+  }
+  <slot />
+</Default>
+
+<style is:global>
+  @media (min-width: 50rem) {
+    html:not([data-has-sidebar]) nav.sidebar {
+      display: none;
+    }
+  }
+</style>

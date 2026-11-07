@@ -1,0 +1,66 @@
+service: file
+tutorials:
+  - {title: Use Lua in your mod, path: /develop/lua/}
+  - {title: Use JavaScript in your mod, path: /develop/javascript/}
+layer: core
+acts_on: game
+lifetime: process
+brief: "Reads files from your mod's folder."
+description: |
+  Your mod's folder can include any files that you ship with the manifest,
+  like data, scripts, and sound banks. Use this service to read them. Refer to
+  a file by its path inside of the folder, with forward slashes, like
+  `data/waves.json`. You can't read files outside of your mod's folder, and
+  you can't write files.
+
+functions:
+  - name: read
+    doc: "Reads part of a file in your mod's folder."
+    owns: true
+    params:
+      - {name: path, type: text, doc: "The file's path inside of your mod's folder."}
+      - {name: offset, type: u64, doc: "The offset in the file to start at, from `0`."}
+    returns: {type: bytes, doc: "The bytes starting at `offset`. You get fewer than requested at the end of the file, and none past it."}
+    fails:
+      invalid: "The path points outside of your mod's folder."
+      not_found: "Your mod has no file at that path."
+      not_ready: "Files can't be read yet."
+      io: "The file couldn't be opened, or reading it failed."
+    users: [groink, online-coop]
+
+  - name: size
+    doc: "The size of a file in your mod's folder, in bytes."
+    owns: true
+    params:
+      - {name: path, type: text, doc: "The file's path inside of your mod's folder."}
+    returns: {type: u64, doc: The size.}
+    fails:
+      invalid: "The path points outside of your mod's folder."
+      not_found: "Your mod has no file at that path."
+      not_ready: "Files can't be read yet."
+      io: "The file couldn't be opened."
+    users: [groink, online-coop]
+
+  - name: exists
+    doc: "Checks if your mod has a file at a path."
+    owns: true
+    params:
+      - {name: path, type: text, doc: "The file's path inside of your mod's folder."}
+    returns: {type: bool, doc: "`true` if there is a file at that path. A folder doesn't count as a file."}
+    fails:
+      invalid: "The path points outside of your mod's folder."
+      not_ready: "Files can't be read yet."
+      io: "The file couldn't be opened."
+    users: [groink, online-coop]
+
+  - name: list
+    doc: "The contents of a folder in your mod's folder, in no particular order. A folder's name ends with a slash."
+    owns: true
+    params:
+      - {name: folder, type: text, doc: "The folder's path inside of your mod's folder, or `\"\"` for the mod's folder itself."}
+    returns: {type: list<text>, doc: "The names of the files and folders inside of it."}
+    fails:
+      invalid: "The path points outside of your mod's folder."
+      not_found: "Your mod has no folder at that path."
+      not_ready: "Files can't be read yet."
+    users: [groink, online-coop]

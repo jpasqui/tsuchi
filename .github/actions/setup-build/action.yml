@@ -1,0 +1,26 @@
+name: Set up the build tools
+description: Install the pinned Python dependencies and verified LLVM distribution.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+      with:
+        python-version-file: .python-version
+        cache: pip
+        cache-dependency-path: requirements-dev.txt
+    - name: Install Python dependencies
+      shell: pwsh
+      run: python -m pip install --disable-pip-version-check -r requirements-dev.txt
+    - name: Install LLVM 22.1.1
+      shell: pwsh
+      run: |
+        $installer = Join-Path $env:RUNNER_TEMP 'LLVM-22.1.1-win64.exe'
+        $destination = Join-Path $env:RUNNER_TEMP 'llvm'
+        Invoke-WebRequest 'https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.1/LLVM-22.1.1-win64.exe' -OutFile $installer
+        $expected = 'e7fec06b4696be82bf8d4b846ebf6b810ed6f27d9eefdce46baf5330ea6e9ed4'
+        if ((Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) {
+          throw 'The LLVM installer hash differs from the pinned release.'
+        }
+        $process = Start-Process -FilePath $installer -ArgumentList '/S', "/D=$destination" -Wait -PassThru -WindowStyle Hidden
+        if ($process.ExitCode -ne 0) { throw "LLVM installation failed: $($process.ExitCode)" }
+        (Join-Path $destination 'bin') | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8

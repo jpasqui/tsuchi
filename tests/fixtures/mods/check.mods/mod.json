@@ -1,0 +1,15 @@
+{
+  "id": "check.mods",
+  "name": "The check of mods",
+  "version": "1.0.0",
+  "meta": {
+    "check": "mods",
+    "checks": [
+      "metadata",
+      "own_version",
+      "missing",
+      "invalid",
+      "log"
+    ]
+  }
+}

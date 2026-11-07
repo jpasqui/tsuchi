@@ -1,0 +1,6 @@
+{
+  "id": "helped.ai-order",
+  "name": "AI values for the ordering check",
+  "version": "1.0.0",
+  "requires": {"check.ai-order": "*"}
+}

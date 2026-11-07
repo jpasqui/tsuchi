@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: false
+        default: ''
+      release_tag:
+        type: string
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ inputs.ref || github.ref }}
+  cancel-in-progress: ${{ inputs.release_tag == '' }}
+
+jobs:
+  checks:
+    name: Host checks and ARM64 builds
+    runs-on: windows-2025
+    timeout-minutes: 90
+    env:
+      TSUCHI_BUILD_JOBS: '2'
+      PYTHONUTF8: '1'
+      TSUCHI_RELEASE_TAG: ${{ inputs.release_tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-build
+      - name: Run all host checks and both ARM64 builds
+        shell: pwsh
+        run: python tools/check.py --ci --report build/ci/checks.json
+      - name: Build and verify candidate archives
+        shell: pwsh
+        run: |
+          $arguments = @('tools/ci_package.py', '--build', '--out', 'build/ci/candidate')
+          if ($env:TSUCHI_RELEASE_TAG) { $arguments += @('--tag', $env:TSUCHI_RELEASE_TAG) }
+          python @arguments
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload candidate archives
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: tsuchi-candidate
+          path: build/ci/candidate/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload check report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: tsuchi-checks
+          path: build/ci/checks.json
+          if-no-files-found: error
+          retention-days: 14
+
+  docs:
+    name: Documentation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version-file: .python-version
+      - run: python -m pip install --disable-pip-version-check -r requirements-dev.txt
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - run: npm ci
+        working-directory: site
+      - run: npm run build
+        working-directory: site
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: tsuchi-docs
+          path: site/dist/
+          if-no-files-found: error
+          retention-days: 14

@@ -1,0 +1,18 @@
+{
+  "id": "check.hooks",
+  "name": "The check of hooks",
+  "version": "1.0.0",
+  "meta": {
+    "check": "hooks",
+    "checks": [
+      "slot",
+      "site",
+      "heard",
+      "removed",
+      "quiet",
+      "refused",
+      "address",
+      "address_removed"
+    ]
+  }
+}

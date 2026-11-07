@@ -1,0 +1,23 @@
+{
+  "id": "check.body",
+  "name": "The check of a suspended body",
+  "version": "1.0.0",
+  "meta": {
+    "check": "body",
+    "checks": [
+      "found",
+      "made",
+      "body",
+      "held",
+      "simulating",
+      "collision",
+      "refused",
+      "hover",
+      "restored",
+      "fall",
+      "ended",
+      "removed",
+      "gone"
+    ]
+  }
+}

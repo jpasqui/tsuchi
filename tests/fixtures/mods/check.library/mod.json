@@ -1,0 +1,9 @@
+{
+  "id": "check.library",
+  "name": "Check library",
+  "version": "1.4.2",
+  "settings": {
+    "volume": {"type": "integer", "default": 7, "min": 0, "max": 10, "public": true, "name": "Volume"},
+    "motto": {"type": "text", "default": "onward"}
+  }
+}

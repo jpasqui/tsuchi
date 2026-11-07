@@ -1,0 +1,1945 @@
+# The game table: every address and offset the framework uses, and nothing else does.
+# An entry is added when code first needs it. Addresses are from the start of the
+# game's code. The format is described in tools/gen/game_table.py. These are one build's values:
+# game/builds/ has other builds' for the same names.
+game: Pikmin 4
+version: "1.1.1"
+key: "1.1.1"                                  # how the framework, its patch files and manifests name this build
+build_id: 060F827BD2B38703E9EA11E3210D89BC   # of the game's code, as patch files name it
+
+# Numbers the compiler needs: each stays a constant, and has to be the same in every build. Only generic
+# containers of the engine and numbers the framework itself owns belong here, never a gameplay layout.
+fixed:
+  constants: [native_jump_offset, dynamic_hook_slots, player_slots]
+  structs: [array, text_value, enum_name, frozen_name]
+
+# The constants that are addresses, the only ones a build can lack. The others are flags, counts, and sizes,
+# which the framework reads as numbers of every build.
+address_constants: [ordinary_end_play, ordinary_unregister, ordinary_destroyed, removal_unregister_return, fix_delta, camera_subject, input_resolver, instance_drawer_table]
+
+# Names a build file may change. A build gives exactly these under `names`.
+build_names: [game_container, shader_format]
+
+# The framework starts only on a game whose code matches all of these.
+identity:
+  - {offset: 0x1000, hash: 0x7495E1CF140F2DF4}
+  - {offset: 0x3A3D6D0, hash: 0x7EF023F9F8532331}
+  - {offset: 0x548C4B0, hash: 0x576D0D50EFC86ADE}
+  - {offset: 0x3405610, hash: 0x12E47DB99BCCB5CC}
+
+data:
+  wwise_audio_manager: 0x92DD0E8
+  wwise_parameter_manager: 0x92DD120
+  ui_select_sound: 0x9335ae0 # native common UI focus FName, initialized as Select
+  console_manager: 0x97f37d8
+  pikmin_ai_class: 0x93768D8
+  pikmin_component_class: 0x93A8D48
+  object_chunks: 0x98555F0          # pointer to the array of object-table chunks
+  object_count: 0x9855604           # objects in the table
+  object_serial_counter: 0x9855700  # last serial number given to an object
+  name_blocks: 0x983B668            # array of pointers to name blocks
+  allocator: 0x981E340              # pointer to the engine's memory allocator
+  game_framework: 0x9350BB8         # pointer to the object that runs the game: its actors, clock and rules
+  game_context: 0x9340E50           # pointer to what the game keeps from one level to the next: its rule, its stages, its players
+  pikmin_scatter_config: 0x9350560  # native restore scatter configuration
+  pikmin_scatter_override: 0x9350568
+  game_instance: 0x934B538          # pointer to the object that lasts for the whole run: saves, scenes, pauses
+  world: 0x9FC3AC8                  # pointer to the loaded world
+  random_stream: 0x9375388          # the four numbers of the random stream that play draws on
+  pause_manager_table: 0x89D3468    # the function table that says an object is the pause manager
+  save_async_state: 0x934F010       # each of these three bytes is nonzero while a save is being read or written
+  save_mounted: 0x93502A1
+  engine_save_mounted: 0x93BDE28
+  # Function tables that tell what a thing is: the queue of messages an actor is sent, and three kinds of message.
+  message_queue_table: 0x89AB878
+  damage_message_table: 0x89AA3C8
+  knock_message_table: 0x88A5448
+  whistle_message_table: 0x89AB800
+  charge_order_table: 0x8953038     # and a captain's charge order, which a build that inlines its constructor stores itself
+  revive_request_table: 0x88D7920   # and a defeated creature's revival request, likewise
+  text_manager: 0x97FB690           # pointer to the engine's keeper of text
+  text_manager_ready: 0x97FB698     # bit 0 is set once that pointer is good
+  game_mode: 0x933AFA8              # pointer to the settings of how the game was started
+  portal_part_class: 0x93AAF18      # pointer to the class of the part that makes an actor a portal
+  # Function tables that tell what a thing is: the level's clock, the story's stage and its stage of plain play.
+  clock_table: 0x89BBCE0
+  story_flow_table: 0x89C0230
+  story_play_table: 0x89C0278
+  # The function tables of two requests the story takes: out of a cave, and through a portal.
+  leave_request_table: 0x8A196C8
+  portal_request_table: 0x89470C0
+  sound_system: 0x9334FA0           # pointer to what plays the game's sounds
+  creature_group: 0x933DAE8         # the name of the group the game keeps its enemies in
+  status_words: 0xA8A4D60           # two unused words after the game's data, where the framework publishes its status
+  # The game's pointer to the system's function that opens a file. Once the game has called it, it leads into the
+  # system's library.
+  system_library_anchor: 0x92D4518
+  loader_state: 0x93C2C80           # a byte: nonzero once the engine has started the system's loader of modules
+  # Pointers to the two functions the navigation takes and gives back its memory with: (bytes, a hint) and (block).
+  nav_allocate: {at: 0x9273100, returns: pointer, args: [i32, i32]}
+  nav_release: {at: 0x9273108, args: [pointer]}
+  explore_areas: 0x93754C8          # an array of the numbers of the areas the list of areas shows
+  # What makes the game's shaders: a pointer to the renderer, and the function table that says an object is it.
+  renderer: 0x9E69BF0
+  renderer_table: 0x9253618
+  # The presenter. The engine, the length of the engine's frame (a double, as most of the game's code asks for
+  # it), and the count of the engine's frames.
+  engine: 0x9FBF880
+  app_delta: 0x8DA9418
+  frame_counter: 0x9826550
+  # The game's import slots of the system's three readers of a controller's state: a Pro Controller, the console
+  # held in the hands, and two Joy-Con held together. Each is (state, controller number).
+  input_full_key: {at: 0x92D4030, args: [pointer, const_pointer]}
+  input_handheld: {at: 0x92D4020, args: [pointer, const_pointer]}
+  input_joy_dual: {at: 0x92D4028, args: [pointer, const_pointer]}
+  physics_dynamic_table: 0x87AAF80  # PhysX's NpRigidDynamic, whose pose getter is qualified below
+
+  world_follow_default_name: 0x9320EA0
+  world_follow_none_name: 0x9320DD0
+  world_follow_move_name: 0x9320DF8
+  mod_config_cache: 0x981E328
+  mod_config_filename: 0x98264D8
+  mod_settings_table: 0x8FBAEC8
+  gimmick_door_closed_table: 0x8930ED0
+  gimmick_door_open_name: 0x932E218
+  gimmick_door_wait_name: 0x932E220
+  gimmick_warp_table: 0x8931050
+  battle_manager_table: 0x89BCA18
+  battle_flow_table: 0x89C02C0
+  battle_load_table: 0x89C0350
+  battle_demo_table: 0x89C0398
+  battle_start_table: 0x89C0308
+  battle_play_table: 0x89C03E0
+  battle_results_table: 0x89C0428
+  battle_end_table: 0x89C0470
+  gimmick_warp_stage_function: 0x14AB0D0
+  content_icon_size: 0x935E568
+constants:
+  stream_block_load: 0x80
+  stream_source_cdo: 0x10
+  physics_dynamic_kind: 6
+  physics_dynamic_buffered_pose: 0x200
+  squad_other_kind: 16
+  battle_results_ready_step: 3
+  battle_results_resume_step: 10
+  battle_pop_class_owner_mask: 0x142
+  battle_pop_owner_types: 9
+  battle_roulette_slot_bytes: 0x40
+  gimmick_pot_hit_offset: 100
+  gimmick_complete_ui_kind: 11
+  gimmick_warp_state_bytes: 0xB0
+  gimmick_warp_board_bytes: 0xC0
+  console_read_only: 4
+  console_priority_mask: 0xff000000
+  console_read_only: 4
+  console_priority_mask: 0xff000000
+  ui_widget_abstract: 1
+  ui_details_button: 4
+  ui_confirm_button: 1
+  ui_previous_tab_button: 0x40
+  ui_next_tab_button: 0x80
+  ui_mod_list_category: 7
+  ui_mod_list_item: 0
+  ui_mod_list_rows_limit: 128
+  pikmin_snapshot_secondary_player_first: 1
+  pikmin_snapshot_secondary_player_second: 2
+  pikmin_live_leaves: 3
+  pikmin_snapshot_rule_second: 2
+  pikmin_snapshot_rule_third: 7
+  pikmin_snapshot_rest_second: 5
+  pikmin_counter_army: 7
+  pikmin_counter_joined: 3
+  pikmin_counter_pending: 8
+  pikmin_counter_excluded: 10
+  pikmin_counter_attached: 11
+  pikmin_counter_current: 2
+  pikmin_counter_partner: 3
+  pikmin_counter_player_first: 1
+  pikmin_counter_player_last: 5
+  pikmin_counter_player_missing: 5
+  pikmin_counter_field: 1           # the counter's state for Pikmin in the field; state 0 sums it with the Onion's
+  pikmin_counter_onion: 4           # the counter's state for the Onion's stock, copied from the story each recount
+  pikmin_selected_none: 16          # the type a squad reports when no Pikmin type is selected; 16 to 21 come out as this
+  cursor_ring_purple: 5             # the ring colour whose ring parts take the second set of materials
+  pikmin_snapshot_pause_mask: 0x140000
+  pikmin_hud_color_a: 19
+  pikmin_hud_color_b: 21
+  pikmin_hud_toggle_a: 32
+  pikmin_save_colors: 22
+  pikmin_stock_save_colors: 17
+  pikmin_save_leaves: 4
+  pikmin_save_decorations: 25
+  pikmin_stock_enum_names: 19
+  pikmin_color_first: 19
+  pikmin_color_second: 21
+  pikmin_count_max: 99999
+  pikmin_scatter_tau_bits: 0x40C90FDB
+  pikmin_restore_refused_rule_first: 6
+  pikmin_restore_refused_rule_second: 8
+  pikmin_type_capacity: 2
+  return_portal_ground: 1          # native EReturnPortalType::Ground
+  reserved_flow_fast_travel: 1 # native FastTravel tag; the fixture deliberately differs
+  reserved_travel_day_area_start: 1 # native DayAreaStart; fixture differs
+  reserved_flow_none: 5            # the native clear helper stores this; no new flow is requested
+  code_size: 0x62F1000
+  stub_base: 0x62F0890              # unused space at the end of the game's code,
+  stub_end: 0x62F1000               # which the framework's patch fills
+  dynamic_hook_slots: 7            # unused legacy padding; native SDK gateways use their own arena
+  max_objects: 600000
+  objects_per_chunk: 0x10000
+  unreachable_flags: 0x30000000     # set on an object the game is destroying
+  actor_destroying_mask: 0x8        # DestroyActor sets BeingDestroyed before its callbacks
+  kept_flag: 0x40000000             # set on an object the engine keeps whatever else lets go of it
+  animation_by_blueprint: 0         # what animates a skeletal mesh: its animation blueprint,
+  animation_single: 1               # or one clip played on it
+  save_slots: 6                     # how many save slots the game keeps
+  save_there: 0                     # what the save system's fuller answer says for a file that is there,
+  save_missing: 1                   # and for one that is not
+  fs_read: 1                        # how a file is opened to be read
+  fs_write: 6                       # and to be written, the way the game opens one
+  fs_write_through: 1               # how a write is told to reach the file before it returns
+  fs_list_all: 3                    # how a folder is opened to list its files and its folders
+  fs_entry_folder: 0                # the kind of a folder's entry that is itself a folder
+  fs_no_such_path: 0x202            # what opening gives for a path nothing is at
+  program_id: 0x0100B7C00933A000    # what the system knows the game by, which a list of modules for it has to name
+  loader_started: 1                 # what the engine notes once it has started the system's loader
+  loader_bind_now: 1                # how the loader is told to settle everything a module refers to as it loads
+  loader_module_bytes: 0x400        # room for the loader's own record of a module it loaded
+  loader_registration_bytes: 0x40   # and for its record of a list of modules it took
+  loader_list_wide: 0               # 1: the system's list of modules carries 3072-bit keys, the form of the Switch 2 builds
+  pause_blocks_travel: 0x7FFF0C0B   # the pause kinds under any of which the story takes no request for travel
+  request_from_menu: 4              # where a request says it comes from, as the game's own menus say
+  leave_request_id: 16
+  portal_request_id: 0xB
+  dialog_question: 0x15             # the game's dialog with a button to accept and one to cancel
+  dialog_message: 0x5E              # its dialog with one button
+  dialog_accept: 2                  # the number the game answers with for the button that accepts
+  dialog_shape: 1                   # a request's `shape` for the dialog in the middle of the screen
+  dialog_mode: 2                    # a request's `mode`, as the game's own menus set it
+  widget_shown: 3                   # how the game shows a widget that takes no touches
+  announce_sliding_in: 1            # the banner's state while it slides in; it takes its time to stay from then
+  polyglot_max_bits: 128            # what an empty set of per-language texts says it has room for
+  name_block_count: 8192
+  names_per_block_shift: 16         # low bits of a name's index are its place in the block
+  name_stride: 2                    # bytes per place
+  name_wide_bit: 0x1                # set in the header of a name stored 16-bit
+  name_length_shift: 6
+  function_static: 0x2000           # function flag: called on the class, not on an object
+  property_const: 0x2               # property flags: an argument the function only reads,
+  property_param: 0x80              # an argument or a result,
+  property_out: 0x100               # an argument passed so the function can write it,
+  property_return: 0x400            # the function's result
+  max_array_count: 1000000          # the longest array the framework will make
+  # What the game's own spawn requests hold when nothing special is asked for.
+  spawn_object_flags: 0x8
+  spawn_team_default: 5             # take the class's own team
+  spawn_team_editor: 4
+  spawn_color_none: 0x10
+  spawn_leaf_none: 3
+  spawn_decoration_none: 0x18
+  spawn_delegate_threshold: 2
+  kill_magic: 0x11335577            # marks a kill record as filled in
+  rule_story: 1                     # the rule number of the story
+  team_story: 4                     # the team of the captain in the story, where there are no sides
+  sort_dog: 4                       # the bit of an actor's sort that says it is a dog
+  state_carcass: 0x10               # the bit of an actor's state that says it is a carcass
+  dismiss_keep_none: 0x10           # in an order to dismiss: no type stays with the leader
+  play_mode_two: 2                  # two players, the second throwing pebbles: no switching to Oatchi
+  pad_none: 7                       # the controller number that stands for none: the eighth, which is never connected
+  pause_stops_control: 0xB          # the pause kinds under any of which the player has no control
+  rest_parked: 1                    # an actor's `rest` once it has been put away in its pool
+  component_destroying_mask: 0x02000000 # DestroyComponent checks/sets bit25 before EndPlay
+  actor_play_state_mask: 0x60       # AActor::EndPlay only acts on the fully begun state
+  actor_play_state_begun: 0x40
+  duplicate_internal_flags: 0x7F800000 # the internal flags the game's own duplications keep (StaticDuplicateObject's mask)
+  ordinary_end_play: 0x05086BB0      # qualified base Actor EndPlay entry
+  ordinary_unregister: 0x05094D50    # qualified base Actor UnregisterAllComponents entry
+  ordinary_destroyed: 0x05086FA0     # qualified base Actor Destroyed entry
+  removal_unregister_return: 0x05BA9728 # original incremental RemoveFromWorld call returns here
+  end_play_removed: 3               # the reason the engine gives for an actor leaving play because its level is taken out of the world
+  max_name_units: 1023              # the longest name the game stores
+  template_flags: 0x30              # set on an object that is a pattern for others: a class's default object, or an archetype
+  default_object_flag: 0x10         # set on a class's default object
+  base_open: 3                      # the state of an area's base once the player can travel to it
+  story_area_bases: 3               # how many bases the story gives an area it adds: what its own areas get
+  story_of_olimar: 1                # the bit of the story's flags that says Olimar's Shipwreck Tale is being played
+  scenes_ready: 1                   # what the keeper of scenes notes once its list is built
+  max_scenes: 4096                  # more scenes than the game could have: a list that claims more is not one
+  save_kinds: 7                     # the game instance's current saves: config, story, quest, report, map fog, generators, player
+  generators_built: 1               # what a generator keeper's `built` holds once the map's generators are made and their actors spawned
+  generator_added: 0x10000          # set in the flags of a generator given to a map that is running
+  ai_stream_version: 0x20230331A    # the version an AI part's values are written at now
+  mutex_ready: 1                    # a system lock's `state` once it is set up
+  shader_map_registered: 0x1        # the bit of a shader map's `flags` that says the engine finds it by its hash
+  listed_pikmin_types: 8            # the types of Pikmin the list of areas shows beside an area: this many, counted from the first
+  widget_collapsed: 1               # how a widget is shown when it is not drawn and takes no room,
+  widget_hidden: 2                  # and when it is not drawn and keeps its room
+  collision_records_most: 128       # how many collision parts the game's own rebuild of an actor's tree has room for,
+  collision_shapes_most: 128        # and how many borrowed shapes
+  pad_handheld: 0x20                # the controller number of the console held in the hands
+  player_slots: 4                   # how many players the game keeps room for
+  nav_failed: 0x80000000            # the bit of what the navmesh's own calls answer that says no
+  nav_tile_owned: 1                 # how a tile is handed to the navmesh for the navmesh to free
+  pause_mod_kinds: 0x7FFF           # pause reasons that a mod may hold
+  sweep_result_bytes: 0x100         # room for the hit result of a sweep
+  mobility_movable: 2               # a part's `Mobility` when it may move
+  engine_fixed_rate: 0x40           # the bit of the engine's flags that holds it to one frame rate
+  world_tick_all: 2                 # how the engine asks a world for a whole update
+  fix_delta: 0x05BD07A0             # the world settings' own clamp of a frame's length between their two limits
+  camera_cut: 0x4                   # the bit of a camera manager's `cut` byte that says this view jumped
+  camera_subject: 0x019CCB20        # the game's camera's own function that finds whom it follows
+  view_times_set: 0x10              # the bit of a view family's values that says they hold the world's times
+  npad_full_key: 0x1                # the styles a controller is connected as: a Pro Controller,
+  npad_handheld: 0x2                # the console held in the hands,
+  npad_joy_dual: 0x4                # and two Joy-Con held together
+  input_resolver: 0x62EDE60         # what an import slot leads to before the system binds it
+  native_jump_offset: 3480          # where in the framework's status the patch's native routes find it
+  render_transform_dirty: 0x40      # bits of a part's flags at +0x88: its place is to be sent,
+  render_dynamic_dirty: 0x80        # and its pose
+  render_ready: 0x3                 # both set in those flags once a part is registered and the renderer has it
+  instance_drawer_table: 0x089C2E60 # the function table of the drawer of the Pikmin's tops, sprouts and pieces
+
+  effect_unpooled: 0xFFFFFFFF
+  effect_spawn_blocked: 0x200200
+  ui_keyboard_characters: 31
+
+# What the game calls things of its own, where the framework has to spell one: classes, and the stages the game
+# goes through.
+names:
+  content_texture_class: Texture2D
+  save_class: CarrotSaveGame        # every save object's class derives from it
+  navigation_system_class: NavigationSystemV1
+  ui_widget_class: Widget
+  ui_user_widget_class: UserWidget
+  ui_widget_tree_class: WidgetTree
+  ui_native_button_class: Button
+  ui_arrow_class: CmnListArrowCursorWidget
+  ui_scroll_box_class: ScrollBox
+  ui_size_box_class: SizeBox
+  ui_option_owner_class: WBP_ui_OptionMenu_C
+  ui_footer_class: WBP_ui_Cmn_Footer_C
+  ui_footer_ingame_class: WBP_ui_Cmn_Footer_InGame_C
+  ui_footer_text_class: CarrotRichTextBlock
+  ui_panel_base_class: PanelWidget
+  ui_host_class: WBP_ui_Option_PA_Settings_C
+  ui_canvas_class: CanvasPanel
+  ui_heading_class: WBP_ui_Battle_PA_Scroll_HeadlineS_C
+  ui_row_class: WBP_ui_Battle_PA_Scroll_List_Text_C
+  ui_button_class: WBP_ui_PA_Button_Base_Text_C
+  ui_selector_plain_class: WBP_ui_PA_List_Base_Text_Arrow_C
+  ui_selector_yellow_class: WBP_ui_PA_List_Base_Icon_Text_Yellow_Arrow_C
+  ui_selector_fixed_class: WBP_ui_PA_List_Unalterable_Text_Arrow_C
+  ui_mod_list_category_class: SettingsMenuMajorItems
+  ui_mod_list_row_class: BattlePaScrollListText
+  ui_mod_list_label_class: CarrotRichTextBlock
+  ui_mod_list_panel_class: VerticalBox
+  ui_mod_list_title_child: F_HeadlineS
+  ui_mod_list_panel_child: N_Vrt_Headline
+  ui_mod_list_tab_class: WBP_ui_Tablet_PA_Tab_Item_C
+  ui_mod_list_slot_class: CanvasPanelSlot
+  # Members the widget Blueprints declare, found by name: each cooking of a Blueprint places them anew.
+  ui_option_settings_member: PA_Settings_000      # the option menu's settings page
+  ui_option_footer_member: PA_Footer              # and its footer
+  ui_footer_text_member: F_FooterGuide            # a footer's text
+  ui_footer_ingame_text_member: F_FooterText      # the in-game footer's
+  ui_mod_list_tab_label_member: F_Tab_Text        # a tab's caption
+  ui_mod_list_tab_underline_member: IM_Base       # the line under it
+  ui_mod_list_tab_selected_member: Select         # the animations of a chosen tab
+  ui_mod_list_tab_idle_member: Normal             # and of the others
+  # The game's own folder of containers, which the engine mounts as it starts, and the game's container there.
+  # The game's project and platform, which name its folder of containers, <project>/Content/Paks, and its own
+  # container there, <project>-<platform>.pak.
+  project: Carrot4
+  game_container: Carrot4-Switch   # the stem of the game's own .pak, .utoc and .ucas in Content/Paks
+  container_layer: PakFile          # the engine's layer of files that mounts containers
+  shader_format: GLSL_SWITCH             # the format a library of shaders is named by
+  throw_parameters: ThrowToggleParameterMap
+  throw_parameters_2p: ThrowToggleParameterMap2P
+  pikmin_enum: EPikminColor
+  pikmin_color_first: Tsuchi19
+  pikmin_color_reserved: TsuchiReserved20
+  pikmin_color_second: Tsuchi21
+  pikmin_row_first: Tsuchi19
+  pikmin_row_second: Tsuchi21
+  function_class: Function
+  class_class: Class
+  engine_actor_class: Actor
+  gameplay_statics_class: GameplayStatics
+  actor_component_class: ActorComponent
+  game_component_class: CarrotActorComponent
+  scene_component_class: SceneComponent
+  mesh_class: MeshComponent
+  material_class: MaterialInterface
+  skeletal_class: SkeletalMeshComponent
+  clip_class: AnimationAsset
+  map_rule_class: CarrotGameRule
+  level_class: Level
+  streaming_class: LevelStreamingDynamic
+  streaming_base_class: LevelStreaming
+  streaming_volume_class: LevelStreamingVolume
+  always_loaded_class: LevelStreamingAlwaysLoaded
+  stage_title: Title
+  stage_story: Story
+  stage_hero: HeroStory
+  stage_challenge: Cave
+  stage_battle: VS
+  stage_story_play: StoryInGame
+  stage_hero_play: HeroStoryInGame
+  stage_battle_play: VsGame
+  stage_special_play: SpecialCaveGame
+  stage_extra_play: ExtraCaveGame
+  cave_prefix: Cave
+  area_level_shape: Area000_P
+  actor_class: GActor               # every actor of the game's own
+  primitive_class: PrimitiveComponent   # a part that can collide
+  avatar_class: AvatarComponent     # the part of a captain that decides for it
+  life_class: LifeComponent         # the part that keeps life
+  data_table_class: DataTable
+  navmesh_class: RecastNavMesh
+  nav_modifier_class: CarrotNavModifierComponent  # a part that marks the navmesh under it
+  rigid_body: PxRigidBody           # what the physics engine calls a body that carries shapes
+  stage_travel: FastTravel          # the stages under which the story is on its way somewhere: to another area,
+  stage_portal: PortalMove          # through a portal,
+  stage_leave: Retire               # and out of a cave
+
+  # carry
+  carry_component_class: TestCarryAffordanceComponent
+  carry_stick_class: C4StickComponent
+  carry_action: Carry
+  carry_ai_action: CarryAI
+
+  effect_asset_class: ParticleSystem
+  effect_component_class: ParticleSystemComponent
+  effect_world_class: World
+  camera_follow_class: CarrotPlayerCamera
+  gimmick_ai_class: ObjectAIComponent
+  gimmick_gate_class: GateAIComponent
+  gimmick_build_class: BuildObjectAIComponent
+  gimmick_station_class: PieceStationAIComponent
+  gimmick_switch_class: SwitchBaseAIComponent
+  gimmick_twin_class: TwinSwitchAIComponent
+  gimmick_door_class: TriggerDoorAIComponent
+  gimmick_drain_class: MizunukiAIComponent
+  gimmick_down_class: DownFloorAIComponent
+  gimmick_pot_class: CrackPotAIComponent
+  gimmick_dig_class: ExcavationAIComponent
+  gimmick_jelly_class: CrushJellyAIComponent
+  gimmick_vent_class: HibaBaseAIComponent
+  gimmick_warp_class: WarpCarryAIComponent
+# Assets of the game's own that the framework loads, by their paths.
+assets:
+  ui_mod_list_tab_class: /Game/Carrot4/UI/InGame/Tablet/Parts/WBP_ui_Tablet_PA_Tab_Item.WBP_ui_Tablet_PA_Tab_Item_C
+  pikmin_property_table: /Game/Carrot4/Core/GActor/DT_PikminProperty.DT_PikminProperty
+  pikmin_color_enum: /Script/Carrot4.EPikminColor
+  area_bases_table: "/Game/Carrot4/GameScene/PrimaryDataAssets/DT_AreaBaseCampTransition.DT_AreaBaseCampTransition"
+  treasure_table: /Game/Carrot4/Core/GActor/DT_OtakaraParameter.DT_OtakaraParameter      # a row for each treasure: its worth and its carriers
+  treasure_catalog_table: /Game/Carrot4/Placeables/Zukan/DT_ZukanOtakaraParameter.DT_ZukanOtakaraParameter  # a row for each treasure the Piklopedia lists
+  catalog_class_table: /Game/Carrot4/Placeables/Zukan/DT_ZukanBP.DT_ZukanBP              # the class the Piklopedia shows for a creature or a treasure
+  icon_table: /Game/Carrot4/Core/GActor/DT_ActorTexture.DT_ActorTexture                  # the icon of a creature or a treasure
+  # a row for each creature: its life, its worth and its carriers. A creature that differs at night has a second row, under its name and `_NIGHT`
+  creature_table: /Game/Carrot4/Core/GActor/DT_TekiParameter.DT_TekiParameter
+  creature_catalog_table: /Game/Carrot4/Placeables/Zukan/DT_ZukanTekiParameter.DT_ZukanTekiParameter  # a row for each creature the Piklopedia lists: the actors it puts on its stage
+  # What the list of areas and the radar show. A row for each area: the pictures the list shows beside it.
+  area_pictures_table: /Game/Carrot4/Core/UI/FastTravel/DT_FastTravelSlideShow.DT_FastTravelSlideShow
+  # A row for each area: its place in the list, the types of Pikmin the list shows for it, and a number for each of its nights.
+  area_types_table: /Game/Carrot4/Core/UI/FastTravel/DT_FastTravelInfo.DT_FastTravelInfo
+  # A row for each area's number, in the order of the numbers: the name of the area's level, and three totals.
+  area_totals_table: /Game/Carrot4/Core/UI/DT_UIMoveArea.DT_UIMoveArea
+  # A row for each scene: the picture the radar draws there, and where the world lies on it.
+  radar_table: /Game/Carrot4/Core/UI/DT_UIRadarTextureParameter.DT_UIRadarTextureParameter
+  # The messages the list of areas shows under an area by day, each with the areas it is for.
+  area_message_table: /Game/Carrot4/Core/UI/DT_UIMoveAreaDayMessage.DT_UIMoveAreaDayMessage
+
+# Rows of the game's own tables that the framework asks for by name.
+  treasure_series_table: /Game/Carrot4/Core/UI/DT_OtakaraSeriesParameter.DT_OtakaraSeriesParameter
+rows:
+  pikmin_properties: [Red, Blue, Yellow, Rock, Wing, Purple, White, Ice]
+  # In the table of the list's messages by day: one row of each kind of message the game shows for every area of
+  # its own. A new area's messages are copies of these.
+  area_messages: [AreaSelect_Common_IncreasePikmin_00, AreaSelect_Common_CollectPikmin_00, AreaSelect_Common_OpenCamp_00,
+                  AreaSelect_Common_CollectOnyon_00, AreaSelect_Common_Rescue_00, AreaSelect_Common_CollectOtakara_00,
+                  AreaSelect_Common_Complete_00]
+
+structs:
+  console_manager_table:
+    fields: {find_variable: {at: 0xb0, returns: pointer, args: [pointer, const_pointer, bool]}}
+  console_variable_table:
+    fields:
+      flags: {at: 0x20, returns: u32, args: [pointer]}
+      set: {at: 0x88, args: [pointer, const_pointer, u32]}
+      value: {at: 0xa0, returns: f32, args: [pointer]}
+  console_manager_table:
+    fields: {find_variable: {at: 0xb0, returns: pointer, args: [pointer, const_pointer, bool]}}
+  console_variable_table:
+    fields:
+      flags: {at: 0x20, returns: u32, args: [pointer]}
+      set: {at: 0x88, args: [pointer, const_pointer, u32]}
+      value: {at: 0xa0, returns: f32, args: [pointer]}
+  ui_widget:
+    fields: {render_x: 0x90, render_y: 0x94, render_scale_x: 0x98, render_scale_y: 0x9C, render_pivot_x: 0xAC, render_pivot_y: 0xB0, clipping: 0xC2, cached_slate: 0xD8, remove_from_parent: {at: 0x298, args: [pointer]}}
+  ui_user_widget:
+    fields: {tree: 0x1E8}
+  ui_widget_tree:
+    fields: {root: 0x28}
+  ui_widget_class_flags:
+    fields: {flags: 0xCC}
+  ui_widget_button:
+    fields: {clicked: 0x3D8, pressed: 0x3E8, released: 0x3F8, hovered: 0x408, unhovered: 0x418}
+  ui_footer_label:
+    fields: {text: 0x138}
+  ui_rich_text:
+    fields:
+      wrapping_policy: 0x11C
+      auto_wrap: 0x11D
+      wrap_width: 0x120
+      slate: 0x448
+  ui_host:
+    fields:
+      tree: 488
+      state: 1256
+      scroll: 1440
+  ui_tree:
+    fields:
+      root: 40
+  ui_row:
+    fields:
+      label: 1280
+      selector: 1288
+  ui_heading:
+    fields:
+      label: 1328
+  ui_button:
+    fields:
+      label: 1344
+  ui_selector:
+    fields:
+      plain_value: 1416
+      yellow_value: 1448
+      fixed_value: 1440
+      plain_arrows: 1424
+      yellow_arrows: 1456
+      fixed_arrows: 1448
+      plain_cursor: 1440
+      yellow_cursor: 1496
+      fixed_cursor: 1464
+  ui_cursor:
+    fields:
+      highlight:
+        at: 1424
+        args:
+        - pointer
+        - u32
+        - u32
+  ui_mod_list_menu:
+    fields:
+      source: 1544
+      active: 0x5A8
+      category_class: 1512
+      new_mode: 1528
+      selected: 1344
+      previous: 1348
+  ui_mod_list_category:
+    fields:
+      title: 1240
+      panel: 1248
+      rows: 1256
+      kind: 1272
+      span: 1276
+      owner: 1280
+      row_class: 1288
+  ui_mod_list_row:
+    fields:
+      title: 1240
+      selector: 1248
+      kind: 1256
+      parent: 1257
+      count: 1260
+      shadow: 1264
+      enabled: 1268
+  ui_mod_list_selector:
+    fields:
+      inner: 0x508
+      value: 0x510
+      left: 0x518
+      right: 0x520
+      choices: 0x528
+      choice: 1340
+      wrap: 1336
+      enabled: 1352
+      redraw:
+        at: 1448
+        args:
+        - pointer
+      valid:
+        at: 1464
+        returns: bool
+        args:
+        - pointer
+        - i32
+  ui_mod_list_tab:
+    fields:
+      slot: 40
+      parent: 40
+      offsets: 56
+      anchors: 72
+      alignment: 88
+  ui_mod_list_scroll:
+    fields:
+      panel: 1280
+      heights: 1304
+      spacing: 1336
+      extent_count: 1352
+      total: 1360
+      variable_height: 0x554
+      viewport: 1368
+      x: 144
+      y: 148
+  ui_button_art:
+    fields:
+      inner: 1352
+      width: 1244
+      height: 1248
+      setup:
+        at: 1424
+        args:
+        - pointer
+        - f32
+        - f32
+      selected_animation: 1328
+      idle_animation: 1320
+      inner_selected_animation: 1464
+      inner_idle_animation: 1456
+  ui_panel:
+    fields:
+      slots: 280
+  ui_panel_slot:
+    fields:
+      content: 48
+  pikmin_counter:
+    size: 0x9B18                    # native allocation at 021541AC
+    fields: {bank: 0x998C,            # the bank the game counts into: 0 or 1
+             read_bank: 0x9988,       # the bank the counter's query reads: 1, or the first for anything else
+             initialized: 0x9990,    # byte; initial recount must run even between world steps
+             force_recount: 0x9B10,  # byte; native requested full recount, not ordinary publication
+             leaf_stride: 0x120, mode_stride: 0x18, player_stride: 4, bank_stride: 0x4C80}
+  snapshot_playerinfo:
+    fields: {id: 4}
+  ai_action_root:
+    fields: {state: 0x68}
+  ai_state:
+    fields: {name: 0x80}
+  throw_toggle_parameter:
+    size: 0x68
+    fields: {toggle: 0, color: 1}
+  throw_icon:
+    fields: {current_toggle: 0x53B,
+             pikmin_type: 0x538,      # the Pikmin type its count is for; the next one while it changes
+             pending_pikmin_type: 0x539, alternate_pikmin_type: 0x53A,
+             alternate: 0x58A}        # nonzero while it shows the alternate type
+  throw_cursor:                     # the throw cursor, a component of the captain
+    fields: {owner: 0x208,            # its actor
+             color: 0x400,            # the Pikmin type its ring was last coloured for; 16 for none
+             parts: 0x5D8,            # its three ring parts, 8 bytes apart
+             materials: 0x5F8,        # what holds the ring parts' materials: three, then three for purple
+             ring: 0x6AC}   # the ring's colours and sizes, as its colour row gives them
+  cursor_placement:                 # original 021C0670 inline placement, called by 01ABEA30
+    fields: {widget_table: 0x89E27E8, component_table: 0x899BC60, producer_return: 0x1AC04F8,
+             ready: 0x528, position: 0x230, screen: 0x504, owner_controller: 0x4A4}
+  ring_part_table:                  # entries in a ring part's function table
+    fields: {set_material: {at: 0x598, args: [pointer, i32, pointer]}}   # (part, slot, material)
+  cursor_toggle:                    # the floating type selector over the throw cursor
+    fields: {icons: 0x588, icon_count: 0x590,
+             alternate: 0x70A}        # nonzero while its icons show their alternate types
+  cursor_toggle_icon:               # one icon of it
+    fields: {textures: 0x4D8,         # its two icon atlases: the Pikmin's, then the items'
+             material: 0x508, toggle: 0x518, alternate_toggle: 0x51A,
+             item_atlas: 0x52C}       # nonzero while it shows a cell of the item atlas
+  selected_info:                    # what a squad says of its selected type
+    size: 0x8
+    fields: {color: 0x0, special: 0x4}
+  map_property:
+    fields: {key: 0x78, value: 0x80, value_offset: 0x88, stride: 0x94}
+  native_map:
+    size: 0x50
+  native_enum:
+    fields: {names: 0x40, cpp_form: 0x50, flags: 0x54}
+  enum_name:
+    size: 0x10
+  pikmin_birth:
+    fields: {onion: 0x0, alone: 0x1, limit: 0x4, sublevel: 0x8, source_first: 0x18, source_second: 0x28,
+             leader_first: 0x38, leader_second: 0x40, origin: 0x48, transform: 0x60, position: 0x70}
+  pikmin_scatter:
+    fields: {minimum: 0xE84, maximum: 0xE88}
+  pikmin_native:
+    fields: {owner: 0x208, property_table: 0x218, property_row: 0x220}
+  object:
+    size: 0x28
+    fields: {flags: 0x8, index: 0xC, class: 0x10, name: 0x18, outer: 0x20}
+  object_item:
+    size: 0x18
+    fields: {object: 0x0, flags: 0x8, serial: 0x10}
+  clock:
+    fields: {progress: 0x14,          # how much of the day has gone by, 0 to 1
+             time_up: 0x9B,           # nonzero once the day has run out
+             night: 0x9C}             # nonzero at night
+  treasure_row:                     # the game's row for one treasure
+    fields: {sparklium: 0x20, poko: 0x24}
+  clock_table:
+    fields: {set_progress: {at: 0x78, args: [pointer, f32, bool]},      # (clock, the part of the day gone by, whether the saved day takes it too)
+             day: 0x28}               # (clock) -> the day it is on
+  game_mode:
+    fields: {skip_story: 0x37E}       # nonzero when the game was started straight into a level, with no story around it
+  request_queue_table:              # entries in the function table of the queue the story takes requests from
+    fields: {push: {at: 0x0, args: [pointer, pointer]}}               # (queue, request)
+  request:                          # what every such request starts with
+    fields: {self: 0x18, id: 0x2C, source: 0x30}
+  travel_request:
+    size: 0x68
+    fields: {captain: 0x38, area: 0x40, base: 0x48}
+  leave_request:
+    size: 0x38
+  portal_request:
+    size: 0x48
+    fields: {captain: 0x38, portal: 0x40}
+  portal_part:
+    fields: {leads_to: 0x258}         # the number of where it leads, below 0 for nowhere
+  fs_entry:                         # one entry of a folder, as the system's file functions give it
+    size: 0x310
+    fields: {name: 0x0,               # as UTF-8, with a terminator
+             kind: 0x304,             # one byte
+             bytes: 0x308}            # a file's size
+  dialog_request:                   # the game's request for a dialog
+    size: 0x230
+    fields: {kind: 0x3C,              # one byte: which of the game's dialogs
+             answerer: 0x40,          # the function the game calls with the answer, as the engine keeps one
+             shape: 0x130, mode: 0x175,   # one byte each
+             player: 0x1E0}           # whose answer counts; below 0 for anyone's
+  dialog_widget:
+    fields: {text: 0x588}             # a weak reference to the block its text is shown in
+  ui_manager:
+    fields: {announcer: 0x2F0}        # what shows the game's announcements
+  announcer:
+    fields: {banner: 0x2C0}           # the banner's widget, once the game has made it
+  banner_widget:
+    fields: {clock: 0x4E0}            # the part of it that slides it in and out
+  announce_widget:
+    fields: {wait_time: 0x514,        # seconds the banner stays
+             state: 0x540}            # see the announce_ constants
+  widget_table:                     # entries in a widget's function table
+    fields: {set_visibility: {at: 0x288, args: [pointer, u32]}}   # (widget, how)
+  sound_system:
+    fields: {started: 0x58, ready: 0x59}  # both nonzero once sounds can be played
+  wwise_audio_queue:
+    fields: {read: 0x0, write: 0x8, reservations: 0x9C}
+  text_manager:
+    fields: {ready: 0x0,              # nonzero once it has read the game's text
+             lock: 0x8}               # what it locks while its strings change
+  text_key:                         # a namespace or a key, as the keeper looks text up
+    size: 0x10
+  text_value:                       # a piece of text as the engine hands it around: what it shares, and who counts the sharers
+    size: 0x18
+    fields: {data: 0x0, counter: 0x8, flags: 0x10}
+  shared_count:                     # the engine's count of who shares a thing
+    size: 0x10
+    fields: {holders: 0x8, watchers: 0xC}
+  shared_count_table:               # entries in its function table
+    fields: {destroy_object: {at: 0x0, args: [pointer]}, destroy_self: {at: 0x10, args: [pointer]}}
+  polyglot_text:                    # a text with its translations, as handed to the keeper
+    size: 0xB8
+    fields: {name_space: 0x18, key: 0x28, text: 0x38,
+             max_bits: 0x74, first_free: 0x78}  # of its empty set of per-language texts
+  data_table:
+    fields: {row_struct: 0x28,        # the type that describes every row
+             rows: 0x30}              # its rows, in slots
+  table_row_entry:                  # one slot: a row's name and where the row is
+    size: 0x18
+    fields: {name: 0x0, row: 0x8}
+  data_table_table:                 # entries in a data table's function table; a plain table has the engine's own in them
+    fields: {add_row_internal: 0x280, remove_row: 0x2A8, add_row: 0x2B0}
+  row_list:                         # rows by name, in slots, as a table keeps them and the keepers below do
+    fields: {slots: 0x0,              # the slots, each a table_row_entry
+             slot_count: 0x8,         # how many slots there are, the free ones among them
+             used_bits: 0x10,         # one bit to a slot, set for a slot in use: here for up to 128 slots,
+             used_bits_far: 0x20,     # and for more, where this points when it is not null
+             bit_count: 0x28,         # how many of those bits there are
+             free_count: 0x34}        # how many slots are free: with none, no bit needs looking at
+  framework_treasures:              # within game_framework: what a loaded world keeps for treasures
+    fields: {rows: 0x490,             # the keeper of the treasures' rows by name
+             icons: 0x4A0}            # the keeper of the icons' rows by name
+  treasure_keeper:                  # the first of those: each of its two tables, and the list it made of that table's rows
+    fields: {table: 0x28, rows: 0x30, catalog_table: 0x80, catalog_rows: 0x88}
+  icon_keeper:
+    fields: {table: 0x28, rows: 0x30}
+  framework_creatures:              # within game_framework: what a loaded world keeps for creatures
+    fields: {rows: 0x488}             # the keeper of the creatures' rows by name
+  creature_keeper:                  # each of its two tables, and the list it made of that table's rows
+    fields: {table: 0x28, rows: 0x30, catalog_table: 0x80, catalog_rows: 0x88}
+  treasure_count:                   # within ui_manager: the Piklopedia's count of treasures, once it was counted
+    fields: {known: 0xC84}            # nonzero while the count stands; the game counts again when it is zero
+  soft_object:                      # the engine's reference to an asset by its path
+    size: 0x28
+    fields: {index: 0x0, serial: 0x4, # the object once it is loaded, by number and serial; -1 for none yet
+             path: 0x10,              # the path as one name,
+             sub_path: 0x18}          # and the path inside the asset as a string, usually empty
+  struct_type:                      # a class, a struct or a function: something with fields
+    fields: {super: 0x40, properties: 0x50, bytes: 0x58, alignment: 0x5C}
+  function:
+    fields: {flags: 0xB0}
+  class_type:
+    fields: {default_object: 0x118}
+  property:                         # one field of a struct_type
+    size: 0x88
+    fields: {kind: 0x8, next: 0x20, name: 0x28, count: 0x34, element_bytes: 0x38, flags: 0x40, offset: 0x4C,
+             inner: 0x78, bool_byte: 0x79, bool_field_mask: 0x7B,
+             meta_class: 0x80}        # a reference to a class: the class it has to be made from
+  array:
+    size: 0x10
+    fields: {data: 0x0, count: 0x8, max: 0xC}
+  game_context:
+    fields: {night_start: 0xFC, snapshot_owner: 0, rule: 0xD0,              # the number of the rule being played: 1 the story, 6 and 8 battles
+             players: 0x408,          # what the game keeps of its players, here within the context itself
+             flow: 0xA30, requests: 0xA20,             # the root of the stages the game is in
+             dialogs: 0xA28,          # the queue the game takes requests for dialogs from
+             level_removal_guard: 0xB8}  # set by the game around its own sublevel hides (0x1ECF1E4); its widgets keep their screen holders while it is set
+  player_block:
+    fields: {captains: 0x4B0,         # a list of the captains in the world, and one of the dogs
+             dogs: 0x4C0,
+             switch_pending: 0x4D1}   # nonzero while a switch between captain and dog is fading in
+  flow_stage:                       # one stage; the stage running within it is its child
+    size: 0xE0
+    fields: {child: 0x60, name: 0x78,
+             stopped: 0x48, status: 0x4C,  # a stage runs while it is not stopped and its status is 1
+             pending: 0xB0}                # a stage waiting to become its child
+  game_instance:
+    fields: {scene_manager: 0x1B0, config_save: 0x1F0, story_save: 0x1F8, controllers: 0x2E8, pause_manager: 0x538,
+             saves: 0x1F0}               # CarrotSaveGames: one object pointer for each of the save_kinds, config first
+  config_save:
+    fields: {play_mode: 0x80, slot: 0x98}         # see the play_mode_ constants
+  story_save:
+    fields: {night: 0xBC, summary: 0xB8, onyon_leaves: 0x290, onyon_deco: 0x2A0, outside_deco: 0x2B0, switch_unlocked: 0x268, day: 0xB8, treasure_records: 0x678, sparklium: 0xA78,  # nonzero once the story lets the player switch to Oatchi
+             area_bases: 0xAB0, saved_portal: 0xB20, return_portal: 0xBA8, reserved_flow: 0xC30, reserved_travel_type: 0xC31}       # an array with one entry for each area's number
+  portal_move:                     # native FPortalMoveInfo, title loader and ReturnGround helpers
+    size: 0x88
+    fields: {initial: 0x1, active: 0x2, return_kind: 0x3, returning: 0x4,
+             from_level: 0x18, from_sublevel: 0x20, from_portal: 0x28,
+             to_level: 0x2C, to_sublevel: 0x34, current_base: 0x44}
+  area_bases:                       # one area's entry there
+    size: 0x28
+    fields: {first_state: 0x0}        # one byte, the state of the area's first base: see base_open
+  controller_manager:               # two sets of slots, one slot for each player; a slot says which controller feeds it
+    fields: {slots: 0x10, slots_too: 0x268}
+  controller_slot:
+    size: 0x68
+    fields: {pad: 0x30}
+  stick_component:                  # the part by which an actor holds on to another
+    fields: {target: 0x498}
+  player_component:                 # the part of a captain that is steered
+    fields: {ridden_dog: 0x1288}
+  event_manager:
+    fields: {busy: 0x98, busy_too: 0x99}
+  scene_manager:
+    fields: {changing: 0x78,          # nonzero while the game is moving to another scene
+             scenes: 0x90,            # an array of the scenes the game knows, each a record of what to load
+             ready: 0xA0}             # see scenes_ready
+  scene_data:                       # one such record
+    fields: {parent: 0x30,            # the record it takes what it does not say from
+             world: 0x50,             # the path of its level, as one name
+             counts: 0xA0}            # the asset that says how much of each thing the level holds
+  explore_menu:                     # the menu the player chooses an area in
+    fields: {story: 0x4F8,            # the story it lists areas of
+             night: 0x509,            # nonzero when it was opened for a night expedition
+             hero: 0x551,             # nonzero in Olimar's Shipwreck Tale
+             panel: 0x6C8,            # the panel that holds its rows
+             selected: 0x708}         # the place in the list of the row the player is on
+  pause_manager:
+    size: 0x58
+    fields: {counters: 0x20, active: 0x34}            # the kinds of thing that are paused now, one bit each
+  streaming_level:
+    fields: {state: 0xB8, policy: 0xBA, loaded: 0x128, pending_unload: 0x130}
+  engine_level:
+    fields: {actors: 0x98, owning_world: 0xB8, world_settings: 0x258}
+  actor_play:
+    fields: {state: 0x5C}
+  world:
+    fields: {levels: 0x138, persistent_level: 0x30, level_name: 0x18,
+             seconds: 0x598, real_seconds: 0x5A0, delta_seconds: 0x5A8}  # its clocks, as floats
+  world_settings:
+    fields: {fix_delta: 0x668,        # the entry of its function table that clamps a frame's length; see fix_delta
+             min_delta: 0x30C, max_delta: 0x310}  # the two limits, before the world's own dilation of time
+  engine:
+    fields: {flags: 0x7A4,            # see engine_fixed_rate
+             fixed_rate: 0x7A8,       # the frame rate the engine is held to, a float
+             user_settings: 0x228}    # the player's settings, as the engine keeps them
+  user_settings:
+    fields: {frame_rate_limit: 0xB0}  # a float; 0 for no limit
+  local_player:
+    fields: {controller: 0x30}
+  player_controller:
+    fields: {camera_manager: 0x2C0}
+  camera_manager:
+    size: 0x2B20
+    fields: {view_target: 0xFA0, cut: 0x2AF1}
+  game_camera:                      # the game's own camera actor, a camera manager's view target in play
+    fields: {subject_finder: 0x668,   # the entry of its function table that finds whom it follows; see camera_subject
+             subject: 0x9D8,          # a weak reference to the part it follows
+             subject_owner: 0x860}    # that part's owner, as the finder left it
+  view_info:                        # a view as the engine describes one
+    size: 0x34
+    fields: {location: 0x0, rotation: 0xC, fov: 0x18, desired_fov: 0x1C, projection: 0x31}
+  scene_world:                      # within the renderer's scene
+    fields: {world: 0x10}
+  view_family_values:               # what a view family is made from
+    fields: {scene: 0x8, world_seconds: 0x5C, delta_seconds: 0x60, real_seconds: 0x64, flags: 0x6C}
+  view_family:
+    fields: {world_seconds: 0x68, delta_seconds: 0x6C, real_seconds: 0x70}
+  npad_device:                      # the game's reader of one controller
+    fields: {buttons: 0x10, id: 0x30}
+  npad_state:                       # what the system says of a controller
+    size: 0x28
+    fields: {buttons: 0x8}
+  input_state:                      # the rest of it: the two sticks' axes, four i32, and its attributes
+    fields: {sticks: 0x10, connected: 0x20}
+  keyboard_state:                   # what the system says of a USB keyboard
+    size: 0x30
+    fields: {sampling: 0x0, modifiers: 0x8, attributes: 0xC, keys: 0x10} # keys: 256 bits, one per USB HID usage
+  primitive:                        # a part the renderer draws
+    fields: {flags: 0x88,             # see render_transform_dirty
+             proxy: 0x478,            # what the renderer has of it, or null
+             last_drawn: 0x2D4}       # the view's world time when the renderer last drew it (WasRecentlyRendered 0x52B0560)
+  instance_holder:                  # within game_framework
+    fields: {drawer: 0xA8}
+  instance_drawer:                  # the game's one drawer of instances, which clears and adds them all each step
+    fields: {components: 0x228, count: 0x230}
+  instanced_mesh:                   # one of its parts: an instanced static mesh
+    fields: {instances: 0x570,        # each a 64-byte matrix
+             count: 0x578,
+             edits: 0x5E4}            # counts changes; the renderer's copy is made again when it does
+  scene_renderer:                   # what draws one view family on the render thread, with its own copy of the family at 0x10
+    fields: {world_seconds: 0x78}
+  life_gauge:                       # a creature's life gauge widget
+    fields: {anchor: 0x720,           # the world point it hangs from, set by the creature's life each step
+             shown: 0x730,            # nonzero while it is shown
+             position: 0x230}         # its place in the viewport, without the screen's scale
+  life_bar:                         # a captain's or the dog's life gauge widget, placed as a creature's is
+    fields: {anchor: 0x6B0,           # the world point it hangs from
+             shown: 0x69C,            # nonzero while it is shown; it is placed only then
+             position: 0x230}
+  material_instance_values:         # a material instance's own parameter values, which its setters keep
+    fields: {scalars: 0xE0, vectors: 0xF0}
+  material_scalar_value:            # one of them: the parameter's info, its value at material_parameter.value
+    size: 0x24
+  material_vector_value:
+    size: 0x30
+  material_parameter:               # one value of a material instance's parameters, as its renderer copy is told it
+    fields: {info: 0x0,               # 16 bytes: the parameter's name, its association and its index
+             index: 0xC,              # that index: -1 for a parameter of the material itself, not of a layer
+             value: 0x10}             # a vector's 4 floats, or a scalar's 1
+  canvas_slot:                      # a widget's place in a canvas panel
+    fields: {content: 0x30,           # the widget it places
+             position: 0x38}          # its offset from the anchors, in the canvas's units
+  particle:                         # one Cascade particle in the renderer's copy
+    fields: {old_location: 0x0, location: 0x10}
+  transform_task:                   # what UpdatePrimitiveTransform hands the renderer, filled in before it is published
+    fields: {scene: 0x10, proxy: 0x18, world_bounds: 0x20, local_bounds: 0x3C, matrix: 0x60, attachment: 0xE0}
+  bone_pose:                        # one bone's place in a pose the renderer is given, 48 bytes
+    size: 0x30
+    fields: {rotation: 0x0, translation: 0x10, scale: 0x1C}
+  skinned_pose:                     # original 0599FC60/059A7128 read these; 0532EFA0 finalizes/increments
+    fields: {master: 0x4D0,          # native weak reference (index, serial); not an owning pointer
+             arrays: 0x4F8,         # two component-space transform TArray headers, 16 bytes apart
+             read_index: 0x53C,
+             revision: 0x540}        # finalized bone revision, independent of unchanged transform bytes
+  game_framework:
+    fields: {ground_query: 0x388,     # what the game asks where the ground is; the warp needs it
+             instance_holder: 0xEA0,  # what holds the drawer of instances
+             world_begun: 0x229,      # nonzero once the loaded world has had its first update
+             ui: 0x510,               # what keeps the game's screens and what is drawn over play
+             clock: 0x420,            # the level's clock, in the story
+             generators: 0x528,       # what makes the map's placed objects and keeps what became of them
+             events: 0x4C0,           # what runs the level's scripted events
+             actor_list: 0xEF8,       # the first link of the ring of actors in play
+             pikmin_list: 0xF28,      # and of the ring of Pikmin, the dying among them
+             pikmin_counters: 0xED0}  # the game's counts of its Pikmin by type, leaf, state and player
+  actor_node:                       # one link of that ring; each actor carries its own
+    size: 0x18
+    fields: {next: 0x8, actor: 0x10}
+  engine_actor:
+    fields: {root: 0x130, play_state: 0x5C}
+  ordinary_actor_vtable:
+    fields:
+      end_play: {at: 0x348, args: [u64, u8]}
+      unregister: {at: 0x4E0, args: [u64, bool]}
+      destroyed: {at: 0x548, args: [u64]}
+  game_actor:
+    fields: {snapshot_playerinfo: 0x248, snapshot_excluded: 0x2BC1, root: 0x130, kind: 0x22C, physics: 0x2E0, physics_place: 0x16C0, movement: 0x2E8, collision_tree: 0x328,
+             stick: 0x318,            # the part by which it holds on to another actor
+             life: 0x338,             # the part that keeps its life, for an actor that has any
+             player: 0x350,           # the part that is steered, for a captain or a dog
+             pikmin: 0x358,           # the part that makes it a Pikmin
+             group: 0x234,            # the name of the group it belongs to, such as the enemies'
+             state_flags: 0x2BC8,     # bits of its state; see the state_ constants
+             sort: 0x242,             # bits that say what sort of thing it is; see the sort_ constants
+             sublevel: 0x2884,        # the name of the part of the level it belongs to
+             color: 0x250,            # a Pikmin's type, as the game numbers them
+             removed: 0x8C4,          # it is on its way out of play
+             ai: 0x340, facing_component: 0x420,
+             facing_enabled: 0x4A0,
+             pool: 0x4B8,
+             kind_pool: 0x4C0,
+             freeze_delay: 0x500,     # frames before an idle actor's physics may stop again
+             awake_holds: 0x504,      # how many things are keeping its physics running
+             tick_requested: 0x510,   # RequestTickEnabled retains this while asleep
+             rest: 0x508,             # 0 while it is up and about; see the rest_ constants
+             kill_queued: 0x8C5, terminated: 0x8C6,
+             rigid_body: 0x928,       # the physics engine's body, remembered between frames
+             body_awake: 0x930,       # it has a physics body that is moving
+             simulating: 0x960, simulating_known: 0x961,
+             team: 0x1234,
+             velocity_pending: 0x1478, velocity_added_1: 0x148C, velocity_added_2: 0x149C, velocity_added_3: 0x14AC,
+             keep_vertical: 0x1521,   # its movement asks to keep the body's speed along gravity
+             speed_clamp: 0x1655,     # its speed is held under a limit
+             velocity: 0x1698,        # centimeters per second
+             support_contact: 0x1820, # accepted upward support in the current native contact update
+             air_steps: 0x1CB8,       # steps since a contact reset; some wall contacts reset this too
+             contact_step: 0x1CBC,    # TickPre sets this; collision processing consumes it before resetting contacts
+             placement: 0x27C8}
+  spawn_request:                    # what the game's spawner is given
+    size: 0xE8
+    fields: {class: 0x0, object_flags: 0x44, location: 0x48, rotation: 0x54, velocity: 0x60, scale: 0x6C, team: 0x78,
+             team_editor: 0x7C, color: 0x80, leaf: 0x81, user_value: 0x8C, delegate_threshold: 0xA8, decoration: 0xB0,
+             node: 0xB8, node_self: 0xC8}
+  kill_record:                      # what the game's kill is given
+    size: 0x50
+    fields: {head: 0x0, tail: 0x8, lock: 0x18, magic: 0x38, quiet: 0x40, cause: 0x41, killer: 0x48}
+  primitive_table:                  # entries in the function table of a component that can collide
+    fields: {is_simulating: {at: 0x430, returns: bool, args: [pointer, u64]},    # (component, bone name or none) -> yes or no
+             get_collision: {at: 0x510, returns: u8, args: [pointer]},    # (component) -> how it collides, as the engine numbers it
+             set_simulating: {at: 0x5D0, args: [pointer, bool]},   # (component, on)
+             set_collision: {at: 0x660, args: [pointer, u32]},    # (component, how)
+             body_instance: {at: 0x6F0, returns: pointer, args: [pointer, u64, bool]}}    # (component, bone name or none, true) -> its body's record
+  body_instance:
+    fields: {body: 0x118}             # the physics engine's body
+  physics_body_table:               # entries in the function table of one of the physics engine's bodies
+    fields: {is_kind: {at: 0x28, returns: bool, args: [pointer, text]},           # (body, a type's name) -> yes or no
+             get_scene: {at: 0x38, returns: pointer, args: [const_pointer]},
+             global_pose: {at: 0xA8, returns: physics_pose, args: [const_pointer]}, # returns rotation and position through the native aggregate ABI
+             is_sleeping: {at: 0x1F8, returns: bool, args: [const_pointer]},
+             shape_count: {at: 0xD0, returns: u32, args: [pointer]}}       # (body) -> how many shapes it has
+  physics_body:
+    fields: {kind: 0x8}
+  physics_dynamic:                  # fields read by NpRigidDynamic's pose and sleeping getters
+    size: 0x180
+    fields: {buffer: 0x70, state: 0x17C}
+  physics_dynamic_buffer:
+    fields: {pose: 0xD0}
+  physics_scene_table:
+    fields: {lock_read: {at: 0x350, args: [pointer, text, u32]}, unlock_read: {at: 0x358, args: [pointer]}}
+  collision_tree:                   # the game's own record of an actor's collision parts
+    fields: {actor: 0x208, records: 0x218, count: 0x220, capacity: 0x224, shapes: 0x238, shapes_other: 0x240}
+  collision_record:                 # one part: its component, and a shape borrowed from the physics engine
+    size: 0x170
+    fields: {component: 0x8, shape: 0xB0, shape_index: 0xB8}
+  actor_table:                      # entries in a game actor's function table
+    fields: {request_tick: {at: 0x690, args: [pointer, bool]},     # (actor, on): its own update, switched when it is next awake
+             find_component: {at: 0x628, returns: pointer, args: [pointer, pointer]}}   # (actor, a class) -> its part of that class, or null
+  game_component:
+    fields: {tick_requested: 0x211}  # SetComponentTickEnabled retains the request while asleep
+  component_table:                  # entries in any component's function table
+    fields: {set_tick_enabled: {at: 0x368, args: [pointer, bool]}} # (component, on)
+  ai_component:
+    size: 0x9EC
+    fields: {classify_child: 0x9E4, messages: 0x640,         # the queue of what the actor has been sent
+             actions: 0x218}          # the root of the tree of what it is doing
+  pikmin_component:
+    size: 0x819
+    fields: {classify_decoration: 0x688, classify_skip: 0x818, classify_ready: 0x6A8, leaf: 0x238,             # what it has on its head: 0 a leaf, 1 a bud, 2 a flower
+             in_army: 0x684}          # nonzero once it counts among a player's Pikmin
+  revive_request:                   # what a defeated creature is sent to come back
+    size: 0x48
+  charge_order:                     # the order a captain's charge gives one Pikmin
+    size: 0x60
+    fields: {place: 0x40,             # where the target is
+             leader: 0x4C,            # in whose name: an object's number and serial
+             target: 0x54,            # what to work on, the same way
+             flag: 0x5C}
+  dog_component:                    # the part of a dog that is steered
+    fields: {dismiss_settings: 0x21E8}  # what the game's dismissal of a dog's squad is given
+  dismiss_order:                    # what the game's dismissal is told
+    size: 0x18
+    fields: {leader: 0x0,             # whose squad: an object's number and serial
+             keep_type: 0x8, keep_special: 0xC, sound: 0x10, motion: 0x11, filter: 0x12}
+  avatar_component:                 # the part of a captain that decides for it
+    fields: {whistle: 0xB80,          # the part that is its whistle
+             whistling: 0xB88,        # nonzero while it whistles
+             ride_reach: 0x1474,      # how near its dog it has to be to get on, across the ground
+             ride_asked: 0x1495}      # set when a ride is asked for; the game leaves it set
+  avatar_table:                     # entries in the function table of that part
+    fields: {squad: {at: 0x918, returns: u64, args: [pointer]}}            # (the part) -> the squad it throws from: its own, or its dog's while it rides
+  whistle_part:
+    fields: {radius: 0x234, center: 0x240,
+             count: 0x360}            # how many whistles it has begun
+  cursor:
+    fields: {offset: 0x280,           # where it is from the captain, across the ground; the game works out the point from this
+             position: 0x2A4}         # the point it is on
+  life_component:
+    fields: {max: 0x32C, current: 0x330, extra: 0x334, max_extra: 0x338}
+  action:                           # one thing an actor is doing; what it is doing within that is its child
+    fields: {child: 0x68, name: 0x80}
+  message_queue_table:
+    fields: {pop: {at: 0x18, returns: pointer, args: [pointer]}}               # (queue) -> the next message, or null
+  message:                          # what every message starts with
+    fields: {self: 0x18,              # the message itself, as its constructor writes
+             sender: 0x28,            # who sent it: an object's number and serial
+             other: 0x30,             # another object's number and serial, none when made
+             references: 0x38,        # how many queues still hold it: 1 when made
+             ready: 0x3E}             # 1 when made
+  message_table:
+    fields: {destroy: {at: 0x18, args: [pointer]}}           # (message): frees it
+  damage_message:
+    size: 0xC8
+    fields: {amount: 0x40, attack: 0x49,
+             riding_applies: 0xAA,    # a captain riding Oatchi loses life only with this set
+             origin: 0xB8}            # where the hit came from: a victim is pushed away from here
+  knock_message:
+    size: 0x120
+    fields: {velocity: 0x78, damage: 0xF0}
+  actor_component:
+    fields: {lifecycle_flags: 0x88}
+  instanced_static_mesh_component:
+    fields: {start_cull_distance: 0x59C, end_cull_distance: 0x5A0}
+  scene_component:                  # a part of an actor that has a place in the world
+    fields: {owner: 0xA0, attach_parent: 0xC0, attach_children: 0xD0, velocity: 0x140,
+             rotation: 0x1C0, location: 0x1D0}  # a quaternion, then a place
+  object_vtable:                    # entries in every object's function table
+    fields: {process_event: {at: 0x228, args: [pointer, pointer, pointer]}}
+  struct_vtable:
+    fields: {initialize: {at: 0x2B8, args: [pointer, pointer, i32]}, destroy: {at: 0x2C0, args: [pointer, pointer, i32]}}
+  allocator_vtable:
+    fields: {malloc: {at: 0x18, returns: pointer, args: [pointer, u64, u32]}, free: {at: 0x38, args: [pointer, pointer]}}
+  name_entry:
+    fields: {header: 0x0, text: 0x2}
+  navmesh_actor:                    # the actor that owns a navmesh
+    fields: {implementation: 0x4C8}
+  navmesh_implementation:
+    fields: {mesh: 0x8}
+  navmesh:                          # its parameters come first: where the grid begins, and how wide a tile is
+    fields: {max_tiles: 0x30, tiles: 0x90, tile_bits: 0x9C, poly_bits: 0xA0}
+  navmesh_tile:
+    size: 0xB0
+    fields: {salt: 0x0, header: 0x8}
+  nav_modifier:                     # a part that marks polygons as an area of a kind
+    fields: {area_class: 0xE0, picked: 0x151}
+  generator_keeper:                 # what makes a map's placed objects, from the map's placement lists or from the save
+    fields: {generators: 0x28,        # an array of generators
+             built: 0x58}             # one byte: see generators_built
+  generator:                        # one placed thing, or several of a kind. A row of a placement list is laid out the same.
+    size: 0x510
+    fields: {index: 0x10,             # its place in the keeper's array
+             class: 0x18,             # the class it makes, once that is loaded
+             init_transform: 0x60,    # where its list puts it, an engine_transform; the game copies it from the row
+             transform: 0x90,         # where it makes its actors, an engine_transform
+             placement: 0xC8,         # its placement number
+             count: 0xD8,             # how many actors it makes
+             birth_day: 0x114,        # the day it was made on
+             left: 0x120,             # how many it has still to make
+             sublevel: 0x490,         # the name of the part of the level it belongs to
+             actors: 0x4C8,           # an array of the actors it made
+             flags: 0x4D8}            # see generator_added
+  engine_transform:                 # a turn as x, y, z, w, a place, and a scale, each of floats, as the engine keeps one
+    size: 0x30
+    fields: {rotation: 0x0, translation: 0x10, scale: 0x20}
+  ai_values:                        # what an AI part writes its values into and reads them from: two arrays of bytes
+    size: 0x20
+    fields: {set: 0x0,                # what the level's maker set for it
+             state: 0x10}             # what it keeps while it runs
+  enum_type:
+    fields: {names: 0x40}             # an array of its values: a name and a number each
+  enum_entry:
+    size: 0x10
+    fields: {value: 0x8}
+  save_table:                       # entries in a save object's function table, as UCarrotSaveGame's subclasses fill them
+    fields: {copy_from: 0x2D8,        # (save, another save of its class): takes that save's data, as the day retry and the hero story do
+             apply: 0x298}            # (save): becomes the current save of its kind and the game finds its places in it again
+  renderer_table:                   # entries in the renderer's function table
+    fields: {make_pixel_shader: 0x58} # (renderer, a shader's bytes as a pointer and a count, its hash) -> a counted reference to the shader
+  shader:                           # a shader as the renderer made it
+    fields: {hash: 0x14}              # its 20 bytes, which the game's library writes after the shader is made
+  material_instance:
+    fields: {resources: 0x390}        # a list of what it is rendered through: one, for a material with shaders of its own
+  material_resource:                # what a material is rendered through
+    fields: {game_map: 0x8,           # its shader map as the game's thread has it,
+             render_map: 0x10,        # and as the renderer's thread has it
+             instance: 0x30}          # the material instance it belongs to
+  shader_map:                       # a material's compiled shaders
+    size: 0x80
+    fields: {resource: 0x10,          # its list of shaders
+             content: 0x28,           # its description, and how many bytes that is
+             content_bytes: 0x30,
+             id_hash: 0x40,           # the 20 bytes the game knows it by
+             references: 0x74,        # how many hold it
+             flags: 0x79}             # one byte; see the shader_map_ constants
+  shader_map_resource:              # a shader map's shaders as the renderer made them
+    size: 0x60
+    fields: {lock: 0x18,              # a system lock for the list
+             shaders: 0x38,           # the list: a place for each shader of the map, empty until the shader is first drawn with
+             shader_count: 0x40,
+             references: 0x48,        # how many hold it
+             preloaded: 0x5C}         # nonzero once the game's library has read its shaders in
+  system_mutex:                     # a lock of the system the game runs on
+    size: 0x20
+    fields: {state: 0x0, recursive: 0x1}  # one byte each
+  frozen_name:                      # a name as a shader map's description holds one
+    size: 0xC
+    fields: {comparison: 0x0, display: 0x4, number: 0x8}
+
+  # carry
+  carry_actor:
+    fields: {component: 0x310}
+  carry_component:
+    fields: {weight: 0x560, maximum: 0x564, carriers: 0x600, info: 0x620}
+  carry_info:
+    fields: {destination: 0xE0, arrival_destination: 0xF0}
+  carry_stick:
+    fields: {owner: 0x208, attachments: 0x3B8, member: 0x418, target_stick: 0x4A8}
+  carry_attachment_list:
+    fields: {previous: 0, next: 8, count: 0x10}
+  carry_attachment_node:
+    fields: {previous: 0, next: 8, actor: 0x10, owner: 0x18}
+
+  camera_service:
+    fields: {pov: 0x1D00, stop_shakes: {at: 0x7C8, args: [pointer, bool]}, player_camera: 0xDA8, distance: 0xA24, pitch: 0xA2C, heading: 0xA40, mode: 0x870, follow: 0x9F5, look: 0x9E8, pole: 0xA14, demo_manager: 0x4C0, demo_hold: 0x3D4, shake_manager: 0x5B0}
+  # input
+  mod_settings:
+    fields: {save: {at: 0x2B8, args: [pointer]}}
+
+  # ui
+  ui_keyboard:
+    size: 0x500
+    fields: {maximum: 0x3AC, minimum: 0x3B0, utf8: 0x3BD, work: 0x4D0, work_bytes: 0x4D8}
+
+  # ui
+  effect_owner:
+    fields: {manager: 0x568, get_world: {at: 0x168, returns: pointer, args: [pointer]}}
+  effect_world:
+    fields: {spawn_flags: 0x10B}
+  effect_asset:
+    fields: {single_emitter: 0xD0, water_adjustment: 0xD4}
+  effect_manager:
+    fields: {invalid_owners: 0x1D8, invalid_count: 0x1E0, invalid_capacity: 0x1E4, invalid_enabled: 0x1F9}
+  effect_emitter:
+    fields: {component: 0x228, pool: 0x2B0, released: 0x2DC}
+  effect_parameters:
+    fields:
+      scalar: {at: 0x8F0, args: [pointer, u64, f32]}
+      vector: {at: 0x8F8, args: [pointer, u64, f32, f32, f32]}
+      color: {at: 0x900, args: [pointer, u64, f32, f32, f32, f32]}
+  # world
+  world_follow_ai:
+    fields: {fsm: 0x218}
+  world_follow_fsm:
+    fields: {locked: 0x50}
+  world_follow_mover:
+    fields: {root: 0x570}
+  world_follow_args:
+    size: 0x30
+    fields: {position: 0x0, target: 0xC, default_name: 0x14, start_motion: 0x1C, walk_motion: 0x24, stop: 0x2D}
+  # gimmicks
+  gimmick_actor:
+    fields: {ai: 0x340, removed: 0x8C4, leaving: 0x8C5, asleep: 0x508, awake: 0x500, wake_count: 0x504, flag_8c8: 0x8C8, flag_8b0: 0x8B0}
+  gimmick_ai:
+    fields: {fsm: 0x218, done: 0x9C4, gate_total: 0xA18, gate_left: 0xA1C, pieces: 0xA14, total_pieces: 0xA20, door_type: 0x9F0, door_open: 0xA10, drain_done: 0x9F4, down_done: 0x9ED, down_phase: 0x9F0, pot_broken: 0x9F8, dig_ratio: 0xA6C, dig_stage: 0xAA0, dig_filling: 0xB60, warp_parameter: 0x9F0}
+  gimmick_fsm:
+    fields: {locked: 0x50, owner: 0x60, child: 0x68, blackboard: 0x98}
+  gimmick_board:
+    fields: {enabled: 0x8, armed: 0x9, pressed: 0xA, parameter: 0x28, want_open: 0x8, want_close: 0x9, warp_stage: 0x10, warp_shapes: 0x38, warp_count: 0x40, warp_parameter: 0xB0, warp_ai: 0xB8}
+  gimmick_switch_parameter:
+    fields: {repeatable: 0x9, warp_first: 0x18, warp_second: 0x1C}
+  gimmick_methods:
+    fields:
+      gate_break: {at: 0x90, args: [pointer, bool]}
+      switch_press: {at: 0x70, args: [pointer]}
+      apply_pieces: {at: 0x7C8, args: [pointer]}
+      built: {at: 0x820, args: [pointer]}
+      drain: {at: 0x4F8, args: [pointer, bool]}
+  # battle
+  battle_framework:
+    fields: {manager: 0xEE0, clock: 0x420, roulette: 0xED8}
+  battle_manager:
+    size: 0x2C8
+    fields: {running: 0xC, pops: 0x28, bonus: 0x50, bonus_count: 0x58, bonus_max: 0x5C, bonus_phases: 0xA8, bonus_phase: 0x124, bonus_refresh: 0x2C0}
+  battle_clock:
+    size: 0xA8
+    fields: {minutes: 0x1C, elapsed: 0x20, stopped: 0x99, time_up: 0x9B, unlimited: 0x9D}
+  battle_context:
+    fields: {flow: 0xA30, tug_time: 0x1D0}
+  battle_flow:
+    size: 0xE0
+    fields: {child: 0x60, aborted: 0xD4, retry: 0xD5, step: 0xD4, choice: 0xD8}
+  battle_pop:
+    fields: {groups: 0x8, stride: 0x58, group: 0x8, rows: 0x18, places: 0x28, row_stride: 0xD0, countdown: 0xB4, repop: 0xBC, place_stride: 0x650, queued: 0x638, kind: 0x639, flag: 0x63A, actor: 0x63C, owner: 0x648, owner_type: 0x8, bit_inline: 0x10, bit_heap: 0x20, bit_count: 0x28}
+  battle_tug:
+    fields: {timer: 0xCC, phase: 0xD0, actor: 0x60, holder: 0x90, info: 0x620, required: 0x560, strength: 0x124}
+  battle_roulette:
+    fields: {slots: 0xA0, count: 0xA8, team: 0x4}
+  # carry
+  content_throw_icon:
+    fields: {textures: 0x4E0, material: 0x510}
+
+  # content
+  squad_formation:
+    fields: {list: 0x830, count: 0x840, throw_cache_a: 0x19CC, throw_cache_b: 0x19D4}
+  pikmin_counter_row: {size: 0x480}  # one Pikmin type's row of the counter
+  throw_cursor_ring: {size: 0x48}   # the throw cursor's ring: its colours and sizes
+  squad_node:
+    size: 0x48
+    fields: {previous: 0, next: 8, self: 0x10, owner: 0x18, kind: 0x20, count: 0x24, members: 0x30, members_last: 0x38}
+  squad_hud:
+    fields: {icons: 0x530, count: 0x538, player: 0x598}
+  squad_icon:
+    fields: {textures: 0x4E0, number: 0x508, material: 0x510, kind: 0x538, toggle: 0x53B, count: 0x584}
+  squad_ai:
+    fields: {home: 0x700}
+
+  # content
+  squad_component:
+    fields: {owner: 0x208}
+
+  # content
+  content_series_manager:
+    fields: {rows: 0xFB0}
+  content_series_row:
+    fields: {series: 8, rate: 0xC}
+  squad_throw_solution:
+    size: 0x68
+    fields: {start: 0, target: 0xC, velocity: 0x18, apex: 0x24, one: 0x28, limit: 0x2C,
+             length_max: 0x30, radius: 0x34, thrower: 0x38, gravity: 0x44, path: 0x48,
+             path_num: 0x50, path_max: 0x54, apex_frame: 0x58, first_near: 0x5C, step: 0x60}
+
+  # content
+  squad_pikmin:
+    fields: {throw_height: 0x2D4}
+  squad_game_config:
+    fields: {throw_length_max: 0x44C}
+
+  # carry: original Attach 0x1A71074..0x1A710E4 and DrainAttachmentList3B8.
+functions:
+  map_add_stream: {address: 0x05BAB910, args: [pointer, pointer]}
+  map_remove_stream: {address: 0x05BABDB0, returns: bool, args: [pointer, pointer]}
+  map_duplicate_stream: {address: 0x039BDA20, returns: pointer, args: [const_pointer, pointer, u64, u32, pointer, i32, u32]}
+  map_set_package: {address: 0x055C6FE0, args: [pointer, u64]}
+  ui_arrow_left: {address: 0x02274CB0, args: [pointer]}
+  ui_arrow_right: {address: 0x02274D70, args: [pointer]}
+  ui_post_sound: {address: 0x18d02f0, returns: u64, args: [pointer, const_pointer, u32, u32, bool, bool]}
+  ui_context_world: {address: 0x05B14720, returns: pointer, args: [pointer, pointer, u32]}
+  ui_widget_in_viewport: {address: 0x4c97e00, returns: bool, args: [pointer]}
+  ui_widget_viewport: {address: 0x04C94C80, args: [pointer, i32, bool]}
+  ui_scroll_offset: {address: 0x04C581B0, args: [f32, pointer]}
+  ui_scroll_reveal: {address: 0x04C581F0, args: [f32, pointer, pointer, bool, u32]}
+  ui_size_box_width: {address: 0x04C59100, args: [f32, pointer]}
+  ui_size_box_height: {address: 0x04C59340, args: [f32, pointer]}
+  ui_scroll_vertical: {address: 0x04C584C0, args: [pointer, u32]}
+  ui_scroll_slot_horizontal: {address: 0x04C587A0, args: [pointer, u32]}
+  ui_scroll_slot_vertical: {address: 0x04C587C0, args: [pointer, u32]}
+  ui_widget_set_clipping: {address: 0x04C6D330, args: [pointer, u32]}
+  ui_widget_scale: {address: 0x04C6BB70, args: [f32, f32, pointer]}
+  ui_widget_pivot: {address: 0x04C6BBC0, args: [f32, f32, pointer]}
+  ui_footer_lookup: {address: 0x02E4E530, returns: engine_text, args: [const_pointer, const_pointer, u32, u32, u32]}  # 2.0.0 reads a fifth (bit 0 of w4); its callers pass 0, as the framework does
+  ui_settings_dispatch: {address: 0x246fe90, returns: bool, args: [pointer, u32]}
+  ui_construct:
+    address: 60550368
+    returns: pointer
+    args:
+    - const_pointer
+  ui_create_widget:
+    address: 80343104
+    returns: pointer
+    args:
+    - pointer
+    - pointer
+    - pointer
+  ui_add_child:
+    address: 79808048
+    returns: pointer
+    args:
+    - pointer
+    - pointer
+  ui_slot_offsets:
+    address: 79811344
+    args:
+    - pointer
+    - f32
+    - f32
+    - f32
+    - f32
+  ui_slot_anchors:
+    address: 0x04C1D4C0
+    args: [pointer, f32, f32, f32, f32]
+  ui_slot_alignment:
+    address: 0x04C1D670
+    args: [pointer, f32, f32]
+  ui_slot_auto_size:
+    address: 0x04C1D800
+    args: [pointer, bool]
+  ui_get_visibility:
+    address: 80136512
+    returns: u32
+    args:
+    - pointer
+  ui_mod_list_refresh:
+    address: 38173376
+    args:
+    - pointer
+  ui_mod_list_focus:
+    address: 38175888
+    args:
+    - pointer
+  ui_mod_list_reveal:
+    address: 0x0228AAD0
+    args: [pointer, u32]
+  ui_cached_geometry:
+    address: 0x04C70150
+    returns: pointer
+    args: [pointer]
+  ui_text_justification:
+    address: 0x02D83610
+    args: [pointer, u32]
+  ui_rich_text_sync:
+    address: 0x02D73080
+    args: [pointer]
+  ui_mod_list_adjust:
+    address: 38210032
+    returns: u32
+    args:
+    - pointer
+    - u32
+    - i32
+  ui_mod_list_bind_row:
+    address: 37765712
+    args:
+    - pointer
+  ui_mod_list_append_choice:
+    address: 37767136
+    args:
+    - pointer
+    - pointer
+  ui_mod_list_play_animation:
+    address: 79729408
+    returns: pointer
+    args:
+    - pointer
+    - pointer
+    - f32
+    - i32
+    - u32
+    - f32
+    - bool
+  ui_mod_list_transform:
+    address: 80131552
+    args:
+    - pointer
+  ui_mod_list_scrollbar:
+    address: 36220736
+    args:
+    - pointer
+  ui_button_setup_frame:
+    address: 41263696
+    args:
+    - pointer
+  ui_remove_child_at:
+    address: 80001904
+    returns: bool
+    args:
+    - pointer
+    - i32
+  pikmin_counter_classify: {address: 0x1D8F970, returns: void, args: [pointer, pointer]}
+  # The floating selector over the throw cursor: (selector, alternate, now) writes each icon's count, up to the
+  # first icon whose toggle is not 1 to 15; (icon, count, most or -1) shows a count.
+  cursor_toggle_counts: {address: 0x21BE590, returns: void, args: [pointer, bool, bool]}
+  # (throw cursor, the ring colour's number): copies that colour row into the cursor's ring.
+  cursor_ring_colors: {address: 0x1AC0F00, returns: void, args: [pointer, pointer]}
+  cursor_icon_count: {address: 0x22F6A60, returns: void, args: [pointer, i32, i32]}
+  # An icon's material: (material, texture) its atlas; (material, cell) the cell it shows.
+  icon_texture: {address: 0x2E53180, returns: void, args: [pointer, pointer]}
+  icon_index: {address: 0x2E52C50, returns: void, args: [pointer, i32]}
+  pikmin_snapshot_current: {address: 0x1C3F5E0, returns: pointer, args: [pointer]}
+  pikmin_snapshot_partner: {address: 0x1C3F910, returns: pointer, args: [pointer]}
+  throw_toggle_for_color: {address: 0x1DF1240, returns: u8, args: [pointer, u8]}
+  add_map_pair: {address: 0x5207920, returns: void, args: [pointer, pointer, const_pointer, const_pointer]}
+  set_enum_names: {address: 0x38C3E50, returns: bool, args: [pointer, const_pointer, u32, u32, u32]}
+  name_from_text: {address: 0x37725D0, returns: u64, args: [pointer, u64, u64]}        # UTF-16 text, length, 1 to add it
+  class_find_function: {address: 0x384D2E0, returns: pointer, args: [pointer, u64, u64]}  # class, name, 1 to search parents
+  spawn_now: {address: 0x2160F60, returns: pointer, args: [pointer, pointer]}            # the game framework, a spawn request -> the actor
+  spawn_request_destroy: {address: 0xD09540, returns: void, args: [pointer]}
+  kill_record_lock: {address: 0x62EDEB0, returns: void, args: [pointer, u64, u64]}       # sets up the lock inside a kill record: (lock, 1, 0)
+  kill_actor: {address: 0x1751800, returns: void, args: [pointer, pointer]}              # a kill record, the actor: queued for the next world update
+  kill_record_destroy: {address: 0xD57180, returns: void, args: [pointer]}
+  request_velocity: {address: 0x1B744F0, returns: void, args: [pointer, pointer]}        # actor, three numbers: applied at the next world update
+  physics_dynamic_pose: {address: 0x157A50, returns: physics_pose, args: [const_pointer]} # NpRigidDynamic::getGlobalPose, 28-byte aggregate return
+  physics_dynamic_sleeping: {address: 0x1561A0, returns: bool, args: [const_pointer]} # NpRigidDynamic::isSleeping reads the native body state
+  # actor, place, angles, turn it too, set it on the ground, allow for its height
+  warp_actor: {address: 0xD95450, returns: void, args: [pointer, pointer, pointer, bool, bool, bool]}
+  rebuild_collision_tree: {address: 0x1A8F720, returns: void, args: [pointer]}           # the tree: finds its borrowed shapes again
+  # actor, sweep, where a sweep reports, teleport, then the place and the angles
+  set_actor_location_and_rotation: {address: 0x5096A60, returns: bool, args: [pointer, bool, pointer, bool, f32, f32, f32, f32, f32, f32]}
+  # component, sweep, where a sweep reports, teleport, then the angles
+  set_component_world_rotation: {address: 0x5304650, returns: void, args: [pointer, bool, pointer, bool, f32, f32, f32]}
+  set_instance_cull_distances: {address: 0x05540C10, returns: void, args: [pointer, i32, i32]} # stores pair then native MarkRenderStateDirty
+  start_whistle: {address: 0x15A9B30, returns: void, args: [pointer, bool]}              # a captain's part, whether it rides
+  end_whistle: {address: 0x15A9DF0, returns: void, args: [pointer]}
+  captain_cursor: {address: 0x158BCE0, returns: pointer, args: [pointer]}                # a captain's part -> the cursor in use
+  squad_selected: {address: 0x1AAD300, returns: i32, args: [pointer]}                    # a squad -> the Pikmin type picked for throwing
+  squad_select_of: {address: 0x1AACE10, returns: void, args: [pointer, pointer]}         # a squad, a Pikmin: picks its type
+  start_throw: {address: 0xDF5360, returns: void, args: [pointer, pointer, pointer]}     # a captain's part, a Pikmin, null: holds it up to throw
+  pikmin_leader: {address: 0xD98500, returns: pointer, args: [pointer]}                  # a Pikmin -> the captain or dog it follows
+  ride_allowed: {address: 0xD97180, returns: bool, args: [pointer, pointer, bool]}       # a dog, a captain, true -> whether the captain may get on
+  request_ride: {address: 0xDF4060, returns: void, args: [pointer]}                      # a captain's part
+  request_get_off: {address: 0x140EB90, returns: void, args: [pointer]}                  # the steered part of a dog
+  # a leader, an engine transform, type, leaf, how many, the part of the level, not counted, decoration: new Pikmin as an Onion gives them out
+  pikmin_enum_get: {address: 0x336F1B0, returns: pointer, args: []}
+  pikmin_deco_stored: {address: 0x20F6600, returns: u32, args: [pointer, i32, i32]}
+  pikmin_deco_field: {address: 0x20F6930, returns: u32, args: [pointer, i32, i32]}
+  pikmin_scatter_cos: {address: 0x62EE120, returns: f32, args: [f32]}
+  pikmin_scatter_sin: {address: 0x62EE130, returns: f32, args: [f32]}
+  eject_pikmin: {address: 0x17821F0, returns: void, args: [pointer, pointer, i32, i32, i32, u64, bool, i32]}
+  revive_request: {address: 0x109EF90, returns: void, args: [pointer, pointer]}           # a request to fill, who sends it
+  is_held_or_carried: {address: 0x1B85650, returns: bool, args: [pointer]}               # an actor -> whether something holds or carries it
+  charge_order: {address: 0x1790F10, returns: void, args: [pointer, pointer]}             # an order to fill, who sends it
+  charge_carry_test: {address: 0xD85120, returns: bool, args: [pointer, bool]}          # a target, true -> the flag a captain's charge gives its order: a test of what is carried
+  pikmin_join: {address: 0x172D150, returns: void, args: [pointer, pointer, u32, u32, u32]}   # a Pikmin, a leader, 0, 0, at once
+  pikmin_free: {address: 0x15A5190, returns: void, args: [pointer]}                      # a Pikmin: it stops following at its next update
+  dismiss_squad: {address: 0x1BA49B0, returns: void, args: [pointer]}                    # an order: a captain's squad
+  dismiss_dog_squad: {address: 0x13A8430, returns: void, args: [pointer, pointer]}       # a dog's dismissal settings, an order
+  find_treasure_row: {address: 0x1D8C010, returns: pointer, args: [pointer]}             # a treasure's name -> its row, or null
+  find_story_record: {address: 0x20FB0E0, returns: pointer, args: [pointer, pointer, pointer]}  # the story, one of its records, a name -> the entry, which begins with its count
+  collect_treasure: {address: 0x1EDA6B0, returns: void, args: [u64, i32, i32]}           # a treasure's name, its Sparklium, its other worth: the record counts one more
+  add_sparklium: {address: 0x1C51660, returns: void, args: [pointer, i32, bool]}         # the game context, how much, whether to show it
+  return_ground: {address: 0x1ECCBD0, returns: u32, args: [pointer, u32, u32, pointer]} # (portal info, Ground, current base, story): consume native ReturnPortal FROM fields
+  clear_reserved_flow: {address: 0x1EA37B0, returns: void, args: [pointer]} # (story): native reserve None, no Retry preparation
+  travel_request: {address: 0x1C5B8E0, returns: void, args: [pointer, u64]}              # a request to fill, where it comes from
+  ensure_banner: {address: 0x2286250, returns: bool, args: [pointer]}                    # the announcer -> whether it has a banner now
+  text_from_string: {address: 0x361F680, returns: engine_text, args: [const_pointer]}                 # a string -> a text, given back by value: called as returning one
+  banner_set_text: {address: 0x251E290, returns: void, args: [pointer, pointer]}         # the banner, a text
+  banner_place: {address: 0x251EA10, returns: void, args: [pointer]}
+  banner_play: {address: 0x251E4D0, returns: void, args: [pointer]}
+  save_begin_session: {address: 0x208C5F0, returns: bool, args: [i32, bool, bool]}       # the user, whether to wait for a save under way, whether to mark the section: the save is opened as "save:"
+  save_end_session: {address: 0x208C770, returns: void, args: []}                        # and closed again
+  # The system's file functions, through the game's own calls to them. Each gives 0 when it worked.
+  fs_open_file: {address: 0x62EFBE0, returns: u32, args: [pointer, pointer, i32]}        # where to put the file, a path, how to open it
+  fs_close_file: {address: 0x62EFC00, returns: void, args: [pointer]}                    # a file
+  fs_file_size: {address: 0x62EFC20, returns: u32, args: [pointer, pointer]}             # where to put the size, a file
+  fs_read_file: {address: 0x62EFC30, returns: u32, args: [pointer, pointer, i64, pointer, u64]}  # where to put how much was read, a file, from where, a buffer, its size
+  fs_open_folder: {address: 0x62EFC80, returns: u32, args: [pointer, pointer, i32]}      # where to put the folder, a path, what to list
+  fs_read_folder: {address: 0x62EFCA0, returns: u32, args: [pointer, pointer, pointer, i64]}  # where to put how many were read, entries, a folder, room for how many
+  fs_close_folder: {address: 0x62EFCB0, returns: void, args: [pointer]}                  # a folder
+  fs_entry_kind: {address: 0x62EFBD0, returns: u32, args: [pointer, pointer]}            # where to put what is at a path, the path
+  fs_create_file: {address: 0x62EFC10, returns: u32, args: [pointer, i64]}               # a path, the size the new file has
+  fs_write_file: {address: 0x62EFBF0, returns: u32, args: [pointer, i64, pointer, u64, pointer]}  # a file, where in it, the bytes, how many, how to write
+  fs_delete_file: {address: 0x62EFC40, returns: u32, args: [pointer]}                    # a path
+  fs_set_file_size: {address: 0x62EFE40, returns: u32, args: [pointer, i64]}             # a file opened to be written, the size it gets
+  fs_create_folder: {address: 0x62EFC50, returns: u32, args: [pointer]}                  # a path
+  fs_commit: {address: 0x62EFAB0, returns: u32, args: [pointer]}                         # the name a save is opened under: what was changed in it is kept
+  dialog_request: {address: 0x1E3C7B0, returns: void, args: [pointer]}                   # memory to make a request for a dialog in
+  dialog_request_dispose: {address: 0x1E3C9C0, returns: void, args: [pointer]}           # a request: it lets go of what it holds
+  dialog_function_transfer: {address: 0x19ED7F0, returns: void, args: [pointer, pointer]}  # a function as the engine keeps one, where to move it to
+  rich_text_set: {address: 0x2D20F00, returns: void, args: [pointer, pointer]}           # a block of text on the screen, a text
+  play_sound_on: {address: 0x18CE310, returns: bool, args: [pointer, pointer, pointer, bool]}  # an actor, a key's name, a part's name, true -> found
+  text_key_from_string: {address: 0x363D240, returns: void, args: [pointer, pointer]}    # a key to fill, a string
+  find_text: {address: 0x360DA10, returns: bool, args: [pointer, pointer, pointer, pointer]}  # a namespace's key, a key's, a text to fill, null
+  text_display_string: {address: 0x3614730, returns: pointer, args: [pointer]}           # a text -> the string every use of it shares
+  register_text: {address: 0x3641A50, returns: void, args: [pointer, pointer, i32]}      # the keeper, texts with translations, how many
+  lock_mutex: {address: 0x62EDF50, returns: void, args: [pointer]}
+  unlock_mutex: {address: 0x62EDF60, returns: void, args: [pointer]}
+  find_table_row: {address: 0x53ACA40, returns: pointer, args: [pointer, u64]}           # a table, a row's name -> the row, or null
+  add_table_row: {address: 0x53ABD30, returns: void, args: [pointer, u64, pointer]}      # a table, a name, a row: a copy of the row under the name
+  remove_table_row: {address: 0x53ABBE0, returns: void, args: [pointer, u64]}            # a table, a row's name: the row is taken out and its memory freed
+  add_table_row_internal: {address: 0x53ABE50, returns: void, args: [pointer, u64, pointer]}
+  load_soft_object: {address: 0xAD8C80, returns: pointer, args: [pointer]}                # a reference by path -> the asset, loaded now if it was not
+  # The engine's layers of files: their keeper, one layer by its name, and mounting a container in the layer of
+  # containers: (layer, the .pak's path, its order, no mount point, read its index) -> mounted. The .utoc and .ucas
+  # beside the .pak are mounted with it, at the same order. Names that end in _P are raised by 100 or more.
+  platform_files: {address: 0x35C5FE0, returns: pointer, args: []}
+  find_platform_file: {address: 0x35C5A30, returns: pointer, args: [pointer, text16]}
+  pak_mount: {address: 0x4F3CB70, returns: bool, args: [pointer, text16, u32, text16, bool]}
+  # The engine opens a library of shaders, as it opens the game's as it starts: (the library's name, the folder
+  # it is in), both the engine's strings by reference -> opened. The file is ShaderArchive-<name>-<format>.ushaderbytecode.
+  shader_library_open: {address: 0x3F0A040, returns: bool, args: [pointer, pointer]}
+  # the navmesh, a tile's block, its bytes, 1 for the navmesh to free it, 0, where the tile's reference goes -> the top bit set when refused
+  nav_add_tile: {address: 0x60E8AC0, returns: u32, args: [pointer, pointer, i32, i32, u64, pointer]}
+  nav_remove_tile: {address: 0x60EC670, returns: u32, args: [pointer, u64, pointer, pointer]}   # the navmesh, a tile's reference, null, null
+  nav_invalidate_paths: {address: 0x61862D0, returns: void, args: [pointer, pointer]}        # the navmesh's actor, an array of tiles' places
+  nav_modifier_select: {address: 0x1F9F8E0, returns: void, args: [pointer]}                  # the part picks its polygons in every navmesh
+  nav_modifier_change: {address: 0x1F9F3B0, returns: void, args: [pointer, pointer]}         # the part, a kind of area: marks its polygons as that
+  scene_array_grow: {address: 0x1F516D0, returns: void, args: [pointer]}                 # the array of scenes: room for the entry its count already includes
+  story_flags: {address: 0x1C22DC0, returns: u64, args: [pointer]}                       # the game context -> bits; see story_of_olimar
+  story_find_area: {address: 0x20D2E50, returns: pointer, args: [pointer, pointer]}      # the story, the name of an area's level -> its record of the area, or null
+  story_add_area: {address: 0x20FE930, returns: void, args: [pointer, pointer, i32]}     # the story, the name of an area's level, its bases: a new record
+  story_link_area: {address: 0x2108160, returns: bool, args: [pointer, pointer, u64]}    # the story, the name, 0: the record is tied to the area's scene
+  explore_row: {address: 0x228AA90, returns: pointer, args: [pointer, i32]}              # the menu's panel, a place -> the row there
+  explore_row_label: {address: 0x21CE600, returns: void, args: [pointer, pointer]}       # a row, a text: the name it shows
+  generator_destroy: {address: 0x1C038C0, returns: void, args: [pointer]}                  # owned generator storage only; actors are destroyed separately
+  generator_copy: {address: 0x1C13E20, returns: void, args: [pointer, pointer]}              # room for a generator, a generator: a copy of it there, with copies of all it holds
+  generator_array_grow: {address: 0x1C13190, returns: void, args: [pointer]}                 # an array of generators whose count was raised: room for that many
+  generator_spawn: {address: 0x1C1F8F0, returns: void, args: [pointer, pointer, u32]}        # a generator, the world, 0: makes its actors
+  actor_start_spawned: {address: 0x1B73E80, returns: void, args: [pointer, pointer]}         # an actor, a spawn request: starts the actor's parts where it stands, as the spawner does for one it made
+  # an AI part, values to fill, values of before (empty), the version to write at, 0: the arrays it fills are the caller's to free
+  ai_values_write: {address: 0x1B93E80, returns: void, args: [pointer, pointer, pointer, u64, u32]}
+  ai_values_read: {address: 0x1B94710, returns: void, args: [pointer, pointer, u64, u64]}    # an AI part, values, the version they were written at, the version now
+  controlled_actor: {address: 0x1C3F730, returns: pointer, args: [pointer, i32]}         # players, team -> the captain or dog being steered
+  # players, team, force, at once -> begun: the game's own switch between a team's captain and its dog
+  request_control_switch: {address: 0x1C3F1B0, returns: bool, args: [pointer, i32, bool, bool]}
+  pause_change: {address: 0x204DAF0, returns: void, args: [pointer, u32, bool]}          # the pause manager, kinds, add or take away: one count for each kind
+  return_to_title: {address: 0x1EB75A0, returns: void, args: [bool]}                     # true: open the title screen. Nothing is saved
+  # the part that keeps life, jump the gauge to it, who did it (an object's number and serial), the new life
+  set_life: {address: 0x1AE5FC0, returns: void, args: [pointer, bool, u64, f32]}
+  damage_message: {address: 0x1B4B370, returns: void, args: [pointer, pointer]}          # makes one in the memory given: (memory, attacker or null)
+  knock_message: {address: 0x1B4B6E0, returns: void, args: [pointer, pointer]}           # the same for a knock
+  post_message: {address: 0x1B8B8D0, returns: bool, args: [pointer, pointer]}            # (actor, message): the actor's queue takes it, or it is freed
+  set_max_fps: {address: 0x5B13090, args: [pointer, f32]}                                # the engine, the most frames a second, 0 for no limit
+  # The system's controllers, through the game's own calls: a controller's number -> the styles it is connected as;
+  # then (where to put its state, its number) for each of three styles.
+  npad_style_set: {address: 0x62EE3F0, returns: u32, args: [const_pointer]}
+  npad_full_key_state: {address: 0x62EF210, args: [pointer, const_pointer]}
+  npad_handheld_state: {address: 0x62EF1F0, args: [pointer, const_pointer]}
+  npad_joy_dual_state: {address: 0x62EF200, args: [pointer, const_pointer]}
+  # A part: it is put on its world's list of what the end of the frame sends; its pose is to be sent, and it is put there.
+  mark_end_of_frame: {address: 0x5259D50, args: [pointer]}
+  mark_pose_dirty: {address: 0x5259F70, args: [pointer]}
+  # A part: the renderer's copy of it is made again at the end of the frame.
+  mark_render_state: {address: 0x52597B0, args: [pointer]}
+  # A widget -> the scale of the screen it is on (the viewport's DPI scale).
+  widget_scale: {address: 0x4C85290, returns: f32, args: [pointer]}
+
+  # net
+  socket_socket: {address: 0x62EE750, returns: i32, args: [i32, i32, i32]}
+  socket_set_sock_opt: {address: 0x62EE800, returns: i32, args: [i32, i32, i32, const_pointer, u32]}
+  socket_close: {address: 0x62EE7E0, returns: i32, args: [i32]}
+  socket_bind: {address: 0x62F0440, returns: i32, args: [i32, const_pointer, u32]}
+  socket_get_sock_name: {address: 0x62F04A0, returns: i32, args: [i32, pointer, pointer]}
+  socket_send_to: {address: 0x62F0480, returns: i64, args: [i32, const_pointer, u64, i32, const_pointer, u32]}
+  socket_recv_from: {address: 0x62F0490, returns: i64, args: [i32, pointer, u64, i32, pointer, pointer]}
+  socket_errno: {address: 0x62EE7A0, returns: i32, args: []}
+  nifm_available: {address: 0x62EF7B0, returns: bool, args: []}
+
+  # net: HTTPS workers
+  socket_get_addr_info: {address: 0x62F04E0, returns: i32, args: [const_pointer, const_pointer, const_pointer, pointer]}
+  socket_free_addr_info: {address: 0x62F04F0, returns: void, args: [pointer]}
+  socket_fcntl: {address: 0x62EE760, returns: i32, args: [i32, i32, i32]}
+  socket_connect: {address: 0x62EE790, returns: i32, args: [i32, const_pointer, u32]}
+  socket_poll: {address: 0x62EE7B0, returns: i32, args: [pointer, u64, i32]}
+  socket_recv: {address: 0x62EE7C0, returns: i64, args: [i32, pointer, u64, i32]}
+  socket_send: {address: 0x62EE7F0, returns: i64, args: [i32, const_pointer, u64, i32]}
+  socket_get_sock_opt: {address: 0x62F04C0, returns: i32, args: [i32, i32, i32, pointer, pointer]}
+  network_utc: {address: 0x62EF550, returns: u32, args: [pointer]}
+  user_utc: {address: 0x62EFF30, returns: u32, args: [pointer]}
+  os_current_thread: {address: 0x62EED40, returns: pointer, args: []}
+  os_thread_priority: {address: 0x62EED50, returns: i32, args: [pointer]}
+  os_create_thread: {address: 0x62EED60, returns: u32, args: [pointer, pointer, pointer, pointer, u64, i32]}
+  os_thread_core_mask: {address: 0x62EED70, returns: void, args: [pointer, pointer, pointer]}
+  os_set_thread_core_mask: {address: 0x62EED80, returns: void, args: [pointer, i32, u64]}
+  os_set_thread_name: {address: 0x62EED90, returns: void, args: [pointer, const_pointer]}
+  os_start_thread: {address: 0x62EEDC0, returns: void, args: [pointer]}
+  os_sleep_thread: {address: 0x62EE9E0, returns: void, args: [i64]}
+
+# Lists of numbers. First, every function table of the game's own actor classes; an actor class made in the
+# editor uses its parent's.
+  effect_create: {address: 0x1BDC460, returns: pointer, args: [pointer, pointer, pointer, const_pointer, pointer, pointer, const_pointer]}
+  effect_release: {address: 0x1BE41C0, args: [pointer, bool]}
+  world_follow_request_move: {address: 0xE92820, args: [pointer, u64, const_pointer]}
+  camera_controller: {address: 0x5478C90, returns: pointer, args: [pointer, i32]}
+  camera_screen: {address: 0x5865490, args: [pointer, pointer, pointer]}
+  camera_shake: {address: 0x19A9A60, args: [pointer, u32, pointer]}
+  camera_project: {address: 0x5484220, returns: bool, args: [pointer, const_pointer, pointer, bool]}
+  mod_config_read: {address: 0x36BA1B0, returns: bool, args: [pointer, const_pointer, const_pointer, pointer, pointer]}
+  mod_config_write: {address: 0x36BB8F0, args: [pointer, const_pointer, const_pointer, const_pointer, pointer]}
+  ui_keyboard_preset: {address: 0x62EFD30, args: [pointer, u32]}
+  ui_keyboard_work_size: {address: 0x62EFD40, returns: u64, args: [bool]}
+  ui_keyboard_text_size: {address: 0x62EFD60, returns: u64, args: []}
+  ui_keyboard_initial: {address: 0x62EFD50, args: [pointer, text]}
+  ui_keyboard_guide: {address: 0x62F03E0, args: [pointer, text]}
+  ui_keyboard_show: {address: 0x62EFD70, returns: u32, args: [pointer, const_pointer]}
+  gimmick_work_done: {address: 0x1553AF0, args: [pointer, bool]}
+  gimmick_removed: {address: 0x1562B10, args: [pointer, bool]}
+  gimmick_complete_ui: {address: 0x1553950, args: [pointer, pointer]}
+  gimmick_dig_finish: {address: 0x145DAC0, args: [pointer]}
+  gimmick_pot_break: {address: 0x14572D0, args: [pointer, f32, f32]}
+  gimmick_door_open: {address: 0x14A49E0, args: [pointer, u64, pointer]}
+  gimmick_down_remove: {address: 0x1B78A30, args: [pointer, bool]}
+  gimmick_warp_refresh: {address: 0x14A9510, args: [pointer, bool]}
+  gimmick_warp_open: {address: 0x14A9AD0, args: [pointer, bool]}
+  battle_score: {address: 0x1E52150, returns: i32, args: [pointer, i32]}
+  battle_add_score: {address: 0x1E521C0, args: [pointer, i32, i32]}
+  battle_pop_class: {address: 0x1E58710, args: [pointer, u64, pointer, u64]}
+  battle_pop_name: {address: 0x1E585D0, args: [pointer, u64, pointer, u64]}
+  battle_spin: {address: 0x1DADF80, args: [pointer]}
+  battle_tug_flick: {address: 0xE57C90, args: [pointer, u64]}
+  gimmick_nav_rebuild: {address: 0x1C52670, args: [pointer, bool, bool]}
+  wwise_initialized: {address: 0xA10, returns: bool, args: []}
+  wwise_parameter_id: {address: 0x7A0, returns: u32, args: [text]}
+  wwise_get_parameter: {address: 0x80410, returns: u32, args: [u32, u64, u32, pointer, pointer]}
+  wwise_set_parameter: {address: 0x27C0, returns: u32, args: [u32, f32, u64, i32, u32, bool]}
+  wwise_reset_parameter: {address: 0x3B00, returns: u32, args: [u32, u64, i32, u32, bool]}
+  wwise_load_bank_copy: {address: 0x8460, returns: u32, args: [pointer, u32, pointer]}
+  wwise_unload_bank: {address: 0x9180, returns: u32, args: [u32, pointer]}
+  wwise_register_object: {address: 0x7AF0, returns: u32, args: [u64]}
+  wwise_unregister_object: {address: 0x7BD0, returns: u32, args: [u64]}
+  wwise_set_position: {address: 0x1920, returns: u32, args: [u64, pointer]}
+  wwise_post_event: {address: 0x4D60, returns: u32, args: [u32, u64, u32, pointer, pointer, u32, pointer, u32]}
+  wwise_event_from_playing: {address: 0x810C0, returns: u32, args: [u32]}
+  wwise_stop_playing: {address: 0xD190, returns: void, args: [u32, i32, u32]}
+  content_icon_vector: {address: 0x5642D30, returns: void, args: [pointer, u64, f32, f32, f32, f32]}
+  squad_select_next: {address: 0x1AACA90, args: [pointer]}
+  squad_icon_count: {address: 0x25542E0, args: [pointer, i32]}
+  squad_throw_trajectory: {address: 0x1728E90, returns: u32, args: [pointer]}
+tables:
+  actor_tables: [0x8884F20, 0x8885C88, 0x8886398, 0x8886AA8, 0x88871B8, 0x8887F20, 0x8889FB0, 0x888C6A8, 0x888D040,
+                 0x8891F00, 0x8892628, 0x88933F8, 0x8893B20, 0x8894248, 0x8894970, 0x8895098, 0x88957C0, 0x8895EE8,
+                 0x88965F8, 0x8896D20, 0x8897448, 0x8897B70, 0x8898280, 0x88989A8, 0x88990D0, 0x88997F8, 0x8899F20,
+                 0x889A648, 0x889AD70, 0x889B480, 0x889BBA8, 0x8975748, 0x89764B0, 0x89AF950, 0x8A874A8, 0x8C26978,
+                 0x8C73D48, 0x8CDFF98]
+
+  # In a collision record, the yes-or-no bytes that make its part a target, an attacker, or something to latch on to.
+  story_rules: [1, 2, 3, 4, 5, 7]   # the rules in which the story's stores are kept
+  free_areas: [5, 7, 8, 9]          # the numbers below ten that no area of the game's has
+  collision_record_flags: [0x10, 0x13, 0x15, 0x16, 0x18, 0x19, 0x1A, 0x1B, 0x21, 0x22, 0x23, 0x24, 0x26]
+  # The function tables of the kinds of AI part whose values the framework knows the shape of: any creature's, a
+  # Bulborb's, and a Bulborb Larva's.
+  ai_part_tables: [0x8955770, 0x88C9128, 0x88B90E8]
+  # The function tables of the widgets that count frames in their NativeTick (+0x360) instead of using its delta: menu
+  # key repeat, cards and results, notices, the item roulette. UCmnAnimationBaseWidget's is a code site, as its
+  # subclasses call it directly.
+  widget_tick_tables: [0x89E1C10, 0x8A80160, 0x8A81928, 0x8A79C78, 0x8A7BDA0, 0x89DD500, 0x8A3A0D8, 0x89E27E8,
+                       0x8A84E90, 0x8A899A8, 0x8A83128, 0x8BC3F48, 0x8AF9078, 0x8AB17E0, 0x8A16FF0, 0x8A8ADD8,
+                       0x8A30020, 0x8A4A230, 0x8A91BC0, 0x8AB2980, 0x8AB4CC0, 0x8ABE6D0, 0x8AB52A0, 0x8ABF290,
+                       0x8AD6958, 0x8AD7B30, 0x8AD9330, 0x8ADC2A0, 0x8ADC900, 0x8ADD4C0, 0x8AE1BE8, 0x8AE36C8,
+                       0x8AE30D8, 0x8A60830, 0x89EA408, 0x8A0F2F0, 0x8A1E8A8, 0x8A25F10, 0x8A264F0, 0x8A64F60,
+                       0x8A8A570, 0x8AC1750, 0x8AFC758, 0x8B0FF20]
+
+# One entry in each of a list of tables, with the functions the game puts there.
+slot_groups:
+  actor_register: {tables: actor_tables, offset: 0x6C8, stock: [0x1B8B9D0, 0xD01B00, 0xD0F0D0], args: [u64, bool]}            # an actor enters play
+  actor_end_play: {tables: actor_tables, offset: 0x348, stock: [0x1B86900, 0xD006C0, 0x189E7D0, 0x189F850], args: [u64, u8]}  # an actor is destroyed
+  ai_part_start: {tables: ai_part_tables, offset: 0x450, stock: [0x17C6F80, 0xFD0D50, 0xF18240]}            # (part): it builds what it works from, out of its values
+  # The two serializers of an AI part's values, known only to tell the game's own by.
+  ai_part_write_set: {tables: ai_part_tables, offset: 0x4E0, stock: [0x17C9190, 0xF18540]}
+  ai_part_write_state: {tables: ai_part_tables, offset: 0x4E8, stock: [0x17C94C0]}
+  # (widget, its geometry, the frame's length): a widget that counts frames, ticked by Slate once for each picture.
+  widget_tick: {tables: widget_tick_tables, offset: 0x360, args: [pointer, const_pointer, f32],
+                stock: [0x21B7300, 0x275F660, 0x276BD80, 0x26E82E0, 0x27581B0, 0x2174650, 0x24F5BA0, 0x21BC790, 0x2781200, 0x27BD850, 0x2787520, 0x2D28740, 0x2A3DCD0, 0x236B660, 0x27C2450, 0x245B600, 0x254BD40, 0x2833ED0, 0x2A43200, 0x2A4BD80, 0x2AB5C50, 0x2A4DED0, 0x2AB87F0, 0x2BAD280, 0x2BB10C0, 0x2BC6050, 0x2BE0F80, 0x2BE8940, 0x2BEB510, 0x2C45D70, 0x2C47050, 0x2C46E80, 0x25FE450, 0x21E82B0, 0x23791D0, 0x23DD7E0, 0x240BA10, 0x240D690, 0x2614610, 0x27BFBE0, 0x2AC95F0, 0x2D34990, 0x2E1C9A0]}
+
+
+slots:
+  physics_contacts: {table: 0x89DA570, offset: 0x278, stock: 0x2166790, args: [pointer, pointer]} # handler, pending collision array
+  ui_mod_list_construct:
+    table: 144906144
+    offset: 848
+    stock: 38163136
+    args:
+    - pointer
+  ui_mod_list_destruct:
+    table: 144906144
+    offset: 856
+    stock: 38173360
+    args:
+    - pointer
+  pikmin_begin_play: {table: 0x8951C80, offset: 0x348, stock: 0x173AD40, args: [pointer]}
+  pikmin_story_serialize: {table: 0x8B97010, offset: 0xA8, stock: 0x2108820, args: [pointer, pointer]}
+  pikmin_story_structured_serialize: {table: 0x8B97010, offset: 0xB0, stock: 0x2FCD6E0, args: [pointer, pointer]}
+  # The engine's per-frame function, in the engine object's function table.
+  engine_tick: {table: 0x8FB4E10, offset: 0x0, stock: 0x5441BB0}
+  # The save system's own functions for writing a file and for deleting one: (system, with a screen, the file's name, the user[, the bytes]) -> done.
+  save_write: {table: 0x89D4730, offset: 0x18, stock: 0x21316E0, returns: bool, args: [pointer, bool, text16, i32, const_pointer]}
+  save_delete: {table: 0x89D4730, offset: 0x28, stock: 0x2132100, returns: bool, args: [pointer, bool, text16, i32]}
+  # Its functions for asking after a file and for reading one: (system, the file's name, the user) -> there;
+  # the same -> a fuller answer; (system, with a screen, the file's name, the user, an array of bytes to add to) -> read.
+  save_exists: {table: 0x89D4730, offset: 0x8, stock: 0x2141B40, returns: bool, args: [pointer, text16, i32]}
+  save_exists_result: {table: 0x89D4730, offset: 0x10, stock: 0x2131500, returns: i32, args: [pointer, text16, i32]}
+  save_read: {table: 0x89D4730, offset: 0x20, stock: 0x2131EC0, returns: bool, args: [pointer, bool, text16, i32, pointer]}
+  # The menu the player chooses an area in: (menu) builds its rows from the list of areas, and (menu) ends it.
+  explore_setup: {table: 0x8A1E8A8, offset: 0x5A0, stock: 0x23DE370}
+  explore_destruct: {table: 0x8A1E8A8, offset: 0x358, stock: 0x23DD7B0}
+  # The throw list beside L and R on the story's HUD: (widget) builds its entries and selects one.
+  throw_list_update: {table: 0x8A3E2A8, offset: 0x598, stock: 0x2557270, args: [pointer]}
+  # The engine's drawing of its viewports, once for each picture: (engine, show the picture).
+  redraw_viewports: {table: 0x8FB4B50, offset: 0x480, stock: 0x543F8E0, args: [pointer, bool]}
+  # Where a local player's view is: (player, the view to fill, which eye).
+  view_point: {table: 0x8FD7A60, offset: 0x288, stock: 0x55EA0B0, args: [pointer, pointer, i32]}
+  # One controller's reader takes the controller's state: (reader).
+  npad_read: {table: 0x89D1978, offset: 0x20, stock: 0x2041010, args: [pointer]}
+  # The renderer's scene: (scene, part) sends a part's place to it; (scene, part) takes a part out of it.
+  scene_update: {table: 0x8E45098, offset: 0x20, stock: 0x4570050, args: [pointer, pointer]}
+  scene_remove: {table: 0x8E45098, offset: 0x8, stock: 0x45720F0, args: [pointer, pointer]}
+  # A skinned part's mesh object builds the renderer's bones: (mesh object, level of detail, part, morphs, weights, previous bones).
+  mesh_update: {table: 0x9033510, offset: 0x28, stock: 0x59A6C60, args: [pointer, i32, pointer, pointer, pointer, u32]}
+  # A creature's life gauge is placed on the screen once a step: (gauge, the frame's length). It projects its anchor
+  # (+0x720) and sets its place in the viewport.
+  life_gauge_place: {table: 0x8A619E8, offset: 0x4B8, stock: 0x2602EE0, args: [pointer, f32]}
+  # A captain's or the dog's life gauge is placed the same way: (gauge, the frame's length). It projects its anchor
+  # (+0x6B0) and sets its place in the viewport.
+  life_bar_place: {table: 0x8A613F0, offset: 0x4B8, stock: 0x26019E0, args: [pointer, f32]}
+  # The floating type selector over the throw cursor: (widget, geometry, seconds) paints its icons and counts.
+  cursor_toggle_tick: {table: 0x89E27E8, offset: 0x360, stock: 0x21BC790, args: [pointer, pointer, f32]}
+  # The throw cursor: (cursor, seconds) gives that selector its current type and that type's count.
+  cursor_update: {table: 0x899BC60, offset: 0x4C0, stock: 0x1ABEA30, args: [pointer, f32]}
+  # (cursor, seconds, kind of tick, its tick function): moves the cursor and colours its ring for the type it holds.
+  cursor_tick: {table: 0x899BC60, offset: 0x360, stock: 0x1AB9530, args: [pointer, f32, i32, pointer]}
+
+# Places in the game's code a patch redirects into the framework, so functions the game
+# calls directly can be hooked. `instruction` is what the game has at the address.
+  effect_finished: {table: 0x89B2808, offset: 0x648, stock: 0x1BEAFE0, args: [pointer, pointer]}
+  battle_tug: {table: 0x88A9C00, offset: 0x48, stock: 0xE578C0, returns: u32, args: [pointer, f32]}
+  battle_roulette: {table: 0x89BBB30, offset: 0x50, stock: 0x1E26470, returns: u32, args: [pointer, pointer]}
+  squad_grab_avatar: {table: 0x88A59D8, offset: 0xA20, stock: 0x15A21F0, returns: u64, args: [pointer, u64]}
+  squad_grab_orima: {table: 0x88ADC78, offset: 0xA20, stock: 0x15A21F0, returns: u64, args: [pointer, u64]}
+# What a native route's handler finds where, by route: register numbers, and offsets from the stack pointer
+# where the route's stack is read. Another compiler can put these elsewhere, so each is per build.
+# A number in a route's frame is a register, unless it is listed here as an offset from the stack.
+route_frame_offsets: [cursor_written.saved_widget, cursor_written.saved_component, cursor_written.saved_return, cursor_written.projected, cursor_written.frame_end]
+# Fields that name a general register as 0-30 or a vector register as 32-63.
+route_frame_either: [particle_sprite.z]
+# Fields a handler asks t::present about, so that a build may lack them while the route stays.
+route_frame_optional: [cursor_written.saved_widget, cursor_written.saved_component, cursor_written.saved_return]
+
+route_frames:
+  package_store_entry: {slot: 8, entry: 24}
+  ui_settings_dispatch: {object: 19, action: 20, no_action: 8}
+  scene_publish: {task: 20}
+  # z: x0-x30 as 0-30 (a float's bits), v0-v31 as 32-63 (lane 0; see route_frame_either); the others are vector registers.
+  particle_sprite: {z: 8, location: 3, old: 1, old_z: 2}
+  particle_mesh_place: {particle: 22, location_pointer: 2}
+  particle_mesh_xy: {particle: 22, xy: 0}
+  particle_mesh_z: {particle: 22, z: 2}
+  particle_lone_place: {particle: 22, location_pointer: 2}
+  particle_lone_xy: {particle: 22, xy: 0}
+  particle_lone_z: {particle: 22, z: 2}
+  # `component` is the cursor update's register for its component. Here the route is inside the placement, which
+  # saved that register and the update's widget at saved_component and saved_widget; a build without those has the
+  # route where the placement returns to the update, with both still in the update's registers.
+  cursor_written: {widget: 19, component: 19, saved_widget: 0x60, saved_component: 0x68, saved_return: 0x78, projected: 0xC0, frame_end: 0xCC}
+  dialog_setup_call: {request: 24}
+
+code_sites:
+  map_initial_flush: {address: 0x05B1D900, instruction: 0x94022494, call: true, args: [u64, u32]} # incoming LoadMap only; original native mode2 flush
+  ui_settings_refresh: {address: 0x02467AC0, instruction: 0xD10343FF, args: [pointer]}
+  ui_settings_reopen: {address: 0x0246C7D0, instruction: 0xF81C0FF7, args: [pointer]} # stock retained Settings reopen, before its first paint
+  wwise_process_queue: {address: 0x18B10, instruction: 0xD10483FF, returns: bool, args: [pointer, bool, pointer]}
+  wwise_term: {address: 0x1250, instruction: 0xF81A0FFB, args: []}
+  ui_widget_broadcast: {address: 0x00ACA170, instruction: 0xD10283FF, args: [pointer, pointer]} # native inline multicast broadcast; Button zero-argument signals
+  level_prepare: {address: 0x055B91B0, instruction: 0xD10783FF, args: [u64, i32, bool, pointer]} # ULevel::IncrementalUpdateComponents, before registration and BeginPlay
+  world_remove_level: {address: 0x05BA95C0, instruction: 0xD104C3FF, args: [u64, u64, u32]} # admitted incremental unregister precedes RouteEndPlay
+  pikmin_throw_icon: {address: 0x2553870, instruction: 0xF81D0FF5, args: [pointer]}
+  pikmin_restore_batch: {address: 0x1785750, instruction: 0xD10303FF, returns: i32, args: [pointer]}
+  pikmin_restore_step: {address: 0x1786080, instruction: 0xD10243FF, returns: i32, args: [pointer, pointer, const_pointer, pointer, const_pointer, pointer]}
+  pikmin_eject_types: {address: 0x17821F0, instruction: 0xD10503FF, args: [pointer, pointer, i32, i32, i32, u64, bool, i32]}
+  pikmin_finish_spawn: {address: 0x17823AC, instruction: 0x94E42F61, call: true, args: [pointer, pointer, bool, pointer]}
+  pikmin_story_construct: {address: 0x2FCCA50, instruction: 0xD10203FF, args: [pointer]}
+  pikmin_story_reset: {address: 0x210D9F0, instruction: 0xD10243FF, args: [pointer, u32]}
+  pikmin_summary_reset: {address: 0x20F7A00, instruction: 0xA9BE4FF4, args: [pointer]}
+  pikmin_result_reset: {address: 0x20F6200, instruction: 0xF9400C09, args: [pointer]}
+  engine_tick_function: {address: 0x5441BB0, instruction: 0xD102C3FF}   # the start of the engine's per-frame function
+  actor_pool_take: {address: 0x203C7A0, instruction: 0xD10443FF, returns: u64, args: [u64, u64]}        # (pool, request) -> actor: one is taken out to be used
+  actor_pool_return: {address: 0x203D310, instruction: 0xA9BE4FF4, args: [u64, u64]}      # (pool, actor): one is put back to be used again
+  actor_park: {address: 0xD87970, instruction: 0xD10303FF, args: [u64, u64]}              # (actor): it is switched off and hidden; a pool does this to what it takes back
+  life_apply_damage: {address: 0x1AE3040, instruction: 0xD10203FF, args: [u64, u64, u64, f32, f32]}      # (life part, attacker, kind of hit; amount, second amount): a hit takes life
+  life_set: {address: 0x1AE5FC0, instruction: 0xBD433001, args: [u64, u64, u64, f32]}               # (life part, jump the gauge, who did it; life): life is set outright
+  pikmin_report_kill: {address: 0x1ED6910, instruction: 0xD10243FF, returns: u64, args: [u64, u64, u64]}     # (Pikmin, killer or null, cause) -> reported: a Pikmin's death is counted
+  # The game sets up a dialog's widget from a request, which is in register x24 here: (widget, kind, layout).
+  dialog_setup_call: {address: 0x1DF728C, instruction: 0x94160FC1, call: true}
+  # Within that: (widget, kind, text, first button, second button), for a dialog with two buttons.
+  dialog_buttons_call: {address: 0x237B850, instruction: 0x94001730, call: true, args: [pointer, u32, const_pointer, const_pointer, const_pointer]}
+  pikmin_follow_clear: {address: 0x1EB5EE0, instruction: 0xAA1F03E8, args: []}
+  pikmin_follow_snapshot: {address: 0x1ECCD50, instruction: 0xD10203FF, args: [u64, u32]}
+  # The game's counts of its Pikmin: (counters, flags) counts them again; (counters, Pikmin) adds one, a type past
+  # the stock ones to row 0, which no total adds; (counters, row, leaf, state, player) -> how many, where row 0 is every row.
+  pikmin_counter_update: {address: 0x1D8DA10, instruction: 0xD10303FF, args: [pointer, u64]}
+  pikmin_counter_add: {address: 0x1D8F970, instruction: 0xD10303FF, args: [pointer, pointer]}
+  pikmin_counter_query: {address: 0x1D91EB0, instruction: 0xD101C3FF, returns: i32, args: [pointer, i32, i32, i32, i32]}
+  # (squad, which, what it says) -> how many of the selected type; the throw list and the cursor take the type from here.
+  pikmin_selected_info: {address: 0x1AAD050, instruction: 0xD10043FF, returns: i32, args: [pointer, i32, pointer]}
+  # (throw list icon, second player, the pending type): it shows the count of its Pikmin type.
+  pikmin_icon_number: {address: 0x2554100, instruction: 0xF81C0FF7, args: [pointer, i32, u64]}
+  # The presenter. A world's update: (world, how much of it, the frame's length).
+  world_tick: {address: 0x055CB180, instruction: 0xD10443FF, args: [pointer, u32, f32]}
+  # A view family is made from its values: (family, values). Every family made from a world's times passes here.
+  view_family: {address: 0x059387C0, instruction: 0xA9BE4FF4, args: [pointer, const_pointer]}
+  # UCmnAnimationBaseWidget's NativeTick, which counts frames and which its subclasses call directly: (widget, geometry, frame's length).
+  widget_animation_tick: {address: 0x021710A0, instruction: 0xD10243FF, args: [pointer, const_pointer, f32]}
+  # Native number count-up/down waits and digit color-curve frames use fixed per-callback increments.
+  # Their base UMG update stays per picture; code sites also cover direct superclass calls from derived widgets.
+  widget_hud_number_tick: {address: 0x024EAFA0, instruction: 0xFC1A0FE8, args: [pointer, const_pointer, f32]}
+  widget_digit_tick: {address: 0x022E14F0, instruction: 0xF81E0FF3, args: [pointer, const_pointer, f32]}
+  # UCarrotBaseWidget NativeTick runs UMG sequences, Blueprint tick, and delta timers. Paced children keep this
+  # base at the picture rate while their own integer frame counters remain at the simulation rate.
+  widget_base_tick: {address: 0x021B8E90, instruction: 0xD10203FF, args: [pointer, const_pointer, f32]}
+  # UUserWidget::Tick builds the geometry/delta EventTick parameters and dispatches ProcessEvent. Only calls
+  # from the presenter's paced-widget scope remain at 30Hz; UMG sequence updates retain the picture delta.
+  widget_script_tick: {address: 0x04D871E0, instruction: 0xD101C3FF, args: [pointer, const_pointer, f32]}
+  # (bones out, the pose, visibility, master mapping, inverse bind matrices, extra, levels of detail, level, required bones):
+  # builds the renderer's bone matrices from a pose.
+  bone_kernel: {address: 0x0599F600, instruction: 0xD101C3FF, args: [pointer, const_pointer, pointer, pointer, pointer, pointer, pointer, i32, u64]}
+  # The game's warp: (actor, place, angles, turn it too, set it on the ground, allow for its height).
+  actor_warp: {address: 0x00D95450, instruction: 0xD10343FF, args: [pointer, pointer, pointer, bool, bool, bool]}
+  # The drawer of instances adds them all again for the step: (drawer).
+  instance_drawer_update: {address: 0x01F58D90, instruction: 0xD106C3FF, args: [pointer]}
+  # On the render thread, a scene is drawn: (the drawing's command, whose first field is the scene renderer; the command list).
+  scene_render: {address: 0x04616E50, instruction: 0xA9BA6FFC, args: [pointer, pointer]}
+  # A world point is projected to the screen through a player's view: (x, y, z, player controller, where the screen point
+  # and the distance go, relative to the player's part of the screen) -> whether it is in front.
+  world_to_screen: {address: 0x05868AF0, instruction: 0xD10643FF, returns: bool, args: [f32, f32, f32, pointer, pointer, bool]}
+  # A widget is placed in the viewport: (x, y, widget, the place is in pixels and the screen's scale is taken off).
+  viewport_position: {address: 0x04C97FF0, instruction: 0x6DBC23E9, args: [f32, f32, pointer, bool]}
+  # A material instance's renderer copy is told one of its values, after the game set it and only when it changed:
+  # (instance, its parameter value). The throw line's materials are given its points this way each step (01AC1480).
+  material_vector_push: {address: 0x0563F800, instruction: 0xD104C3FF, args: [pointer, const_pointer]}
+  material_scalar_push: {address: 0x0563FDF0, instruction: 0xD10483FF, args: [pointer, const_pointer]}
+  # The material instance's own setters: a scalar by name, a scalar by its index, a color by name. A build that makes
+  # the push inline in them names them; this one reaches the pushes above through them.
+  material_scalar_set: {same_as: material_scalar_push, args: [pointer, u64, f32]}
+  material_scalar_set_index: {same_as: material_scalar_push, returns: bool, args: [pointer, i32, f32]}
+  material_vector_set: {same_as: material_vector_push, args: [pointer, u64, f32, f32, f32, f32]}
+  # A widget is placed in a canvas panel: (x, y, its slot). The castaways' role icons (027C4D90) and the treasures'
+  # markers (015DB280) project a point and place their widget this way.
+  canvas_position: {address: 0x04C1CFD0, instruction: 0xAA0003E8, args: [f32, f32, pointer]}
+  # A widget is moved by its render translation: (x, y, widget).
+  render_translation: {address: 0x04C6BBB0, instruction: 0xBD009000, args: [f32, f32, pointer]}
+  # An action marker (a prompt such as "Ride") projects its actor and sets its place in the viewport itself: (marker).
+  action_marker_place: {address: 0x02219A30, instruction: 0xD102C3FF, args: [pointer]}
+  # A map's generators are made from its placement lists: (keeper, world, the world settings' array of lists of lists).
+  # The game reads each row as it copies it to a generator. Only this and placement_restore read the rows.
+  placement_build: {address: 0x01C013B0, instruction: 0xFC180FEA, args: [pointer, pointer, pointer]}
+  # A map's generators are made from the save's record of them: (keeper, world, 1 to skip reading the save again) ->
+  # whether the save had them. It reads only the rows of lists named *_C4Upd110, for a save older than that update.
+  placement_restore: {address: 0x01C01DE0, instruction: 0xFC180FEA, returns: bool, args: [pointer, pointer, u32]}
+
+
+  # carry: the collection-credit dispatcher the Onion and ship receivers call
+  carry_credit: {address: 0x1ED7D00, instruction: 0xD10603FF, returns: i32, args: [bool, pointer, i32, u32, pointer, pointer]}
+
+  ui_settings_action: {address: 0x246FE90, instruction: 0xD10643FF, returns: bool, args: [pointer, u32]}
+conditional_sites:
+  throw_color_admission: {address: 0x2557EE4, instruction: 0x7100443F, next_instruction: 0x540085AA, register: 1, threshold: 17, admit: [19, 21]}
+
+# Places inside a function where the framework reads or changes the registers, with every register kept.
+native_routes:
+  # FPackageStore container callback, under PackageNameMapsCritical. x8 is the global entry
+  # pointer slot (package ID at x8-8); x24 is this container's 32-byte store entry.
+  package_store_entry: {address: 0x382D8D8, instruction: 0xF9400109, resume: false}
+  # Settings input has passed the native owning-context, state and consumed gates.
+  ui_settings_dispatch: {address: 0x247006c, instruction: 0x7100069f, resume: false}
+  # UpdatePrimitiveTransform's task is filled in and not yet published: x20 holds it.
+  scene_publish: {address: 0x045704F4, instruction: 0xB0024189, resume: false}
+  # A sprite particle's vertices: x28 is the particle, its location loaded into d3 and w8, its old location into d1 and s2.
+  particle_sprite: {address: 0x057B435C, instruction: 0x36002B69, resume: false}
+  # A mesh particle's transform: x22 is the particle, and x2 its location for the transform that follows.
+  particle_mesh_place: {address: 0x057B8118, instruction: 0x9100C2C3, resume: false}
+  # The same with the camera's offset: the location's x and y loaded into d0, then its z into s2.
+  particle_mesh_xy: {address: 0x057B81F8, instruction: 0x0EA0D420, resume: false}
+  particle_mesh_z: {address: 0x057B8208, instruction: 0x1E223821, resume: false}
+  # GetParticleTransform's own copy, used one particle at a time, on a build that also inlines it in the instance loop
+  # (above). This build has the function once, so the routes above serve both paths.
+  particle_lone_place: {same_as: particle_mesh_place, resume: false}
+  particle_lone_xy: {same_as: particle_mesh_xy, resume: false}
+  particle_lone_z: {same_as: particle_mesh_z, resume: false}
+  # X19 is the cursor widget; observe the unchanged path only with saved NZCV.Z set.
+  cursor_unchanged: {address: 0x021C084C, instruction: 0x540003A0, resume: false}
+  # Both viewport floats and the zero margins have been stored; X19 is still the widget.
+  cursor_written: {address: 0x021C0864, instruction: 0xB40002F4, resume: false}

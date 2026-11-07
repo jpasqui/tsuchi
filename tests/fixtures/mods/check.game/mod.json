@@ -1,0 +1,19 @@
+{
+  "id": "check.game",
+  "name": "The check of game",
+  "version": "1.0.0",
+  "meta": {
+    "check": "game",
+    "checks": [
+      "where",
+      "control",
+      "random",
+      "refused",
+      "listened",
+      "title",
+      "events",
+      "cancelled"
+    ],
+    "check_explicit": true
+  }
+}

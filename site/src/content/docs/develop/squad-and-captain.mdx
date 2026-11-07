@@ -1,0 +1,157 @@
+---
+title: Watch a captain's squad
+description: Read the squad when the first player's captain starts whistling.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+Start with [your first mod](/develop/first-mod/). We'll read the first player's
+captain and write to the log when they whistle.
+
+## Leader
+
+Get the captain through [`player.captain`](/reference/player/#captain), then pass the
+handle to [`squad.members`](/reference/squad/#members). You'll get the Pikmin following
+that captain in the game's order. If the player is controlling Oatchi, you can pass
+`player.character(0)` to `squad.members` to read the controlled character's squad instead.
+
+Read [`captain.whistle`](/reference/captain/#whistle) to check whether the captain is
+whistling. Its `center` and `radius` use centimeters. Its `count` goes up when the
+captain starts another whistle.
+
+## Code
+
+For example, check the whistle on every world step and read the squad when the
+whistle starts. We'll remember whether the whistle was active on the previous step
+so holding the button doesn't fill the log.
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua title="main.lua"
+local was_whistling = false
+
+time.on_step(function()
+    local leader = player.captain(0)
+    local whistle = leader and captain.whistle(leader)
+    if not whistle then
+        was_whistling = false
+        return
+    end
+    if whistle.active and not was_whistling then
+        local members, why = squad.members(leader)
+        if members then
+            print("Whistle started with " .. #members .. " Pikmin")
+        else
+            print("Couldn't read the squad: " .. why)
+        end
+    end
+    was_whistling = whistle.active
+end)
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript title="main.js"
+let was_whistling = false;
+
+time.on("step", () => {
+    let leader, whistle;
+    try {
+        leader = player.captain(0);
+        whistle = captain.whistle(leader);
+    } catch (error) {
+        was_whistling = false;
+        if (error.name === "not_found" || error.name === "not_ready") return;
+        throw error;
+    }
+    if (whistle.active && !was_whistling) {
+        try {
+            const members = squad.members(leader);
+            print("Whistle started with " + members.length + " Pikmin");
+        } catch (error) {
+            print("Couldn't read the squad: " + error.name);
+        }
+    }
+    was_whistling = whistle.active;
+});
+```
+
+</TabItem>
+<TabItem label="C">
+
+[Build this code](/develop/compiled-mod/) into `mod.nro`.
+
+```c title="main.c"
+#include "tsuchi/tsuchi.h"
+
+static const TSUCHI_Host *host;
+static TSUCHI_Mod *self;
+static TSUCHI_Subscription steps;
+static bool was_whistling;
+static TSUCHI_Actor members[1024];
+
+static void on_step(void *user, const TSUCHI_TimeStep *event) {
+    (void)user;
+    (void)event;
+    TSUCHI_Actor leader = {0};
+    TSUCHI_Whistle whistle = {0};
+    if (host->player->captain(self, 0, &leader) != TSUCHI_OK ||
+        host->captain->whistle(self, leader, &whistle) != TSUCHI_OK) {
+        was_whistling = false;
+        return;
+    }
+    if (whistle.active && !was_whistling) {
+        uint64_t count = 0;
+        TSUCHI_Result result = host->squad->members(self, leader, members, 1024, &count);
+        if (result == TSUCHI_OK) {
+            host->mod->log(self, count ? "Whistle started with Pikmin" :
+                                        "Whistle started with an empty squad");
+        } else {
+            host->mod->log(self, "Couldn't read the squad");
+        }
+    }
+    was_whistling = whistle.active;
+}
+
+TSUCHI_Result tsuchi_mod_start(const TSUCHI_Host *given, TSUCHI_Mod *mod) {
+    host = given;
+    self = mod;
+    was_whistling = false;
+    return host->time->on_step(mod, on_step, 0, &steps);
+}
+```
+
+</TabItem>
+</Tabs>
+
+[Install your mod](/players/install-a-mod/), gather some Pikmin, and start a whistle.
+You should see a line in the [log](/develop/logs/). The Lua example
+prints the count, and the C example says whether the squad has any Pikmin.
+
+If the C buffer is too small, `members` returns `TSUCHI_CAPACITY`, copies nothing,
+and writes the required count to `count`. Increase the buffer before reading the list.
+
+## Orders
+
+If you want to change the squad, call `squad.join` to make a Pikmin follow a leader.
+The Pikmin joins the list immediately and gets its formation position on its next
+update. Call `squad.leave` to make it stop following on its next update, or
+`squad.dismiss` to gather the squad by type next to its leader.
+
+If you join a Pikmin to a dog, make sure the dog is leading. A dog following its
+captain won't keep the Pikmin as a follower.
+
+To throw a Pikmin, pass the captain and one of its squad members to
+`captain.throw_pikmin`. It'll select that Pikmin's type and throw on the captain's next
+update. If the Pikmin isn't following the captain, the call fails with `invalid`.
+
+## Holds
+
+The captain's cursor determines where throws and whistles are aimed. Use
+`hold_cursor` to keep it at a fixed point, or `hold_cursor_on` to make it follow an
+actor. End the hold with `release_cursor` when you're done. If another mod has the
+cursor, you'll get `busy`. For a growing whistle on a captain controlled by your mod,
+suspend the captain before calling `hold_whistle`, as a player-controlled captain
+can end the whistle on every update. See [Events and cleanup](/develop/events-and-cleanup/).

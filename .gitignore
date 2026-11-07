@@ -1,0 +1,12 @@
+build/
+__pycache__/
+*.pyc
+node_modules/
+# Settings for one machine. Never committed.
+local/
+private/camera-input-proof/
+private/world-effects-drafts/
+# Local research, environments, and release outputs.
+private/
+.venv/
+dist/

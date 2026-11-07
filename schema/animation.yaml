@@ -1,0 +1,90 @@
+service: animation
+tutorials:
+  - {title: Inspect a loaded asset, path: /develop/reflection-and-assets/}
+  - {title: Events and cleanup, path: /develop/events-and-cleanup/}
+layer: engine
+acts_on: component
+lifetime: world
+brief: "Plays an animation clip on a skeletal mesh and holds it there."
+description: |
+  A skeletal mesh is normally animated by an animation blueprint, which blends
+  clips however the game decides. Use this service to play a single clip on a
+  mesh in place of the blueprint, which is useful if your mod animates a
+  creature itself.
+
+  The blueprint doesn't run while a clip is held. When the hold ends, the
+  blueprint takes over again from its starting state.
+
+structs:
+  Clip:
+    doc: "The clip that a mod is holding on a mesh, and the mesh's current time in it."
+    fields:
+      - {name: clip, type: handle<object>, doc: The clip.}
+      - {name: position, type: f32, doc: "The time in the clip, in seconds."}
+      - {name: rate, type: f32, doc: "The playback rate. `1` is normal speed, and `0` pauses it."}
+      - {name: looping, type: bool, doc: "`true` if the clip loops."}
+      - {name: playing, type: bool, doc: "`false` after a clip that doesn't loop reaches its end."}
+
+functions:
+  - name: hold_clip
+    doc: |
+      Plays a clip on a skeletal mesh from the start and holds it there, replacing
+      the mesh's animation blueprint. Only one mod at a time can hold a mesh. If
+      your mod is already holding the mesh, playing another clip changes the clip.
+      The hold ends when your mod releases it or stops, or when the actor leaves the
+      world.
+    owns: true
+    params:
+      - {name: component, type: handle<component>, doc: A skeletal mesh.}
+      - {name: clip, type: handle<object>, doc: "The clip, which is an animation asset from `asset`."}
+      - {name: looping, type: bool, default: false, doc: "Whether the clip loops."}
+      - {name: rate, type: f32, default: 1, doc: "The playback rate. `1` is normal speed, `0` pauses it, and a value below `0` plays it backward."}
+    fails:
+      not_found: "The component or the clip no longer exists."
+      unsupported: "The component isn't a skeletal mesh, it isn't animated by an animation blueprint, or the framework can't restore its actor's components when the actor leaves the world. Nothing is changed."
+      invalid: "The object isn't a clip."
+      busy: "Another mod is holding a clip on this mesh."
+      not_ready: "The engine isn't ready. Nothing is changed."
+    users: [groink, groink-lua]
+
+  - name: set_clip_rate
+    doc: "Changes the playback rate of the clip that your mod is holding on a mesh."
+    owns: true
+    params:
+      - {name: component, type: handle<component>, doc: "The mesh that you passed to `hold_clip`."}
+      - {name: rate, type: f32, doc: "The playback rate. `1` is normal speed, `0` pauses it, and a value below `0` plays it backward."}
+    fails:
+      not_found: "The component no longer exists, or your mod isn't holding a clip on it."
+      not_ready: "The engine isn't ready."
+    users: [groink, groink-lua]
+
+  - name: seek_clip
+    doc: "Seeks the clip that your mod is holding on a mesh. With a rate of `0`, the mesh stays in that pose."
+    owns: true
+    params:
+      - {name: component, type: handle<component>, doc: "The mesh that you passed to `hold_clip`."}
+      - {name: seconds, type: f32, doc: "The time in the clip in seconds, from `0`. A time past the end is clamped to the end."}
+    fails:
+      not_found: "The component no longer exists, or your mod isn't holding a clip on it."
+      invalid: "The time is negative."
+      not_ready: "The engine isn't ready."
+    users: [groink, groink-lua]
+
+  - name: clip
+    doc: "The clip that any mod is holding on a mesh, and the mesh's current time in it."
+    params:
+      - {name: component, type: handle<component>, doc: The mesh.}
+    returns: {type: struct<Clip>, doc: The clip and its state., none: No mod is holding a clip on the mesh.}
+    fails:
+      not_found: "The component no longer exists."
+      not_ready: "The engine isn't ready."
+    users: [groink, groink-lua]
+
+  - name: release_clip
+    doc: "Ends your mod's hold on a mesh. The animation blueprint takes over again from its starting state."
+    owns: true
+    params:
+      - {name: component, type: handle<component>, doc: "The mesh that you passed to `hold_clip`."}
+    fails:
+      not_found: "The component no longer exists, or your mod isn't holding a clip on it."
+    users: [groink, groink-lua]

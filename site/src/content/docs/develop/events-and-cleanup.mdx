@@ -1,0 +1,116 @@
+---
+title: Events and cleanup
+description: Subscribe to events and release changes when your mod stops.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+If your mod reacts to play, start with an event from the [reference](/reference/).
+When you subscribe to an event, your callback stays registered until you cancel it or
+your mod stops. Every callback runs on the game thread. If an event comes from inside
+the game's code, Lua and JavaScript handlers run at the start of the next world step,
+so your script never runs in the middle of the game's own work. A compiled mod can get
+some of those events right away, so check the event's reference for when it arrives.
+
+## Subscriptions
+
+For example, listen for one step and then cancel the subscription:
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua title="main.lua"
+local steps
+steps = assert(time.on_step(function(event)
+    print("First step: " .. event.number)
+    assert(steps:cancel())
+end))
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript title="main.js"
+let steps;
+steps = time.on("step", (event) => {
+    print("First step: " + event.number);
+    steps.cancel();
+});
+```
+
+</TabItem>
+<TabItem label="C">
+
+```c title="main.c"
+#include "tsuchi/tsuchi.h"
+
+static const TSUCHI_Host *host;
+static TSUCHI_Mod *self;
+static TSUCHI_Subscription steps;
+
+static void on_step(void *user, const TSUCHI_TimeStep *event) {
+    (void)user;
+    (void)event;
+    host->mod->log(self, "First step");
+    host->cancel(self, steps);
+}
+
+TSUCHI_Result tsuchi_mod_start(const TSUCHI_Host *given, TSUCHI_Mod *mod) {
+    host = given;
+    self = mod;
+    steps = (TSUCHI_Subscription){0};
+    return host->time->on_step(mod, on_step, 0, &steps);
+}
+```
+
+</TabItem>
+</Tabs>
+
+After the callback runs, it shouldn't run again. In C, copy any event data you need
+later, as the event's pointers are valid only while the callback runs. In Lua and
+JavaScript, keep the fields you need and check handles again before using them later,
+as an actor can leave play between callbacks.
+
+## Holds
+
+When you need a change to last, use the service's *hold*. For example,
+[`component.hold_hidden`](/reference/component/#hold_hidden) keeps a component
+hidden until you release it. Tsuchi records which mod made the hold and releases it
+when the mod stops. The service reference says what gets restored, and whether
+another mod can hold the same thing.
+
+If a call returns `busy`, wait for the game or the other mod to release the resource.
+If an actor leaves the world, its holds end along with its handles. Release a hold
+yourself when you no longer need it, even if your mod will keep running.
+
+## Cleanup
+
+When your mod stops, Tsuchi cancels its subscriptions, releases its holds, removes its
+hooks, and removes actors it spawned without `keep`. Table overrides and replacements
+of existing text revert. A failed startup gets the same cleanup.
+
+Some changes remain after your mod stops:
+
+- An actor spawned with `keep = true` stays in the world.
+- A row added with [`datatable.add_row`](/reference/datatable/#add_row) stays while
+  its table is loaded.
+- A new [text key](/reference/text/) keeps its last text.
+- A [dialog](/reference/dialog/) already accepted by the game can still appear or
+  stay open. Your mod won't receive its answer.
+- A [save hold](/reference/save/#hold) ends right away when you release it. If your
+  mod stops while it holds the save, the save slots stay locked until the player goes
+  back to the title screen. After you use a stand-in, the save slots stay locked until
+  the title screen, even if you release the stand-in yourself.
+- [Saved mod data](/develop/save-data/), settings, and recorded content allocations
+  stay in the player's save.
+
+Changes to life, inventory, story progress, and other game state aren't holds. They
+aren't rolled back when your mod stops, and the game can save them.
+
+## Restarts
+
+When a Lua mod starts again, it gets a new state and runs `main.lua` again. A
+JavaScript mod gets a fresh runtime and runs `main.js` again. A compiled
+mod's code stays loaded until the game closes. If it starts again, Tsuchi calls
+`tsuchi_mod_start` again with its globals as they were left. Reset counters and saved
+handles in that function, and make fresh subscriptions and holds.

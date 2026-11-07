@@ -1,0 +1,14 @@
+{
+  "id": "check.pikmin",
+  "name": "The check of pikmin",
+  "version": "1.0.0",
+  "meta": {
+    "check": "pikmin",
+    "checks": [
+      "listed",
+      "info",
+      "team",
+      "refused"
+    ]
+  }
+}

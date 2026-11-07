@@ -1,0 +1,19 @@
+{
+  "id": "check.reflect",
+  "name": "The check of reflection",
+  "version": "1.0.0",
+  "meta": {
+    "check": "reflect",
+    "checks": [
+      "classes",
+      "names",
+      "fields",
+      "read",
+      "written",
+      "call",
+      "results",
+      "ended",
+      "refused"
+    ]
+  }
+}

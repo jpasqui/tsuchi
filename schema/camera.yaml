@@ -1,0 +1,320 @@
+service: camera
+layer: engine
+acts_on: game
+lifetime: world
+brief: Reads and holds a player's view.
+description: Read the view and project world positions onto the screen. Holds are exclusive per player
+  and restore the game when your mod stops. Look-at holds pause during demos and camera modes other
+  than follow.
+tutorials:
+- title: Control a camera
+  path: /develop/camera-input/
+enums:
+  ShakeKind:
+    open: false
+    doc: The game's shake kinds.
+    values:
+    - name: captain_hurt
+      value: 0
+      doc: Captain hurt shake.
+    - name: pikmin_pound
+      value: 1
+      doc: Pikmin pound shake.
+    - name: gate_down
+      value: 2
+      doc: Gate down shake.
+    - name: step_hard
+      value: 3
+      doc: Hard step shake.
+    - name: drop_heavy
+      value: 4
+      doc: Heavy drop shake.
+    - name: drop_middle
+      value: 5
+      doc: Middle drop shake.
+    - name: drop_light
+      value: 6
+      doc: Light drop shake.
+    - name: crash_hard
+      value: 7
+      doc: Hard crash shake.
+    - name: boss_drop
+      value: 8
+      doc: Boss drop shake.
+    - name: rock_hit
+      value: 9
+      doc: Rock hit shake.
+    - name: bomb
+      value: 10
+      doc: Bomb shake.
+    - name: dog_crush
+      value: 11
+      doc: Oatchi crush shake.
+    - name: dog_weak_damage
+      value: 12
+      doc: Oatchi weak damage shake.
+    - name: dog_heavy_damage
+      value: 13
+      doc: Oatchi heavy damage shake.
+    - name: micro
+      value: 14
+      doc: Micro shake.
+    - name: small
+      value: 15
+      doc: Small shake.
+    - name: medium
+      value: 16
+      doc: Medium shake.
+    - name: large
+      value: 17
+      doc: Large shake.
+structs:
+  View:
+    doc: A camera view.
+    fields:
+    - name: location
+      type: vec3
+      doc: The position, in centimeters.
+    - name: rotation
+      type: rotation
+      doc: The view direction, in degrees.
+    - name: fov
+      type: f32
+      doc: The horizontal field of view, in degrees.
+  Zoom:
+    doc: The follow camera goal.
+    fields:
+    - name: distance
+      type: f32
+      doc: The distance, in centimeters, from 10 to 100000.
+    - name: pitch
+      type: f32
+      doc: The pitch, in degrees, from -90 to 90.
+  ScreenPoint:
+    doc: A projected world position.
+    fields:
+    - name: x
+      type: f32
+      doc: Pixels from the left.
+    - name: y
+      type: f32
+      doc: Pixels from the top.
+  ScreenSize:
+    doc: The viewport size.
+    fields:
+    - name: width
+      type: i32
+      doc: The width in pixels.
+    - name: height
+      type: i32
+      doc: The height in pixels.
+  Look:
+    doc: A look-at target.
+    fields:
+    - name: actor
+      type: handle<actor>
+      optional: true
+      doc: The followed actor, or an empty handle for a world point.
+    - name: point
+      type: vec3
+      doc: Centimeters relative to the actor, or in the world with no actor.
+functions:
+- name: view
+  doc: Returns the view shown for this player.
+  params:
+  - &id001
+    name: player
+    type: u32
+    doc: The player, from 0 to 3.
+  users:
+  - online-coop
+  - camera-tools
+  returns:
+    type: struct<View>
+    doc: The value.
+  fails:
+    invalid: The player or value is outside its range.
+    not_ready: The player has no camera yet.
+- name: zoom
+  doc: Returns the follow camera goal.
+  params:
+  - *id001
+  users:
+  - online-coop
+  - camera-tools
+  returns:
+    type: struct<Zoom>
+    doc: The value.
+  fails:
+    invalid: The player or value is outside its range.
+    not_ready: The player has no camera yet.
+- name: heading
+  doc: Returns the view heading, in degrees from -180 to 180.
+  params:
+  - *id001
+  users:
+  - online-coop
+  - camera-tools
+  returns:
+    type: f32
+    doc: The value.
+  fails:
+    invalid: The player or value is outside its range.
+    not_ready: The player has no camera yet.
+- name: hold_zoom
+  doc: Holds the camera distance and pitch. The game eases toward the goal. The hold ends when your
+    mod stops.
+  params:
+  - *id001
+  - name: zoom
+    type: struct<Zoom>
+    doc: The goal.
+  users:
+  - online-coop
+  - camera-tools
+  owns: true
+  fails:
+    invalid: The player or goal is outside its range.
+    not_ready: The player has no follow camera yet.
+    not_found: The followed actor is gone.
+    busy: Another mod holds this player's camera.
+- name: release_zoom
+  doc: Restores the camera goal your mod held.
+  params:
+  - *id001
+  users:
+  - online-coop
+  - camera-tools
+  owns: true
+  fails:
+    invalid: The player is outside 0 to 3.
+    not_found: Your mod has no such hold.
+- name: hold_heading
+  doc: Holds the view heading, in degrees from -3600 to 3600. The hold ends when your mod stops.
+  params:
+  - *id001
+  - name: heading
+    type: f32
+    doc: The goal.
+  users:
+  - online-coop
+  - camera-tools
+  owns: true
+  fails:
+    invalid: The player or goal is outside its range.
+    not_ready: The player has no follow camera yet.
+    not_found: The followed actor is gone.
+    busy: Another mod holds this player's camera.
+- name: release_heading
+  doc: Restores the camera goal your mod held.
+  params:
+  - *id001
+  users:
+  - online-coop
+  - camera-tools
+  owns: true
+  fails:
+    invalid: The player is outside 0 to 3.
+    not_found: Your mod has no such hold.
+- name: hold_look
+  doc: Holds the camera on a world point or an actor. The hold pauses during demos and other camera
+    modes. It ends if the actor leaves play. The hold ends when your mod stops.
+  params:
+  - *id001
+  - name: look
+    type: struct<Look>
+    doc: The goal.
+  users:
+  - online-coop
+  - camera-tools
+  owns: true
+  fails:
+    invalid: The player or goal is outside its range.
+    not_ready: The player has no follow camera yet.
+    not_found: The followed actor is gone.
+    busy: Another mod holds this player's camera.
+    unsupported: The actor cannot report when it leaves play.
+- name: release_look
+  doc: Restores the camera goal your mod held.
+  params:
+  - *id001
+  users:
+  - online-coop
+  - camera-tools
+  owns: true
+  fails:
+    invalid: The player is outside 0 to 3.
+    not_found: Your mod has no such hold.
+- name: look
+  doc: Returns the held target, or an empty target if nobody holds it.
+  params:
+  - *id001
+  users:
+  - online-coop
+  - camera-tools
+  returns:
+    type: struct<Look>
+    doc: The value.
+  fails:
+    invalid: The player or value is outside its range.
+    not_ready: The player has no camera yet.
+- name: shake
+  doc: Starts a shake for the player. Use stop_shakes to end it.
+  params:
+  - *id001
+  - name: kind
+    type: enum<ShakeKind>
+    doc: The shake kind.
+  users:
+  - online-coop
+  - camera-tools
+  fails:
+    invalid: The player or value is outside its range.
+    not_ready: The player has no camera yet.
+- name: stop_shakes
+  doc: Stops the player's camera shakes.
+  params:
+  - *id001
+  - name: immediately
+    type: bool
+    doc: If true, stops at once. Otherwise the shake fades out.
+    default: false
+  users:
+  - online-coop
+  - camera-tools
+  fails:
+    invalid: The player or value is outside its range.
+    not_ready: The player has no camera yet.
+- name: world_to_screen
+  doc: Projects a world point onto the player's viewport. Uses the view after interpolation and held
+    camera changes.
+  params:
+  - *id001
+  - name: location
+    type: vec3
+    doc: The world position, in centimeters.
+  users:
+  - online-coop
+  - camera-tools
+  returns:
+    type: struct<ScreenPoint>
+    doc: The value.
+  fails:
+    invalid: The player or position is invalid.
+    not_ready: The viewport has no view yet.
+    not_found: The point is behind the camera.
+    unsupported: Another camera implementation bypasses the player view slot.
+    busy: A projection is already in progress.
+- name: screen_size
+  doc: Returns the viewport dimensions, in pixels.
+  params:
+  - *id001
+  users:
+  - online-coop
+  - camera-tools
+  returns:
+    type: struct<ScreenSize>
+    doc: The value.
+  fails:
+    invalid: The player or value is outside its range.
+    not_ready: The player has no camera yet.

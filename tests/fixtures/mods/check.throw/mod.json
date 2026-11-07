@@ -1,0 +1,25 @@
+{
+  "id": "check.throw",
+  "name": "The isolated check of an owned Pikmin throw",
+  "version": "1.0.0",
+  "meta": {
+    "check": "throw",
+    "check_explicit": true,
+    "checks": [
+      "found",
+      "added",
+      "identified",
+      "aimed",
+      "asked",
+      "left",
+      "rise",
+      "speed",
+      "engine",
+      "refused",
+      "ended",
+      "removed",
+      "gone",
+      "originals"
+    ]
+  }
+}

@@ -1,0 +1,147 @@
+---
+title: Write your first mod
+description: Create a small mod that writes to the log every in-game minute.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+In this guide, you'll create a small mod that writes a line to the log every in-game minute.
+It's best to start with Lua, as all you need is a text editor. If you would rather use C,
+then you'll also need the SDK, which is covered in
+[Build a compiled mod](/develop/compiled-mod/).
+
+If you have the SDK, you can use its copies of the exact examples below. After you [extract it](/develop/compiled-mod/#sdk), create an `olimar.clock`
+folder next to `sdk` and copy `sdk/examples/olimar.clock/mod.json` into it.
+
+## Folder
+
+The first step is to create a folder for your mod. The name of the folder will be your mod's
+ID, so it can only use ASCII lowercase letters, digits, `.`, `_`, and `-`, and it can be up to 47
+characters long. It also has to start and end with a letter or a digit.
+
+Put your name at the start of the ID to avoid another author's ID. For this guide,
+we'll use `olimar.clock`. Content your mod adds uses that same prefix, such as
+`example.gems:ruby` for a treasure from `example.gems`. See [IDs and kinds](/develop/ids-and-kinds/).
+
+```text
+olimar.clock/
+  mod.json
+  main.lua
+```
+
+## Manifest
+
+Next, create your mod's manifest by adding a file named `mod.json` to the folder with these
+three keys:
+
+```json title="mod.json"
+{
+  "id": "olimar.clock",
+  "name": "Clock",
+  "version": "1.0.0"
+}
+```
+
+Make sure that the `id` matches the name of the folder, and that the `version` is three
+numbers. If there is a key in the manifest that Tsuchi doesn't recognize, then the mod won't
+load, so check your spelling if your mod stops loading after you edit it. Every key that you
+can use is listed in [Write a manifest](/develop/manifest/).
+
+## Code
+
+The game world updates in steps, 30 times per in-game second. The
+[`time`](/reference/time/) service fires a `step` event every time this happens, so we can
+use it to count minutes.
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+Create a file named `main.lua` inside of the mod's folder, and add this code:
+
+```lua title="main.lua"
+print("Started " .. mod.name() .. " " .. mod.version())
+
+time.on_step(function(event)
+    if event.number % 1800 == 0 then
+        print("The world has run for " .. event.number // 1800 .. " minutes")
+    end
+end)
+```
+
+Anything that you `print` will show up in the Tsuchi log.
+
+If you use the SDK's copy of this example, copy
+`sdk/examples/olimar.clock/main.lua` into your `olimar.clock` folder.
+
+</TabItem>
+<TabItem label="JavaScript">
+
+Create `main.js` in your mod's folder and add this code:
+
+```javascript title="main.js"
+print("Started " + mod.name() + " " + mod.version());
+
+time.on("step", (event) => {
+    if (event.number % 1800n === 0n) {
+        print("The world has run for " + event.number / 1800n + " minutes");
+    }
+});
+```
+
+The `n` suffix makes a BigInt, which keeps all 64 bits of the step number.
+Choose one script entry, `main.lua` or `main.js`, as Tsuchi refuses a mod with both.
+If you use the SDK's example, copy `sdk/examples/olimar.clock/main.js` into your folder.
+See [Use JavaScript in your mod](/develop/javascript/) for events, errors, and waiting.
+
+</TabItem>
+<TabItem label="C">
+
+Create a file named `main.c` and add this code, then build it into `mod.nro`:
+
+```c title="main.c"
+#include "tsuchi/tsuchi.h"
+
+static const TSUCHI_Host *host;
+static TSUCHI_Mod *self;
+static TSUCHI_Subscription steps;
+
+static void on_step(void *user, const TSUCHI_TimeStep *event) {
+    if (event->number % 1800 == 0) host->mod->log(self, "Another minute has passed");
+}
+
+TSUCHI_Result tsuchi_mod_start(const TSUCHI_Host *given, TSUCHI_Mod *mod) {
+    host = given;
+    self = mod;
+    host->mod->log(mod, "Started");
+    return host->time->on_step(mod, on_step, 0, &steps);
+}
+```
+
+After you extract the SDK, build its copy of this example from the folder that
+contains `sdk`:
+
+```sh
+python sdk/build_mod.py sdk/examples/olimar.clock/main.c --out olimar.clock/mod.nro
+```
+
+Your `olimar.clock` folder should contain `mod.json` and `mod.nro`. Leave both
+`main.lua` and `main.js` out when you run the C example, as a script and compiled
+code both run when present.
+
+Tsuchi will call `tsuchi_mod_start` when it loads your mod. If the function returns anything
+other than `TSUCHI_OK`, then the mod won't load.
+
+</TabItem>
+</Tabs>
+
+You don't need to unsubscribe from the event yourself, as Tsuchi will clean up your mod's
+subscriptions when the mod stops.
+
+## Testing
+
+Now it's time to test the mod. [Install your mod](/players/install-a-mod/) and start the
+game. After the game has been running for a minute, open `tsuchi/tsuchi.log` in the game's
+save folder, and you should see the lines from your mod. If the lines are missing,
+check the mod list and the log's startup summary for a blocked reason. Also check
+the system's debug output, as the file may be waiting for the save or may have
+reached its limit. Missing file lines alone don't prove the mod failed to load.

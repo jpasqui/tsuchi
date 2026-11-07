@@ -1,0 +1,13 @@
+{
+  "id": "check.time",
+  "name": "Check time",
+  "version": "1.0.0",
+  "meta": {
+    "check": "time",
+    "checks": [
+      "steps",
+      "presented",
+      "cancelled"
+    ]
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "id": "check.storage",
+  "name": "Check storage",
+  "version": "1.0.0",
+  "meta": {
+    "check": "storage",
+    "checks": [
+      "left",
+      "kept",
+      "listed",
+      "replaced",
+      "refused",
+      "removed"
+    ]
+  }
+}

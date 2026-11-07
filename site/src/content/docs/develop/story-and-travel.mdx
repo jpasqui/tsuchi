@@ -1,0 +1,161 @@
+---
+title: Travel to an area
+description: Read the story's day clock, request travel, and watch for the new world.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+Start with [your first mod](/develop/first-mod/), then enter an area in the daytime
+story. We'll request a trip to `Area001_P` and write the loaded world's name to the log.
+If the player is inside a cave, leave it before trying this example.
+
+## Clock
+
+Read [`story.day`](/reference/story/#day) for the day number, starting at `1`, and
+`story.clock` for progress through the day. The clock goes from `0` at morning to
+`1` at sunset. At night, the same value measures progress through the night.
+
+If you want to move the clock, pass a value from `0` to `1` to `story.set_clock`.
+The sun and the game's timers change on the clock's next update. Reading the clock
+can fail with `not_ready` if no story is loaded or the level has no clock.
+
+## Code
+
+For example, read the clock after the player gets control, then request one trip.
+We'll listen for [`game.on_world_loaded`](/reference/game/#world_loaded) before
+requesting travel, as travel takes time to fade out and load the next world.
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua title="main.lua"
+local tried = false
+
+game.on_world_loaded(function(event)
+    print("Loaded " .. event.world)
+end)
+
+time.on_step(function()
+    if tried or game.mode() ~= "story" or game.has_control() ~= true then return end
+    local day = story.day()
+    local clock = story.clock()
+    if day == nil or clock == nil then return end
+
+    tried = true
+    print("Travel request on day " .. day .. ", clock " .. clock)
+    local accepted, why = story.travel("Area001_P", -1)
+    if accepted then
+        print("Area trip requested")
+    else
+        print("Couldn't travel: " .. why)
+    end
+end)
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript title="main.js"
+let tried = false;
+
+game.on("world_loaded", (event) => { print("Loaded " + event.world); });
+
+time.on("step", () => {
+    if (tried) return;
+    let day, clock;
+    try {
+        if (game.mode() !== "story" || !game.has_control()) return;
+        day = story.day();
+        clock = story.clock();
+    } catch (error) {
+        if (error.name === "not_ready") return;
+        throw error;
+    }
+
+    tried = true;
+    print("Travel request on day " + day + ", clock " + clock);
+    try {
+        story.travel("Area001_P", -1);
+        print("Area trip requested");
+    } catch (error) {
+        print("Couldn't travel: " + error.name);
+    }
+});
+```
+
+</TabItem>
+<TabItem label="C">
+
+[Build this code](/develop/compiled-mod/) into `mod.nro`.
+
+```c title="main.c"
+#include "tsuchi/tsuchi.h"
+
+static const TSUCHI_Host *host;
+static TSUCHI_Mod *self;
+static TSUCHI_Subscription steps, worlds;
+static bool tried;
+
+static void on_loaded(void *user, const TSUCHI_GameWorldLoaded *event) {
+    (void)user;
+    host->mod->log(self, event->world);
+}
+
+static void on_step(void *user, const TSUCHI_TimeStep *event) {
+    (void)user;
+    (void)event;
+    TSUCHI_Mode mode = TSUCHI_MODE_NONE;
+    bool control = false;
+    uint32_t day = 0;
+    float clock = 0;
+    if (tried || host->game->mode(self, &mode) != TSUCHI_OK ||
+        mode != TSUCHI_MODE_STORY) return;
+    if (host->game->has_control(self, &control) != TSUCHI_OK || !control) return;
+    if (host->story->day(self, &day) != TSUCHI_OK ||
+        host->story->clock(self, &clock) != TSUCHI_OK) return;
+
+    tried = true;
+    host->mod->log(self, "Story clock read, requesting Area001_P");
+    TSUCHI_Result result = host->story->travel(self, "Area001_P", -1);
+    host->mod->log(self, result == TSUCHI_OK ? "Area trip requested" : "Couldn't travel");
+}
+
+TSUCHI_Result tsuchi_mod_start(const TSUCHI_Host *given, TSUCHI_Mod *mod) {
+    host = given;
+    self = mod;
+    tried = false;
+    TSUCHI_Result result = host->game->on_world_loaded(mod, on_loaded, 0, &worlds);
+    if (result != TSUCHI_OK) return result;
+    return host->time->on_step(mod, on_step, 0, &steps);
+}
+```
+
+</TabItem>
+</Tabs>
+
+[Install your mod](/players/install-a-mod/) and enter a daytime area. You should see
+`Area trip requested` in the [log](/develop/logs/), then the game should
+load `Area001_P`. The day continues during an area trip.
+
+The `-1` base asks for the last base used in that area. If you need a particular base,
+pass its number, starting at `0`. For a mod's area, pass its content ID instead of
+`Area001_P`.
+
+## Results
+
+If the request returns `busy`, wait until the cutscene, menu, save, or earlier travel
+finishes. This example tries once each time your mod starts, so restart your mod to
+make another attempt. Don't repeat the request on every step after it succeeds.
+
+If the request returns `not_ready`, check the game mode, time of day, and whether the
+player is inside a cave. If it returns `not_found`, check that the ID names an area.
+A cave floor is a world, but you can't travel to it with `story.travel`.
+
+## Caves
+
+To leave a cave, call `story.leave_cave`. To enter a cave or move through a hole to the
+next floor, find the portal actor and pass its handle to `story.enter_portal`. The
+game asks the player to confirm the portal trip.
+
+When a world unloads, its actor handles stop working. Find the actors again after the
+new world loads, and see [Events and cleanup](/develop/events-and-cleanup/) for their lifetime.

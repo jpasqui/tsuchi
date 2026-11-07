@@ -1,0 +1,129 @@
+---
+title: Measure game time
+description: Run gameplay on fixed steps and picture changes on presented frames.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+Use [`time.on_step`](/reference/time/#step) for anything that changes the world.
+Each step is 1/30 of a game second, so 30 steps make one second and 1,800 make one
+minute. Counting rendered frames would change your mod's timing with the frame rate.
+
+## Steps
+
+For example, count steps from your mod's startup and log every five game seconds:
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua title="main.lua"
+local elapsed = 0
+time.on_step(function(event)
+    elapsed = elapsed + 1
+    if elapsed % 150 == 0 then
+        print("Five game seconds")
+    end
+end)
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript title="main.js"
+let elapsed = 0;
+time.on("step", () => {
+    elapsed += 1;
+    if (elapsed % 150 === 0) print("Five game seconds");
+});
+```
+
+</TabItem>
+<TabItem label="C">
+
+```c title="main.c"
+#include "tsuchi/tsuchi.h"
+
+static const TSUCHI_Host *host;
+static TSUCHI_Mod *self;
+static TSUCHI_Subscription steps;
+static uint64_t elapsed;
+
+static void on_step(void *user, const TSUCHI_TimeStep *event) {
+    (void)user;
+    (void)event;
+    if (++elapsed % 150 == 0) host->mod->log(self, "Five game seconds");
+}
+
+TSUCHI_Result tsuchi_mod_start(const TSUCHI_Host *given, TSUCHI_Mod *mod) {
+    host = given;
+    self = mod;
+    elapsed = 0;
+    return host->time->on_step(mod, on_step, 0, &steps);
+}
+```
+
+</TabItem>
+</Tabs>
+
+The event's `number` counts from the game's startup. Keep your own counter if the
+timer should begin when your mod starts, as this example does. Check the loaded world
+or game mode inside the callback if you want to count only time in a particular mode.
+
+## Pictures
+
+Use [`time.on_presented`](/reference/time/#presented) for changes that affect the
+picture, such as a cursor or a HUD animation. It runs once for each rendered frame.
+Its `seconds` field gives the time since the last frame, and `fraction` tells you
+where the frame falls between the last two steps, from 0 to 1. With one picture
+per step, `presented` follows the step with `fraction = 1`. Your mod must also work
+when there are no pictures between steps.
+
+The player picks the frame rate with Tsuchi's
+[`frame_limit` setting](/players/install-tsuchi/#frame-rate). At the default of 30, every
+step gets one picture. At 60, most steps get two pictures, half a step apart. Frame limits
+above 30 are experimental; higher frame rates are still being worked on. Above 30, water,
+trails, and some shadows still move once a step.
+
+If you draw a moving marker, keep its last two positions on steps and blend between
+them on presented frames. Keep damage, movement requests, and story changes on steps
+so a higher frame rate won't make the mod act more often. Use Tsuchi's movement
+calls for an immediate jump, as they mark the change for interpolation and prevent
+the pictures between steps from showing a slide.
+
+
+## Request a presentation policy
+
+`time.hold_presentation(limit, vsync)` requests 30, 60, 120, or 0 for uncapped.
+VSync is `game`, `on`, or `off`. Only one mod holds this policy at a time; another
+request returns `busy`. Higher rates remain experimental. The presenter applies
+the request on its next available frame and keeps world updates at thirty steps
+per second.
+
+`time.presentation()` reads the requested policy. `time.release_presentation()`
+returns to the latest framework-file preference. Stopping the requesting mod
+also releases its policy. Emulator VSync is separate. In Eden, turn off both
+emulator VSync and the engine-speed limit when testing rates above 60. Read the
+presenter's measured pictures, renderer calls, and world steps with
+`presenter_log: true`; the requested limit alone is not a rate measurement.
+
+## Request pose interpolation
+
+`time.hold_pose_presentation("smooth")` requests interpolation for qualified
+small skeletal poses and native updates up to four world steps apart. It has a
+separate owner from frame limit and VSync. Another mod can hold the frame policy
+while your mod holds the pose policy. `time.pose_presentation()` reads the
+requested choice, `selective` or `smooth`.
+
+`selective` preserves the presenter's size and update-cadence omissions. Without
+a mod hold, the framework-file `pose_presentation` selects the choice and defaults
+to `selective`. `time.release_pose_presentation()` and stopping the mod restore
+the latest file preference. Changes apply on the next available frame. At 30
+frames per second no extra poses are drawn.
+
+Smooth mode retains the presenter's lifetime, recent-draw, bone and memory limits.
+It adds pose submissions and interpolation delay across the native update gap.
+The presenter uses completed native poses; it does not increase the game's
+animation evaluation frequency or restore detail missing from those poses.
+Gaps beyond four world steps keep native endpoints. Native update-rate controls
+are separate engine settings. Measure visible animation and frame cost in the
+game before claiming that an animation-quality option improves either.

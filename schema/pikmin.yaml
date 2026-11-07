@@ -1,0 +1,105 @@
+service: pikmin
+tutorials:
+  - {title: Watch a captain's squad, path: /develop/squad-and-captain/}
+layer: game
+acts_on: actor
+lifetime: world
+brief: "Lists the Pikmin in the world, reads their type and leaf stage, and spawns new ones."
+description: |
+  The game keeps its own list of the Pikmin in the world. Use this service to
+  get that list, read a Pikmin's type and leaf stage, and spawn new Pikmin the
+  same way that an Onion does.
+
+  A Pikmin type is named by an ID, like `red`. A type that a mod adds is named
+  `<mod id>:<name>`. Your manifest declares it under `content.pikmin`. Two added
+  type allocations are shared by every mod and every save slot. Allocations are
+  never reused. Added types spawn in the story rule and use their saved donor
+  when their mod is missing.
+
+  To find out which leader a Pikmin follows, use `squad`. To kill a Pikmin,
+  use `combat.kill_pikmin`.
+
+enums:
+  PikminType:
+    open: true
+    most: 255
+    doc: The type of a Pikmin.
+    values:
+      - {name: red, value: 0, doc: Red.}
+      - {name: blue, value: 1, doc: Blue.}
+      - {name: yellow, value: 2, doc: Yellow.}
+      - {name: rock, value: 3, doc: Rock.}
+      - {name: wing, value: 4, doc: Winged.}
+      - {name: purple, value: 5, doc: Purple.}
+      - {name: white, value: 6, doc: White.}
+      - {name: ice, value: 7, doc: Ice.}
+      - {name: glow, value: 9, doc: "Glow Pikmin, which appear at night."}
+
+  Leaf:
+    open: false
+    doc: "The leaf, bud, or flower on a Pikmin's head."
+    values:
+      - {name: leaf, value: 0, doc: A leaf.}
+      - {name: bud, value: 1, doc: A bud.}
+      - {name: flower, value: 2, doc: A flower.}
+
+structs:
+  PikminInfo:
+    doc: "Information about a Pikmin."
+    fields:
+      - {name: kind, type: enum<PikminType>, doc: "Its type. A type without a name is returned as `#` followed by the game's number for it."}
+      - {name: leaf, type: enum<Leaf>, doc: "The leaf, bud, or flower on its head."}
+      - {name: team, type: i32, doc: "Its team, in the same format that `entity.team` returns."}
+      - {name: in_army, type: bool, doc: "Whether it counts as one of a player's Pikmin. Whistling and dismissing don't change this."}
+
+functions:
+  - name: list
+    doc: "Every living Pikmin in the world, in the game's own order."
+    returns: {type: list<handle<actor>>, doc: The Pikmin.}
+    fails:
+      not_ready: No world is loaded.
+    users: [groink, online-coop]
+
+  - name: info
+    doc: "A Pikmin's type, leaf stage, and team."
+    params:
+      - {name: pikmin, type: handle<actor>, doc: The Pikmin.}
+    returns: {type: struct<PikminInfo>, doc: "Its type, leaf stage, and team."}
+    fails:
+      not_found: "The actor no longer exists, isn't a Pikmin, or is a Pikmin that is being removed."
+    users: [groink, online-coop]
+
+  - name: add
+    doc: |
+      Spawns new Pikmin next to a captain or a dog, following it, the same way that
+      an Onion releases them. They count as the player's Pikmin right away. No
+      Onion's stock changes, and the game's limit on Pikmin in the field isn't
+      applied.
+    params:
+      - {name: leader, type: handle<actor>, doc: "The captain or dog that they follow."}
+      - {name: kind, type: enum<PikminType>, doc: "Their type, in the same format that `info` returns."}
+      - {name: leaf, type: enum<Leaf>, default: leaf, doc: "The leaf, bud, or flower on their heads."}
+      - {name: count, type: u32, default: 1, doc: "The number of Pikmin."}
+    fails:
+      not_found: "The actor no longer exists or isn't a captain or a dog, or no Pikmin type has the ID in `kind`."
+      invalid: "`count` is `0`, or `kind` isn't a valid ID."
+      unsupported: "`kind` is a type without a name, which starts with `#`, or it is an added type outside the story rule."
+      not_ready: "The leader has no position in the world yet, or the game isn't ready."
+    users: [groink, online-coop]
+
+  - name: work_on
+    doc: |
+      Sends a Pikmin to work on a target, the same way that a captain's charge does.
+      The Pikmin runs to the target and does whatever the target allows, which is
+      attacking a creature, carrying a treasure, digging, or pushing. A Pikmin that
+      is following a leader goes on that leader's behalf. A Pikmin that isn't
+      following anyone runs there and might only stand by.
+    params:
+      - {name: pikmin, type: handle<actor>, doc: The Pikmin.}
+      - {name: target, type: handle<actor>, doc: "The target to work on."}
+    fails:
+      not_found: "The Pikmin or the target no longer exists, or the first actor isn't a Pikmin."
+      not_ready: "The target has no position in the world, the Pikmin's state can't be read right now, or the game isn't ready."
+      no_memory: "The game is out of memory."
+      unsupported: "This build of the game has no order to send one Pikmin to work."
+    users: [groink, groink-lua]

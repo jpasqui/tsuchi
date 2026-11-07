@@ -1,0 +1,2579 @@
+version: sw2-demo
+build_id: FB43FD7D0A63D26A805B54D3EA308225
+identity:
+- offset: 24452888
+  hash: 2296294898460915239
+- offset: 18928128
+  hash: 9509073354247026797
+- offset: 87208880
+  hash: 6299706095032625886
+- offset: 54547984
+  hash: 17676423334391457610
+data:
+  wwise_audio_manager: 133386464
+  wwise_parameter_manager: 133386520
+  ui_select_sound: 133926408
+  console_manager: 139056440
+  pikmin_ai_class: 134273472
+  pikmin_component_class: 134535216
+  object_chunks: 139609208
+  object_count: 139609228
+  object_serial_counter: 139609352
+  name_blocks: 139352552
+  allocator: 139268272
+  game_framework: 134076032
+  game_context: 133983472
+  pikmin_scatter_config: 134073160
+  pikmin_scatter_override: 134073152
+  game_instance: 134046064
+  world: 147488344
+  random_stream: 134264808
+  pause_manager_table: 123428840
+  save_async_state: 134066560
+  save_mounted: 134066186
+  engine_save_mounted: 134640896
+  message_queue_table: 123254032
+  damage_message_table: 123248856
+  knock_message_table: 123248912
+  whistle_message_table: 123254752
+  charge_order_table: 122170496
+  revive_request_table: 122375472
+  text_manager: 139086216
+  text_manager_ready: 139086224
+  game_mode: 133947872
+  portal_part_class: 134546064
+  clock_table: 123319800
+  story_flow_table: 123343712
+  story_play_table: 123343856
+  leave_request_table: 123342672
+  portal_request_table: 122823016
+  sound_system: 133926336
+  creature_group: 133966192
+  status_words: 148418512
+  system_library_anchor: 133166352
+  loader_state: 134659192
+  nav_allocate: 133384552
+  nav_release: 133384560
+  explore_areas: 134264792
+  renderer: 146048152
+  renderer_table: 132637624
+  engine: 147471672
+  app_delta: 133355328
+  frame_counter: 139268264
+  input_full_key: 133236480
+  input_handheld: 133236448
+  input_joy_dual: 133236464
+  physics_dynamic_table: 120472416
+  world_follow_default_name: 133816160
+  world_follow_none_name: 133815944
+  world_follow_move_name: 133816216
+  mod_config_cache: 139268056
+  mod_config_filename: absent
+  mod_settings_table: absent
+  gimmick_door_closed_table: 122742720
+  gimmick_door_open_name: 133883792
+  gimmick_door_wait_name: 133883800
+  gimmick_warp_table: 122743104
+  battle_manager_table: 123328224
+  battle_flow_table: 123343784
+  battle_load_table: 123338160
+  battle_demo_table: 123338232
+  battle_start_table: 123338088
+  battle_play_table: 123338304
+  battle_results_table: 123338376
+  battle_end_table: 123338448
+  gimmick_warp_stage_function: 52913312
+  content_icon_size: 134154048
+constants:
+  stream_block_load: 128
+  stream_source_cdo: 16
+  physics_dynamic_kind: 6
+  physics_dynamic_buffered_pose: 512
+  squad_other_kind: 16
+  battle_results_ready_step: 3
+  battle_results_resume_step: 10
+  battle_pop_class_owner_mask: 322
+  battle_pop_owner_types: 9
+  battle_roulette_slot_bytes: 64
+  gimmick_pot_hit_offset: 100
+  gimmick_complete_ui_kind: 11
+  gimmick_warp_state_bytes: 176
+  gimmick_warp_board_bytes: 192
+  console_read_only: 4
+  console_priority_mask: 4278190080
+  ui_widget_abstract: 1
+  ui_details_button: 4
+  ui_confirm_button: 1
+  ui_previous_tab_button: 64
+  ui_next_tab_button: 128
+  ui_mod_list_category: 7
+  ui_mod_list_item: 0
+  ui_mod_list_rows_limit: 128
+  pikmin_snapshot_secondary_player_first: 1
+  pikmin_snapshot_secondary_player_second: 2
+  pikmin_live_leaves: 3
+  pikmin_snapshot_rule_second: 2
+  pikmin_snapshot_rule_third: 7
+  pikmin_snapshot_rest_second: 5
+  pikmin_counter_army: 7
+  pikmin_counter_joined: 3
+  pikmin_counter_pending: 8
+  pikmin_counter_excluded: 10
+  pikmin_counter_attached: 11
+  pikmin_counter_current: 2
+  pikmin_counter_partner: 3
+  pikmin_counter_player_first: 1
+  pikmin_counter_player_last: 5
+  pikmin_counter_player_missing: 5
+  pikmin_counter_field: 1
+  pikmin_counter_onion: 4
+  pikmin_selected_none: 16
+  cursor_ring_purple: 5
+  pikmin_snapshot_pause_mask: 1310720
+  pikmin_hud_color_a: 19
+  pikmin_hud_color_b: 21
+  pikmin_hud_toggle_a: 32
+  pikmin_save_colors: 22
+  pikmin_stock_save_colors: 17
+  pikmin_save_leaves: 4
+  pikmin_save_decorations: 25
+  pikmin_stock_enum_names: 19
+  pikmin_color_first: 19
+  pikmin_color_second: 21
+  pikmin_count_max: 99999
+  pikmin_scatter_tau_bits: 1086918619
+  pikmin_restore_refused_rule_first: 6
+  pikmin_restore_refused_rule_second: 8
+  pikmin_type_capacity: 2
+  return_portal_ground: 1
+  reserved_flow_fast_travel: 1
+  reserved_travel_day_area_start: 1
+  reserved_flow_none: 5
+  code_size: 95969280
+  stub_base: 95968576
+  stub_end: 95969280
+  max_objects: 600000
+  objects_per_chunk: 65536
+  unreachable_flags: 805306368
+  actor_destroying_mask: 16
+  kept_flag: 1073741824
+  animation_by_blueprint: 0
+  animation_single: 1
+  save_slots: 6
+  save_there: 0
+  save_missing: 1
+  fs_read: 1
+  fs_write: 6
+  fs_write_through: 1
+  fs_list_all: 3
+  fs_entry_folder: 0
+  fs_no_such_path: 514
+  program_id: 288465672311013376
+  loader_started: 1
+  loader_bind_now: 1
+  loader_module_bytes: 1024
+  loader_registration_bytes: 64
+  loader_list_wide: 1
+  pause_blocks_travel: 2147421195
+  request_from_menu: 4
+  leave_request_id: 16
+  portal_request_id: 11
+  dialog_question: 21
+  dialog_message: 94
+  dialog_accept: 2
+  dialog_shape: 1
+  dialog_mode: 2
+  widget_shown: 3
+  announce_sliding_in: 1
+  polyglot_max_bits: 128
+  name_block_count: 8192
+  names_per_block_shift: 16
+  name_stride: 2
+  name_wide_bit: 1
+  name_length_shift: 6
+  function_static: 8192
+  property_const: 2
+  property_param: 128
+  property_out: 256
+  property_return: 1024
+  max_array_count: 1000000
+  spawn_object_flags: 8
+  spawn_team_default: 5
+  spawn_team_editor: 4
+  spawn_color_none: 16
+  spawn_leaf_none: 3
+  spawn_decoration_none: 24
+  spawn_delegate_threshold: 2
+  kill_magic: 288576887
+  rule_story: 1
+  team_story: 4
+  sort_dog: 4
+  state_carcass: 16
+  dismiss_keep_none: 16
+  play_mode_two: 2
+  pad_none: 7
+  pause_stops_control: 11
+  rest_parked: 1
+  component_destroying_mask: 33554432
+  actor_play_state_mask: 192
+  actor_play_state_begun: 128
+  duplicate_internal_flags: 4286578688
+  ordinary_end_play: 4059568
+  ordinary_unregister: 4057792
+  ordinary_destroyed: 4072704
+  removal_unregister_return: 87909948
+  end_play_removed: 3
+  max_name_units: 1023
+  template_flags: 48
+  default_object_flag: 16
+  base_open: 3
+  story_area_bases: 3
+  story_of_olimar: 1
+  scenes_ready: 1
+  max_scenes: 4096
+  save_kinds: 7
+  generators_built: 1
+  generator_added: 65536
+  ai_stream_version: 8626647834
+  mutex_ready: 1
+  shader_map_registered: 1
+  listed_pikmin_types: 8
+  widget_collapsed: 1
+  widget_hidden: 2
+  collision_records_most: 128
+  collision_shapes_most: 128
+  pad_handheld: 32
+  nav_failed: 2147483648
+  nav_tile_owned: 1
+  pause_mod_kinds: 32767
+  sweep_result_bytes: 256
+  mobility_movable: 2
+  engine_fixed_rate: 64
+  world_tick_all: 2
+  fix_delta: 91036848
+  camera_cut: 4
+  camera_subject: 3825248
+  view_times_set: 16
+  npad_full_key: 1
+  npad_handheld: 2
+  npad_joy_dual: 4
+  input_resolver: 95951184
+  render_transform_dirty: 64
+  render_dynamic_dirty: 128
+  render_ready: 3
+  instance_drawer_table: 123353984
+  effect_unpooled: 4294967295
+  effect_spawn_blocked: 2097664
+  ui_keyboard_characters: 31
+structs:
+  console_manager_table:
+    fields:
+      find_variable: 176
+  console_variable_table:
+    fields:
+      flags: 32
+      set: 136
+      value: 160
+  ui_widget:
+    fields:
+      render_x: 144
+      render_y: 148
+      render_scale_x: 152
+      render_scale_y: 156
+      render_pivot_x: 172
+      render_pivot_y: 176
+      clipping: 194
+      cached_slate: 216
+      remove_from_parent: 672
+  ui_user_widget:
+    fields:
+      tree: 488
+  ui_widget_tree:
+    fields:
+      root: 40
+  ui_widget_class_flags:
+    fields:
+      flags: 204
+  ui_widget_button:
+    fields:
+      clicked: 984
+      pressed: 1000
+      released: 1016
+      hovered: 1032
+      unhovered: 1048
+  ui_footer_label:
+    fields:
+      text: 312
+  ui_rich_text:
+    fields:
+      wrapping_policy: 284
+      auto_wrap: 285
+      wrap_width: 288
+      slate: 1096
+  ui_host:
+    fields:
+      tree: 488
+      state: 1256
+      scroll: 1440
+  ui_tree:
+    fields:
+      root: 40
+  ui_row:
+    fields:
+      label: absent
+      selector: absent
+  ui_heading:
+    fields:
+      label: absent
+  ui_button:
+    fields:
+      label: absent
+  ui_selector:
+    fields:
+      plain_value: absent
+      yellow_value: absent
+      fixed_value: absent
+      plain_arrows: absent
+      yellow_arrows: absent
+      fixed_arrows: absent
+      plain_cursor: absent
+      yellow_cursor: absent
+      fixed_cursor: absent
+  ui_cursor:
+    fields:
+      highlight: absent
+  ui_mod_list_menu:
+    fields:
+      source: 1552
+      active: 1448
+      category_class: 1512
+      new_mode: 1528
+      selected: 1344
+      previous: 1348
+  ui_mod_list_category:
+    fields:
+      title: 1240
+      panel: 1248
+      rows: 1256
+      kind: 1272
+      span: 1276
+      owner: 1280
+      row_class: 1288
+  ui_mod_list_row:
+    fields:
+      title: 1240
+      selector: 1248
+      kind: 1256
+      parent: 1257
+      count: 1260
+      shadow: 1264
+      enabled: 1268
+  ui_mod_list_selector:
+    fields:
+      inner: 1288
+      value: 1296
+      left: 1304
+      right: 1312
+      choices: 1320
+      choice: 1340
+      wrap: 1336
+      enabled: 1352
+      redraw: 1456
+      valid: 1472
+  ui_mod_list_tab:
+    fields:
+      slot: 40
+      parent: 40
+      offsets: 56
+      anchors: 72
+      alignment: 88
+  ui_mod_list_scroll:
+    fields:
+      panel: 1280
+      heights: 1304
+      spacing: 1336
+      extent_count: 1352
+      total: 1360
+      variable_height: 1364
+      viewport: 1368
+      x: 144
+      y: 148
+  ui_button_art:
+    fields:
+      inner: absent
+      width: absent
+      height: absent
+      setup: absent
+      selected_animation: absent
+      idle_animation: absent
+      inner_selected_animation: absent
+      inner_idle_animation: absent
+  ui_panel:
+    fields:
+      slots: 280
+  ui_panel_slot:
+    fields:
+      content: 48
+  pikmin_counter:
+    size: 39704
+    fields:
+      bank: 39308
+      read_bank: 39304
+      initialized: 39312
+      force_recount: 39696
+      leaf_stride: 288
+      mode_stride: 24
+      player_stride: 4
+      bank_stride: 19584
+  snapshot_playerinfo:
+    fields:
+      id: 4
+  ai_action_root:
+    fields:
+      state: 104
+  ai_state:
+    fields:
+      name: 128
+  throw_toggle_parameter:
+    size: 104
+    fields:
+      toggle: 0
+      color: 1
+  throw_icon:
+    fields:
+      current_toggle: 1339
+      pikmin_type: 1336
+      pending_pikmin_type: 1337
+      alternate_pikmin_type: 1338
+      alternate: 1418
+  throw_cursor:
+    fields:
+      owner: 520
+      color: 1024
+      parts: 1496
+      materials: 1528
+      ring: 1716
+  cursor_placement:
+    fields:
+      widget_table: 123494752
+      component_table: 123189784
+      producer_return: 55611952
+      ready: 1320
+      position: 560
+      screen: 1284
+      owner_controller: 1188
+  ring_part_table:
+    fields:
+      set_material: 1440
+  cursor_toggle:
+    fields:
+      icons: 1416
+      icon_count: 1424
+      alternate: 1802
+  cursor_toggle_icon:
+    fields:
+      textures: 1240
+      material: 1288
+      toggle: 1304
+      alternate_toggle: 1306
+      item_atlas: 1324
+  selected_info:
+    size: absent
+    fields:
+      color: 0
+      special: 4
+  map_property:
+    fields:
+      key: 120
+      value: 128
+      value_offset: 136
+      stride: 148
+  native_map:
+    size: 80
+  native_enum:
+    fields:
+      names: 64
+      cpp_form: 80
+      flags: 84
+  pikmin_birth:
+    fields:
+      onion: 0
+      alone: 1
+      limit: absent
+      sublevel: 8
+      source_first: absent
+      source_second: absent
+      leader_first: 72
+      leader_second: 80
+      origin: 88
+      transform: 112
+      position: 128
+  pikmin_scatter:
+    fields:
+      minimum: 3916
+      maximum: 3920
+  pikmin_native:
+    fields:
+      owner: 520
+      property_table: absent
+      property_row: absent
+  object:
+    size: 40
+    fields:
+      flags: 8
+      index: 12
+      class: 16
+      name: 24
+      outer: 32
+  object_item:
+    size: 24
+    fields:
+      object: 0
+      flags: 8
+      serial: 16
+  clock:
+    fields:
+      progress: 20
+      time_up: 155
+      night: 156
+  treasure_row:
+    fields:
+      sparklium: 32
+      poko: 36
+  clock_table:
+    fields:
+      set_progress: 120
+      day: 40
+  game_mode:
+    fields:
+      skip_story: 894
+  request_queue_table:
+    fields:
+      push: 0
+  request:
+    fields:
+      self: 24
+      id: 44
+      source: 48
+  travel_request:
+    size: 104
+    fields:
+      captain: 56
+      area: 64
+      base: 72
+  leave_request:
+    size: 56
+  portal_request:
+    size: 72
+    fields:
+      captain: 56
+      portal: 64
+  portal_part:
+    fields:
+      leads_to: 600
+  fs_entry:
+    size: 784
+    fields:
+      name: 0
+      kind: 772
+      bytes: absent
+  dialog_request:
+    size: 944
+    fields:
+      kind: 60
+      answerer: 64
+      shape: 304
+      mode: 373
+      player: 480
+  dialog_widget:
+    fields:
+      text: 1416
+  ui_manager:
+    fields:
+      announcer: 760
+  announcer:
+    fields:
+      banner: 704
+  banner_widget:
+    fields:
+      clock: 1248
+  announce_widget:
+    fields:
+      wait_time: 1300
+      state: 1344
+  widget_table:
+    fields:
+      set_visibility: 656
+  sound_system:
+    fields:
+      started: 88
+      ready: 89
+  wwise_audio_queue:
+    fields:
+      read: 0
+      write: 8
+      reservations: 156
+  text_manager:
+    fields:
+      ready: 0
+      lock: 8
+  text_key:
+    size: 16
+  shared_count:
+    size: 16
+    fields:
+      holders: 8
+      watchers: 12
+  shared_count_table:
+    fields:
+      destroy_object: 0
+      destroy_self: 16
+  polyglot_text:
+    size: 184
+    fields:
+      name_space: 24
+      key: 40
+      text: 56
+      max_bits: 116
+      first_free: 120
+  data_table:
+    fields:
+      row_struct: 40
+      rows: 48
+  table_row_entry:
+    size: 24
+    fields:
+      name: 0
+      row: 8
+  data_table_table:
+    fields:
+      add_row_internal: 648
+      remove_row: 688
+      add_row: 696
+  row_list:
+    fields:
+      slots: 0
+      slot_count: 8
+      used_bits: 16
+      used_bits_far: 32
+      bit_count: 40
+      free_count: 52
+  framework_treasures:
+    fields:
+      rows: 1168
+      icons: 1184
+  treasure_keeper:
+    fields:
+      table: 40
+      rows: 48
+      catalog_table: 128
+      catalog_rows: 136
+  icon_keeper:
+    fields:
+      table: 40
+      rows: 48
+  framework_creatures:
+    fields:
+      rows: 1160
+  creature_keeper:
+    fields:
+      table: 40
+      rows: 48
+      catalog_table: 128
+      catalog_rows: 136
+  treasure_count:
+    fields:
+      known: 3220
+  soft_object:
+    size: 40
+    fields:
+      index: 0
+      serial: 4
+      path: 16
+      sub_path: 24
+  struct_type:
+    fields:
+      super: 64
+      properties: 80
+      bytes: 88
+      alignment: 92
+  function:
+    fields:
+      flags: 176
+  class_type:
+    fields:
+      default_object: 280
+  property:
+    size: absent
+    fields:
+      kind: 8
+      next: 32
+      name: 40
+      count: 52
+      element_bytes: 56
+      flags: 64
+      offset: 76
+      inner: 120
+      bool_byte: 121
+      bool_field_mask: 123
+      meta_class: 128
+  game_context:
+    fields:
+      night_start: 252
+      snapshot_owner: 0
+      rule: 208
+      players: 1288
+      flow: 2864
+      requests: 2848
+      dialogs: 2856
+      level_removal_guard: 184
+  player_block:
+    fields:
+      captains: 1200
+      dogs: 1216
+      switch_pending: 1233
+  flow_stage:
+    size: 224
+    fields:
+      child: 96
+      name: 120
+      stopped: 72
+      status: 76
+      pending: 176
+  game_instance:
+    fields:
+      scene_manager: 432
+      config_save: 496
+      story_save: 504
+      controllers: 768
+      pause_manager: 1360
+      saves: 496
+  config_save:
+    fields:
+      play_mode: 128
+      slot: 152
+  story_save:
+    fields:
+      night: 188
+      summary: 184
+      onyon_leaves: 656
+      onyon_deco: 672
+      outside_deco: 688
+      switch_unlocked: 616
+      day: 184
+      treasure_records: 1656
+      sparklium: 2760
+      area_bases: 2816
+      saved_portal: 2928
+      return_portal: 3064
+      reserved_flow: 3200
+      reserved_travel_type: 3201
+  portal_move:
+    size: absent
+    fields:
+      initial: absent
+      active: absent
+      return_kind: absent
+      returning: absent
+      from_level: absent
+      from_sublevel: absent
+      from_portal: absent
+      to_level: absent
+      to_sublevel: absent
+      current_base: absent
+  area_bases:
+    size: 40
+    fields:
+      first_state: 0
+  controller_manager:
+    fields:
+      slots: 16
+      slots_too: 616
+  controller_slot:
+    size: 104
+    fields:
+      pad: 48
+  stick_component:
+    fields:
+      target: 1176
+  player_component:
+    fields:
+      ridden_dog: 4800
+  event_manager:
+    fields:
+      busy: 152
+      busy_too: 153
+  scene_manager:
+    fields:
+      changing: 120
+      scenes: 144
+      ready: 160
+  scene_data:
+    fields:
+      parent: 48
+      world: 80
+      counts: 160
+  explore_menu:
+    fields:
+      story: 1272
+      night: 1289
+      hero: 1361
+      panel: 1736
+      selected: 1800
+  pause_manager:
+    size: 88
+    fields:
+      counters: 32
+      active: 52
+  streaming_level:
+    fields:
+      state: 184
+      policy: 186
+      loaded: 296
+      pending_unload: 304
+  engine_level:
+    fields:
+      actors: 152
+      owning_world: 184
+      world_settings: 600
+  actor_play:
+    fields:
+      state: 92
+  world:
+    fields:
+      levels: 312
+      persistent_level: 48
+      level_name: 24
+      seconds: 1440
+      real_seconds: 1448
+      delta_seconds: 1456
+  world_settings:
+    fields:
+      fix_delta: 1648
+      min_delta: 780
+      max_delta: 784
+  engine:
+    fields:
+      flags: 1956
+      fixed_rate: 1960
+      user_settings: 552
+  user_settings:
+    fields:
+      frame_rate_limit: 176
+  local_player:
+    fields:
+      controller: 48
+  player_controller:
+    fields:
+      camera_manager: 704
+  camera_manager:
+    size: 11136
+    fields:
+      view_target: 4032
+      cut: 11089
+  game_camera:
+    fields:
+      subject_finder: 1648
+      subject: 2536
+      subject_owner: 2160
+  view_info:
+    size: 52
+    fields:
+      location: 0
+      rotation: 12
+      fov: 24
+      desired_fov: 28
+      projection: 49
+  scene_world:
+    fields:
+      world: 16
+  view_family_values:
+    fields:
+      scene: 8
+      world_seconds: 92
+      delta_seconds: 96
+      real_seconds: 100
+      flags: 108
+  view_family:
+    fields:
+      world_seconds: 104
+      delta_seconds: 108
+      real_seconds: 112
+  npad_device:
+    fields:
+      buttons: 16
+      id: 48
+  npad_state:
+    size: 40
+    fields:
+      buttons: 8
+  input_state:
+    fields:
+      sticks: 16
+      connected: 32
+  keyboard_state:
+    size: 48
+    fields:
+      sampling: 0
+      modifiers: 8
+      attributes: 12
+      keys: 16
+  primitive:
+    fields:
+      flags: 136
+      proxy: 1144
+      last_drawn: 724
+  instance_holder:
+    fields:
+      drawer: 168
+  instance_drawer:
+    fields:
+      components: 552
+      count: 560
+  instanced_mesh:
+    fields:
+      instances: 1392
+      count: 1400
+      edits: 1508
+  scene_renderer:
+    fields:
+      world_seconds: 120
+  life_gauge:
+    fields:
+      anchor: 1824
+      shown: 1840
+      position: 560
+  life_bar:
+    fields:
+      anchor: 1712
+      shown: 1692
+      position: 560
+  material_instance_values:
+    fields:
+      scalars: 224
+      vectors: 240
+  material_scalar_value:
+    size: 36
+  material_vector_value:
+    size: 48
+  material_parameter:
+    fields:
+      info: 0
+      index: 12
+      value: 16
+  canvas_slot:
+    fields:
+      content: 48
+      position: 56
+  particle:
+    fields:
+      old_location: 0
+      location: 16
+  transform_task:
+    fields:
+      scene: 16
+      proxy: 24
+      world_bounds: 32
+      local_bounds: absent
+      matrix: 96
+      attachment: 224
+  bone_pose:
+    size: absent
+    fields:
+      rotation: absent
+      translation: absent
+      scale: absent
+  skinned_pose:
+    fields:
+      master: 1232
+      arrays: 1272
+      read_index: 1340
+      revision: 1344
+  game_framework:
+    fields:
+      ground_query: 904
+      instance_holder: 3920
+      world_begun: 553
+      ui: 1296
+      clock: 1056
+      generators: 1320
+      events: 1216
+      actor_list: 4008
+      pikmin_list: 4056
+      pikmin_counters: 3968
+  actor_node:
+    size: 24
+    fields:
+      next: 8
+      actor: 16
+  engine_actor:
+    fields:
+      root: 304
+      play_state: 92
+  ordinary_actor_vtable:
+    fields:
+      end_play: 848
+      unregister: 1256
+      destroyed: 1360
+  game_actor:
+    fields:
+      snapshot_playerinfo: 584
+      snapshot_excluded: 11361
+      root: 304
+      kind: 556
+      physics: 736
+      physics_place: 5856
+      movement: 744
+      collision_tree: 808
+      stick: 792
+      life: 824
+      player: 848
+      pikmin: 856
+      group: 564
+      state_flags: 11368
+      sort: 578
+      sublevel: 10532
+      color: 592
+      removed: 2276
+      ai: 832
+      facing_component: 1056
+      facing_enabled: 1184
+      pool: 1208
+      kind_pool: 1216
+      freeze_delay: 1280
+      awake_holds: 1284
+      tick_requested: 1296
+      rest: 1288
+      kill_queued: 2277
+      terminated: 2278
+      rigid_body: 2376
+      body_awake: 2384
+      simulating: 2432
+      simulating_known: 2433
+      team: 4692
+      velocity_pending: 5272
+      velocity_added_1: 5292
+      velocity_added_2: 5308
+      velocity_added_3: 5324
+      keep_vertical: 5441
+      speed_clamp: 5749
+      velocity: 5816
+      support_contact: 6208
+      air_steps: 7384
+      contact_step: 7388
+      placement: 10344
+  spawn_request:
+    size: 232
+    fields:
+      class: 0
+      object_flags: 68
+      location: 72
+      rotation: 84
+      velocity: 96
+      scale: 108
+      team: 120
+      team_editor: 124
+      color: 128
+      leaf: 129
+      user_value: 140
+      delegate_threshold: 168
+      decoration: 176
+      node: 184
+      node_self: 200
+  kill_record:
+    size: 80
+    fields:
+      head: 0
+      tail: 8
+      lock: 24
+      magic: 56
+      quiet: 64
+      cause: 65
+      killer: 72
+  primitive_table:
+    fields:
+      is_simulating: 1080
+      get_collision: 1304
+      set_simulating: 1496
+      set_collision: 1640
+      body_instance: 1784
+  body_instance:
+    fields:
+      body: 280
+  physics_body_table:
+    fields:
+      is_kind: 40
+      get_scene: 56
+      global_pose: 168
+      is_sleeping: 504
+      shape_count: 208
+  physics_body:
+    fields:
+      kind: 8
+  physics_dynamic:
+    size: 384
+    fields:
+      buffer: 112
+      state: 380
+  physics_dynamic_buffer:
+    fields:
+      pose: 208
+  physics_scene_table:
+    fields:
+      lock_read: 848
+      unlock_read: 856
+  collision_tree:
+    fields:
+      actor: 520
+      records: 536
+      count: 544
+      capacity: 548
+      shapes: 568
+      shapes_other: 576
+  collision_record:
+    size: 368
+    fields:
+      component: 8
+      shape: 176
+      shape_index: 184
+  actor_table:
+    fields:
+      request_tick: 1688
+      find_component: 1584
+  game_component:
+    fields:
+      tick_requested: 529
+  component_table:
+    fields:
+      set_tick_enabled: 880
+  ai_component:
+    size: 2540
+    fields:
+      classify_child: 2532
+      messages: 1600
+      actions: 536
+  pikmin_component:
+    size: 2073
+    fields:
+      classify_decoration: 1672
+      classify_skip: 2072
+      classify_ready: 1704
+      leaf: 568
+      in_army: 1668
+  revive_request:
+    size: 72
+  charge_order:
+    size: 96
+    fields:
+      place: 64
+      leader: 76
+      target: 84
+      flag: 92
+  dog_component:
+    fields:
+      dismiss_settings: 8752
+  dismiss_order:
+    size: 24
+    fields:
+      leader: 0
+      keep_type: 8
+      keep_special: 12
+      sound: 16
+      motion: 17
+      filter: 18
+  avatar_component:
+    fields:
+      whistle: 2944
+      whistling: 2952
+      ride_reach: 5308
+      ride_asked: 5341
+  avatar_table:
+    fields:
+      squad: 2336
+  whistle_part:
+    fields:
+      radius: 564
+      center: 576
+      count: 864
+  cursor:
+    fields:
+      offset: 640
+      position: 676
+  life_component:
+    fields:
+      max: 812
+      current: 816
+      extra: 820
+      max_extra: 824
+  action:
+    fields:
+      child: 104
+      name: 128
+  message_queue_table:
+    fields:
+      pop: 24
+  message:
+    fields:
+      self: 24
+      sender: 40
+      other: 48
+      references: 56
+      ready: 62
+  message_table:
+    fields:
+      destroy: 24
+  damage_message:
+    size: 200
+    fields:
+      amount: 64
+      attack: 73
+      riding_applies: 170
+      origin: 184
+  knock_message:
+    size: 288
+    fields:
+      velocity: 120
+      damage: 240
+  actor_component:
+    fields:
+      lifecycle_flags: 136
+  instanced_static_mesh_component:
+    fields:
+      start_cull_distance: 1436
+      end_cull_distance: 1440
+  scene_component:
+    fields:
+      owner: 160
+      attach_parent: 192
+      attach_children: 208
+      velocity: 320
+      rotation: 448
+      location: 464
+  object_vtable:
+    fields:
+      process_event: 560
+  struct_vtable:
+    fields:
+      initialize: 704
+      destroy: 712
+  allocator_vtable:
+    fields:
+      malloc: 24
+      free: 56
+  name_entry:
+    fields:
+      header: 0
+      text: 2
+  navmesh_actor:
+    fields:
+      implementation: 1224
+  navmesh_implementation:
+    fields:
+      mesh: 8
+  navmesh:
+    fields:
+      max_tiles: 48
+      tiles: 144
+      tile_bits: 156
+      poly_bits: 160
+  navmesh_tile:
+    size: 176
+    fields:
+      salt: 0
+      header: 8
+  nav_modifier:
+    fields:
+      area_class: 224
+      picked: 337
+  generator_keeper:
+    fields:
+      generators: 40
+      built: 88
+  generator:
+    size: 1296
+    fields:
+      index: 176
+      class: 24
+      init_transform: 64
+      transform: 48
+      placement: 200
+      count: 216
+      birth_day: 276
+      left: 288
+      sublevel: 1168
+      actors: 1224
+      flags: 1240
+  engine_transform:
+    size: absent
+    fields:
+      rotation: 0
+      translation: 16
+      scale: 32
+  ai_values:
+    size: 32
+    fields:
+      set: 0
+      state: 16
+  enum_type:
+    fields:
+      names: 64
+  enum_entry:
+    size: 16
+    fields:
+      value: 8
+  save_table:
+    fields:
+      copy_from: 736
+      apply: 672
+  renderer_table:
+    fields:
+      make_pixel_shader: 88
+  shader:
+    fields:
+      hash: 20
+  material_instance:
+    fields:
+      resources: 880
+  material_resource:
+    fields:
+      game_map: 24
+      render_map: 32
+      instance: 64
+  shader_map:
+    size: 144
+    fields:
+      resource: 16
+      content: 40
+      content_bytes: 48
+      id_hash: 96
+      references: 136
+      flags: 141
+  shader_map_resource:
+    size: 96
+    fields:
+      lock: 24
+      shaders: 56
+      shader_count: 64
+      references: 72
+      preloaded: 92
+  system_mutex:
+    size: 32
+    fields:
+      state: 0
+      recursive: 1
+  carry_actor:
+    fields:
+      component: 784
+  carry_component:
+    fields:
+      weight: 1464
+      maximum: 1468
+      carriers: 1624
+      info: 1656
+  carry_info:
+    fields:
+      destination: 224
+      arrival_destination: 240
+  carry_stick:
+    fields:
+      owner: 520
+      attachments: 952
+      member: 1048
+      target_stick: 1192
+  carry_attachment_list:
+    fields:
+      previous: 0
+      next: 8
+      count: 16
+  carry_attachment_node:
+    fields:
+      previous: 0
+      next: 8
+      actor: 16
+      owner: 24
+  camera_service:
+    fields:
+      pov: 7440
+      stop_shakes: 2000
+      player_camera: 3512
+      distance: 2612
+      pitch: 2620
+      heading: 2640
+      mode: 2176
+      follow: 2565
+      look: 2552
+      pole: 2596
+      demo_manager: 1216
+      demo_hold: 980
+      shake_manager: 1456
+  mod_settings:
+    fields:
+      save: absent
+  ui_keyboard:
+    size: absent
+    fields:
+      maximum: absent
+      minimum: absent
+      utf8: absent
+      work: absent
+      work_bytes: absent
+  effect_owner:
+    fields:
+      manager: 1384
+      get_world: 368
+  effect_world:
+    fields:
+      spawn_flags: 267
+  effect_asset:
+    fields:
+      single_emitter: 208
+      water_adjustment: 212
+  effect_manager:
+    fields:
+      invalid_owners: 472
+      invalid_count: 480
+      invalid_capacity: 484
+      invalid_enabled: 505
+  effect_emitter:
+    fields:
+      component: 552
+      pool: 688
+      released: 732
+  effect_parameters:
+    fields:
+      scalar: 2296
+      vector: 2304
+      color: 2312
+  world_follow_ai:
+    fields:
+      fsm: absent
+  world_follow_fsm:
+    fields:
+      locked: 80
+  world_follow_mover:
+    fields:
+      root: absent
+  world_follow_args:
+    size: 48
+    fields:
+      position: 0
+      target: 12
+      default_name: 20
+      start_motion: 28
+      walk_motion: 32
+      stop: 45
+  gimmick_actor:
+    fields:
+      ai: 832
+      removed: 2276
+      leaving: 2277
+      asleep: 1288
+      awake: 1280
+      wake_count: 1284
+      flag_8c8: 2280
+      flag_8b0: 2256
+  gimmick_ai:
+    fields:
+      fsm: 536
+      done: 2500
+      gate_total: 2584
+      gate_left: 2588
+      pieces: 2580
+      total_pieces: 2592
+      door_type: 2544
+      door_open: 2576
+      drain_done: 2548
+      down_done: 2541
+      down_phase: 2544
+      pot_broken: 2552
+      dig_ratio: 2668
+      dig_stage: 2720
+      dig_filling: 2912
+      warp_parameter: 2544
+  gimmick_fsm:
+    fields:
+      locked: 80
+      owner: 96
+      child: 104
+      blackboard: 152
+  gimmick_board:
+    fields:
+      enabled: 8
+      armed: 9
+      pressed: 10
+      parameter: 40
+      want_open: 8
+      want_close: 9
+      warp_stage: 16
+      warp_shapes: 56
+      warp_count: 64
+      warp_parameter: 176
+      warp_ai: 184
+  gimmick_switch_parameter:
+    fields:
+      repeatable: 9
+      warp_first: 24
+      warp_second: 28
+  gimmick_methods:
+    fields:
+      gate_break: 144
+      switch_press: 112
+      apply_pieces: 2000
+      built: 2088
+      drain: 1280
+  battle_framework:
+    fields:
+      manager: 3984
+      clock: 1056
+      roulette: 3976
+  battle_manager:
+    size: 712
+    fields:
+      running: 12
+      pops: 40
+      bonus: 80
+      bonus_count: 88
+      bonus_max: 92
+      bonus_phases: 168
+      bonus_phase: 292
+      bonus_refresh: 704
+  battle_clock:
+    size: 168
+    fields:
+      minutes: 28
+      elapsed: 32
+      stopped: 153
+      time_up: 155
+      unlimited: 157
+  battle_context:
+    fields:
+      flow: 2864
+      tug_time: 472
+  battle_flow:
+    size: 224
+    fields:
+      child: 96
+      aborted: 212
+      retry: 213
+      step: 212
+      choice: 216
+  battle_pop:
+    fields:
+      groups: 8
+      stride: 88
+      group: 8
+      rows: 24
+      places: 40
+      row_stride: 208
+      countdown: 180
+      repop: 188
+      place_stride: 1616
+      queued: 1592
+      kind: 1593
+      flag: 1594
+      actor: 1596
+      owner: 1608
+      owner_type: 8
+      bit_inline: 16
+      bit_heap: 32
+      bit_count: 40
+  battle_tug:
+    fields:
+      timer: 204
+      phase: 208
+      actor: 96
+      holder: 144
+      info: 1656
+      required: 1464
+      strength: 292
+  battle_roulette:
+    fields:
+      slots: 160
+      count: absent
+      team: 4
+  content_throw_icon:
+    fields:
+      textures: 1248
+      material: 1296
+  squad_formation:
+    fields:
+      list: 2096
+      count: 2112
+      throw_cache_a: 6604
+      throw_cache_b: 6612
+  pikmin_counter_row:
+    size: 1152
+  throw_cursor_ring:
+    size: 72
+  squad_node:
+    size: 72
+    fields:
+      previous: 0
+      next: 8
+      self: 16
+      owner: 24
+      kind: 32
+      count: 36
+      members: 48
+      members_last: 56
+  squad_hud:
+    fields:
+      icons: 1328
+      count: 1336
+      player: 1432
+  squad_icon:
+    fields:
+      textures: 1248
+      number: absent
+      material: 1296
+      kind: 1336
+      toggle: 1339
+      count: 1412
+  squad_ai:
+    fields:
+      home: absent
+  squad_component:
+    fields:
+      owner: 520
+  content_series_manager:
+    fields:
+      rows: 4048
+  content_series_row:
+    fields:
+      series: 8
+      rate: absent
+  squad_throw_solution:
+    size: 104
+    fields:
+      start: 0
+      target: 12
+      velocity: 24
+      apex: 36
+      one: 40
+      limit: 44
+      length_max: 48
+      radius: 52
+      thrower: 56
+      gravity: 68
+      path: 72
+      path_num: 80
+      path_max: 84
+      apex_frame: 88
+      first_near: 92
+      step: 96
+  squad_pikmin:
+    fields:
+      throw_height: 724
+  squad_game_config:
+    fields:
+      throw_length_max: 1104
+functions:
+  map_add_stream: 10772480
+  map_remove_stream: 10761184
+  map_duplicate_stream: 9698496
+  map_set_package: 16039472
+  ui_arrow_left: 59209792
+  ui_arrow_right: 59209872
+  ui_post_sound: 5999312
+  ui_context_world: 2916048
+  ui_widget_in_viewport: 10006944
+  ui_widget_viewport: 15891328
+  ui_scroll_offset: absent
+  ui_scroll_reveal: absent
+  ui_size_box_width: absent
+  ui_size_box_height: absent
+  ui_scroll_vertical: absent
+  ui_scroll_slot_horizontal: absent
+  ui_scroll_slot_vertical: absent
+  ui_widget_set_clipping: 82501680
+  ui_widget_scale: 3601408
+  ui_widget_pivot: 17903168
+  ui_footer_lookup: 6282016
+  ui_settings_dispatch: 60868704
+  ui_construct: 2321360
+  ui_create_widget: 82568560
+  ui_add_child: 9714176
+  ui_slot_offsets: 3595312
+  ui_slot_anchors: 3593024
+  ui_slot_alignment: 3589552
+  ui_slot_auto_size: 82407440
+  ui_get_visibility: 2134720
+  ui_mod_list_refresh: 17874864
+  ui_mod_list_focus: 17847216
+  ui_mod_list_reveal: 17848672
+  ui_cached_geometry: 3569984
+  ui_text_justification: 66181024
+  ui_rich_text_sync: 3597824
+  ui_mod_list_adjust: 60871616
+  ui_mod_list_bind_row: 7461744
+  ui_mod_list_append_choice: 9061200
+  ui_mod_list_play_animation: 5754512
+  ui_mod_list_transform: 3601424
+  ui_mod_list_scrollbar: 17849552
+  ui_button_setup_frame: absent
+  ui_remove_child_at: 9715312
+  pikmin_counter_classify: 1984704
+  cursor_toggle_counts: 2144912
+  cursor_ring_colors: 14784544
+  cursor_icon_count: 2145728
+  icon_texture: 13063744
+  icon_index: 2624176
+  pikmin_snapshot_current: 13611024
+  pikmin_snapshot_partner: 4965744
+  throw_toggle_for_color: 4960944
+  add_map_pair: 85767632
+  set_enum_names: 6594112
+  name_from_text: 2314064
+  class_find_function: 684704
+  spawn_now: 3741680
+  spawn_request_destroy: 9929136
+  kill_record_lock: 95951760
+  kill_actor: 17367472
+  kill_record_destroy: 15125008
+  request_velocity: 13406624
+  physics_dynamic_pose: 25937272
+  physics_dynamic_sleeping: 25931284
+  warp_actor: 10962384
+  rebuild_collision_tree: 6199536
+  set_actor_location_and_rotation: 85095376
+  set_component_world_rotation: 86327968
+  set_instance_cull_distances: 87571568
+  start_whistle: 14302176
+  end_whistle: 12458688
+  captain_cursor: 8411232
+  squad_selected: 55607488
+  squad_select_of: 3199232
+  start_throw: 48737792
+  pikmin_leader: 3048064
+  ride_allowed: 3064128
+  request_ride: 48737536
+  request_get_off: 14514048
+  pikmin_enum_get: 8865040
+  pikmin_deco_stored: 11010992
+  pikmin_deco_field: 58517744
+  pikmin_scatter_cos: 95952112
+  pikmin_scatter_sin: 95952096
+  eject_pikmin: 54258240
+  revive_request: absent
+  is_held_or_carried: 55949952
+  charge_order: absent
+  charge_carry_test: 3863984
+  pikmin_join: 10855712
+  pikmin_free: 53405456
+  dismiss_squad: 10813008
+  dismiss_dog_squad: 52485056
+  find_treasure_row: 12438896
+  find_story_record: 9672000
+  collect_treasure: 57204464
+  add_sparklium: 12715040
+  return_ground: absent
+  clear_reserved_flow: absent
+  travel_request: 56174816
+  ensure_banner: 59223648
+  text_from_string: 6302752
+  banner_set_text: 61183136
+  banner_place: 61183456
+  banner_play: 61183296
+  save_begin_session: 4215632
+  save_end_session: 18986912
+  fs_open_file: 95957392
+  fs_close_file: 95957424
+  fs_file_size: 95957440
+  fs_read_file: 95957456
+  fs_open_folder: 95957520
+  fs_read_folder: 95957552
+  fs_close_folder: 95957584
+  fs_entry_kind: 95957568
+  fs_create_file: 95957376
+  fs_write_file: 95957408
+  fs_delete_file: 95957472
+  fs_set_file_size: 95957776
+  fs_create_folder: 95957488
+  fs_commit: 95957360
+  dialog_request: 17015984
+  dialog_request_dispose: 56906400
+  dialog_function_transfer: 14821280
+  rich_text_set: 6853104
+  play_sound_on: 3472000
+  text_key_from_string: 6283184
+  find_text: 6280464
+  text_display_string: 2815616
+  register_text: 71750064
+  lock_mutex: 95951600
+  unlock_mutex: 95951616
+  find_table_row: 86697424
+  add_table_row: 86694896
+  remove_table_row: 86694704
+  add_table_row_internal: 86695168
+  load_soft_object: 9424240
+  platform_files: 16347776
+  find_platform_file: 10784272
+  pak_mount: 22289728
+  shader_library_open: 7791104
+  nav_add_tile: 6902816
+  nav_remove_tile: 94600592
+  nav_invalidate_paths: 94921568
+  nav_modifier_select: 6489504
+  nav_modifier_change: 6492496
+  scene_array_grow: 9406400
+  story_flags: 4978400
+  story_find_area: 11629856
+  story_add_area: 8186752
+  story_link_area: 11646768
+  explore_row: 15783168
+  explore_row_label: 13958128
+  generator_destroy: 10913040
+  generator_copy: 10931152
+  generator_array_grow: 56168880
+  generator_spawn: 7331024
+  actor_start_spawned: 11032528
+  ai_values_write: 5434064
+  ai_values_read: 5416160
+  controlled_actor: 4916208
+  request_control_switch: 14512736
+  pause_change: 10149312
+  return_to_title: 4215168
+  set_life: 14210752
+  damage_message: 7213840
+  knock_message: 12487344
+  post_message: 5812944
+  set_max_fps: 13350640
+  npad_style_set: 95954432
+  npad_full_key_state: 95954800
+  npad_handheld_state: 95954736
+  npad_joy_dual_state: 95954768
+  mark_end_of_frame: 881760
+  mark_pose_dirty: 874544
+  mark_render_state: 6218192
+  widget_scale: 3576832
+  socket_socket: 95960688
+  socket_set_sock_opt: 95960624
+  socket_close: 95960768
+  socket_bind: 95960432
+  socket_get_sock_name: 95960576
+  socket_send_to: 95960512
+  socket_recv_from: 95960544
+  socket_errno: 95966896
+  nifm_available: 95956352
+  socket_get_addr_info: 95960704
+  socket_free_addr_info: 95960720
+  socket_fcntl: 95960608
+  socket_connect: 95960448
+  socket_poll: 95966912
+  socket_recv: 95960560
+  socket_send: 95960528
+  socket_get_sock_opt: 95960640
+  network_utc: 95955728
+  user_utc: 95959184
+  os_current_thread: 95968080
+  os_thread_priority: 95968096
+  os_create_thread: 95968112
+  os_thread_core_mask: 95968128
+  os_set_thread_core_mask: 95968144
+  os_set_thread_name: 95968160
+  os_start_thread: 95968208
+  os_sleep_thread: 95967344
+  effect_create: 7120656
+  effect_release: 7101600
+  world_follow_request_move: absent
+  camera_controller: 17744896
+  camera_screen: 14708608
+  camera_shake: 15948320
+  camera_project: 2267568
+  mod_config_read: absent
+  mod_config_write: absent
+  ui_keyboard_preset: 95957616
+  ui_keyboard_work_size: 95957632
+  ui_keyboard_text_size: 95957728
+  ui_keyboard_initial: 95957648
+  ui_keyboard_guide: 95960304
+  ui_keyboard_show: 95957744
+  gimmick_work_done: 12209488
+  gimmick_removed: 12274368
+  gimmick_complete_ui: 12208304
+  gimmick_dig_finish: 12202208
+  gimmick_pot_break: 52720432
+  gimmick_door_open: 52894272
+  gimmick_down_remove: 12274656
+  gimmick_warp_refresh: 52908816
+  gimmick_warp_open: 52909904
+  battle_score: 12428336
+  battle_add_score: 12426560
+  battle_pop_class: 9976112
+  battle_pop_name: 9976640
+  battle_spin: 13703504
+  battle_tug_flick: 12490688
+  gimmick_nav_rebuild: 56230720
+  wwise_initialized: 193632
+  wwise_parameter_id: 5959040
+  wwise_get_parameter: 25012448
+  wwise_set_parameter: 3476672
+  wwise_reset_parameter: 24464864
+  wwise_load_bank_copy: 24488048
+  wwise_unload_bank: 24490720
+  wwise_register_object: 1463232
+  wwise_unregister_object: 6685776
+  wwise_set_position: 1456592
+  wwise_post_event: 5984192
+  wwise_event_from_playing: 25015520
+  wwise_stop_playing: 24513008
+  content_icon_vector: 2638944
+  squad_select_next: 16971072
+  squad_icon_count: 6302032
+  squad_throw_trajectory: 3876384
+slots:
+  physics_contacts:
+    table: 123475936
+    offset: 640
+    stock: 201568
+  ui_mod_list_construct:
+    table: 123885872
+    offset: 856
+    stock: 17855792
+  ui_mod_list_destruct:
+    table: 123885872
+    offset: 864
+    stock: 15585968
+  pikmin_begin_play:
+    table: 122887024
+    offset: 848
+    stock: 8862304
+  pikmin_story_serialize:
+    table: 125412720
+    offset: 168
+    stock: 9108352
+  pikmin_story_structured_serialize:
+    table: 125412720
+    offset: 176
+    stock: 67506432
+  engine_tick:
+    table: 129863896
+    offset: 0
+    stock: 2719696
+  save_write:
+    table: 123433000
+    offset: 24
+    stock: 16830288
+  save_delete:
+    table: 123433000
+    offset: 40
+    stock: 58337840
+  save_exists:
+    table: 123433000
+    offset: 8
+    stock: 58366432
+  save_exists_result:
+    table: 123433000
+    offset: 16
+    stock: 16831728
+  save_read:
+    table: 123433000
+    offset: 32
+    stock: 16830864
+  explore_setup:
+    table: 123785608
+    offset: 1448
+    stock: 15611488
+  explore_destruct:
+    table: 123785608
+    offset: 864
+    stock: 15815024
+  throw_list_update:
+    table: 123987952
+    offset: 1440
+    stock: 4925296
+  redraw_viewports:
+    table: 129863184
+    offset: 1168
+    stock: 2911888
+  view_point:
+    table: 129992632
+    offset: 656
+    stock: 2186176
+  npad_read:
+    table: 123423072
+    offset: 32
+    stock: 22606848
+  scene_update:
+    table: 128299632
+    offset: 32
+    stock: 209792
+  scene_remove:
+    table: 128299632
+    offset: 8
+    stock: 566496
+  mesh_update:
+    table: 130385232
+    offset: 40
+    stock: 474400
+  life_gauge_place:
+    table: 124064296
+    offset: 1216
+    stock: 3577424
+  life_bar_place:
+    table: 124062760
+    offset: 1216
+    stock: 3572880
+  cursor_toggle_tick:
+    table: 123494752
+    offset: 872
+    stock: 2142896
+  cursor_update:
+    table: 123189784
+    offset: 1224
+    stock: 55609984
+  cursor_tick:
+    table: 123189784
+    offset: 872
+    stock: 3234400
+  effect_finished:
+    table: 123285360
+    offset: 1616
+    stock: 7102512
+  battle_tug:
+    table: 122186752
+    offset: 72
+    stock: 12503040
+  battle_roulette:
+    table: 123319576
+    offset: 80
+    stock: 56873936
+  squad_grab_avatar:
+    table: 122181944
+    offset: 2600
+    stock: 53396560
+  squad_grab_orima:
+    table: 122212384
+    offset: 2600
+    stock: 53396560
+tables:
+  actor_tables:
+  - 122040608
+  - 122125712
+  - 122044056
+  - 122045872
+  - absent
+  - 122051136
+  - 122132376
+  - 122057848
+  - 122153424
+  - 122069784
+  - 122160952
+  - 122164344
+  - 122073176
+  - 122075016
+  - 122122160
+  - 122076856
+  - 122078696
+  - 122080536
+  - 122082352
+  - 122084192
+  - 122086032
+  - 122087872
+  - 122089688
+  - 122091528
+  - 122137528
+  - 122093368
+  - 122151584
+  - 122155456
+  - 122157296
+  - 122159112
+  - 122095208
+  - 123030760
+  - 123047584
+  - 123272504
+  - 124235312
+  - 126058208
+  - 126390952
+  - 126837600
+  story_rules:
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 7
+  free_areas:
+  - 5
+  - 7
+  - 8
+  - 9
+  collision_record_flags:
+  - 16
+  - 19
+  - 21
+  - 22
+  - 24
+  - 25
+  - 26
+  - 27
+  - 33
+  - 34
+  - 35
+  - 36
+  - 38
+  ai_part_tables:
+  - 122915040
+  - 122331592
+  - 122268344
+  widget_tick_tables:
+  - 123491704
+  - 124206144
+  - 124232360
+  - 124180072
+  - 124188696
+  - 123472616
+  - 123911848
+  - 123494752
+  - 124223200
+  - 124237128
+  - 124229272
+  - 125599808
+  - 124707024
+  - 124431152
+  - 123756184
+  - 124242320
+  - 123810616
+  - 123980496
+  - 124286888
+  - 124435688
+  - 124444760
+  - 124481584
+  - 124446272
+  - 124492168
+  - 124586400
+  - 124589424
+  - 124595600
+  - 124610944
+  - 124615392
+  - 124618416
+  - 124626120
+  - 124651664
+  - 124650136
+  - 124083136
+  - 123526696
+  - 123789192
+  - 123785608
+  - 123812128
+  - 123813640
+  - 124068968
+  - 124240160
+  - 124501672
+  - 124718056
+  - 124832120
+slot_groups:
+  actor_register:
+    offset: 1744
+    stock:
+    - 8269568
+    - 48368416
+    - 8505680
+  actor_end_play:
+    offset: 848
+    stock:
+    - 8281728
+    - 48366224
+    - 8275952
+    - 8276336
+  ai_part_start:
+    offset: 1112
+    stock:
+    - 15397792
+    - 15393264
+    - 49316224
+  ai_part_write_set:
+    offset: 1256
+    stock:
+    - 7963888
+    - 49316848
+  ai_part_write_state:
+    offset: 1264
+    stock:
+    - 7931936
+  widget_tick:
+    offset: 872
+    stock:
+    - 58881616
+    - 62478160
+    - 62490000
+    - 62214224
+    - 62471792
+    - 58734976
+    - 61174304
+    - 2142896
+    - 62509088
+    - 9719872
+    - 9715968
+    - 12316448
+    - 9157168
+    - 16666800
+    - 2129216
+    - 60730816
+    - 61343040
+    - 62923856
+    - 64222480
+    - 64248144
+    - 64518816
+    - 64251808
+    - 64521984
+    - 65098576
+    - 65104880
+    - 65136224
+    - 65169776
+    - 65354512
+    - 65357632
+    - 65382464
+    - 65385248
+    - 65384752
+    - 61672480
+    - 13294352
+    - 9771008
+    - 14587968
+    - 60698512
+    - 60700512
+    - 61700560
+    - 62652880
+    - 64554448
+    - 65886912
+    - 66336800
+code_sites:
+  map_initial_flush:
+    address: 8723160
+    instruction: 2550134890
+  ui_settings_refresh:
+    address: 17874864
+    instruction: 3573752703
+  ui_settings_reopen:
+    address: 60864928
+    instruction: 3573752703
+  wwise_process_queue:
+    address: 24566560
+    instruction: 3573752703
+  wwise_term:
+    address: 24453408
+    instruction: 3573752703
+  ui_widget_broadcast:
+    address: 2137904
+    instruction: 3573752703
+  level_prepare:
+    address: 10756640
+    instruction: 3573752703
+  world_remove_level:
+    address: 24194800
+    instruction: 3573752703
+  pikmin_throw_icon:
+    address: 8631136
+    instruction: 3573752703
+  pikmin_restore_batch:
+    address: 13636784
+    instruction: 3573752703
+  pikmin_restore_step:
+    address: 13639344
+    instruction: 3573752703
+  pikmin_eject_types:
+    address: 54258240
+    instruction: 3573752703
+  pikmin_finish_spawn:
+    address: 54258672
+    instruction: 2538410628
+  pikmin_story_construct:
+    address: 8154544
+    instruction: 3573752703
+  pikmin_story_reset:
+    address: 8164672
+    instruction: 3573752703
+  pikmin_summary_reset:
+    address: 8178256
+    instruction: 3573752703
+  pikmin_result_reset:
+    address: 8179056
+    instruction: 1862329344
+  engine_tick_function:
+    address: 2719696
+    instruction: 3573752703
+  actor_pool_take:
+    address: 3743264
+    instruction: 3573752703
+  actor_pool_return:
+    address: 3741344
+    instruction: 3107983371
+  actor_park:
+    address: 4001344
+    instruction: 3573752703
+  life_apply_damage:
+    address: 9535488
+    instruction: 3573752703
+  life_set:
+    address: 14210752
+    instruction: 3175297025
+  pikmin_report_kill:
+    address: 17366400
+    instruction: 3573752703
+  dialog_setup_call:
+    address: 56759636
+    instruction: 2483938555
+  dialog_buttons_call: absent
+  pikmin_follow_clear:
+    address: 13393552
+    instruction: 2953025673
+  pikmin_follow_snapshot:
+    address: 13392752
+    instruction: 3573752703
+  pikmin_counter_update:
+    address: 3540432
+    instruction: 3573752703
+  pikmin_counter_add:
+    address: 1984704
+    instruction: 3573752703
+  pikmin_counter_query:
+    address: 4942224
+    instruction: 3573752703
+  pikmin_selected_info:
+    address: 4961632
+    instruction: 3573752703
+  pikmin_icon_number:
+    address: 4935168
+    instruction: 3573752703
+  world_tick:
+    address: 2730016
+    instruction: 3573752703
+  view_family:
+    address: 2207904
+    instruction: 3573752703
+  widget_animation_tick:
+    address: 2123440
+    instruction: 3573752703
+  widget_hud_number_tick:
+    address: 2117888
+    instruction: 3573752703
+  widget_digit_tick:
+    address: 2119712
+    instruction: 3573752703
+  widget_base_tick:
+    address: 2119824
+    instruction: 3573752703
+  widget_script_tick:
+    address: 21049152
+    instruction: 3573752703
+  bone_kernel: absent
+  actor_warp:
+    address: 10962388
+    instruction: 3573752703
+  instance_drawer_update:
+    address: 5056800
+    instruction: 3573752703
+  scene_render:
+    address: 4517568
+    instruction: 3573752703
+  world_to_screen:
+    address: 3573552
+    instruction: 3573752703
+  viewport_position:
+    address: 3571344
+    instruction: 3573752703
+  material_vector_push:
+    address: 2899184
+    instruction: 3573752703
+  material_scalar_push:
+    address: 7410336
+    instruction: 3573752703
+  material_scalar_set:
+    address: 2624352
+    instruction: 3573752703
+  material_scalar_set_index:
+    address: 2628672
+    instruction: 3573752703
+  material_vector_set:
+    address: 2638944
+    instruction: 3573752703
+  canvas_position:
+    address: 3589936
+    instruction: 2852127720
+  render_translation:
+    address: 3601344
+    instruction: 756155392
+  action_marker_place:
+    address: 3568080
+    instruction: 4182042632
+  placement_build: absent
+  placement_restore: absent
+  carry_credit:
+    address: 9484752
+    instruction: 3573752703
+  ui_settings_action: absent
+conditional_sites:
+  throw_color_admission:
+    address: 4929164
+    instruction: 1895842879
+    next_instruction: 1409316266
+    register: 1
+    threshold: 17
+    admit:
+    - 19
+    - 21
+native_routes:
+  package_store_entry:
+    address: 23179880
+    instruction: 4181721353
+  ui_settings_dispatch:
+    address: 60869956
+    instruction: 1895828127
+  scene_publish:
+    address: 210972
+    instruction: 3489920968
+  particle_sprite:
+    address: 2459752
+    instruction: 1895826719
+  particle_mesh_place:
+    address: 2507384
+    instruction: 2432746339
+  particle_mesh_xy:
+    address: 2508816
+    instruction: 245421088
+  particle_mesh_z:
+    address: 2508828
+    instruction: 505493569
+  particle_lone_place:
+    address: 22931440
+    instruction: 3108016169
+  particle_lone_xy:
+    address: 22931620
+    instruction: 245421088
+  particle_lone_z:
+    address: 22931632
+    instruction: 505493569
+  cursor_unchanged: absent
+  cursor_written:
+    address: 55611952
+    instruction: 4182145800
+route_frames:
+  package_store_entry:
+    slot: 8
+    entry: 24
+  ui_settings_dispatch:
+    object: 19
+    action: 20
+    no_action: 8
+  scene_publish:
+    task: 20
+  particle_sprite:
+    z: 33
+    location: 4
+    old: 2
+    old_z: 3
+  particle_mesh_place:
+    particle: 27
+    location_pointer: 2
+  particle_mesh_xy:
+    particle: 27
+    xy: 0
+  particle_mesh_z:
+    particle: 27
+    z: 1
+  particle_lone_place:
+    particle: 1
+    location_pointer: 2
+  particle_lone_xy:
+    particle: 1
+    xy: 0
+  particle_lone_z:
+    particle: 1
+    z: 1
+  cursor_written:
+    widget: 20
+    component: 19
+    saved_widget: absent
+    saved_component: absent
+    saved_return: absent
+    projected: 32
+    frame_end: 44
+  dialog_setup_call:
+    request: 23
+names:
+  game_container: Carrot4-Sage
+  shader_format: SF_GLSL_SAGE
+patch_space:
+  - [0x1e48b8, 8]
+  - [0x1e5804, 12]
+  - [0x205054, 12]
+  - [0x2050f4, 12]
+  - [0x205804, 12]
+  - [0x205814, 12]
+  - [0x205874, 12]
+  - [0x205884, 12]
+  - [0x206664, 12]
+  - [0x2066a4, 12]
+  - [0x21b908, 8]
+  - [0x21bd74, 12]
+  - [0x27feb4, 12]
+  - [0x280814, 12]
+  - [0x280b58, 8]
+  - [0x281678, 8]
+  - [0x2833b4, 12]
+  - [0x283ae8, 8]
+  - [0x297e54, 12]
+  - [0x297fc4, 12]
+  - [0x29a714, 12]
+  - [0x29a818, 8]
+  - [0x2c42c8, 8]
+  - [0x2c4344, 12]
+  - [0x360054, 12]
+  - [0x3605c4, 12]
+  - [0x365fa4, 12]
+  - [0x366074, 12]
+  - [0x367934, 12]
+  - [0x367a98, 8]
+  - [0x367e84, 12]
+  - [0x368484, 12]
+  - [0x36c838, 8]
+  - [0x36c994, 12]
+  - [0x36f3a4, 12]
+  - [0x36f3b8, 8]
+  - [0x3917e4, 12]
+  - [0x392368, 8]
+  - [0x392374, 12]
+  - [0x3924f4, 12]
+  - [0x3d0a54, 12]
+  - [0x3d0e34, 12]
+  - [0x44f3c8, 8]
+  - [0x44f6f4, 12]
+  - [0x4b22a8, 8]
+  - [0x4b3378, 8]
+  - [0x4b34f8, 8]
+  - [0x4b4df8, 8]
+  - [0x4b5584, 12]
+  - [0x4b57d4, 12]
+  - [0x4b6548, 8]
+  - [0x4bb788, 8]
+  - [0x4bb904, 12]
+  - [0x4c530c, 20]
+  - [0x4d0b70, 16]
+  - [0x4d0e28, 8]
+  - [0x711164, 12]
+  - [0x711298, 8]
+  - [0x7c9264, 12]
+  - [0x7c9534, 12]
+  - [0x7cc4e4, 12]
+  - [0x7cc804, 12]
+  - [0x7ccd68, 8]
+  - [0x7cce74, 12]
+  - [0x90b844, 12]
+  - [0x90b9c4, 12]
+  - [0x917244, 12]
+  - [0x917ff8, 8]
+  - [0xa73bf4, 12]
+  - [0xa74138, 8]
+  - [0xcc5a54, 12]
+  - [0xcc6048, 8]
+  - [0xcc60f4, 12]
+  - [0xcc61c4, 12]
+  - [0xd8d6b4, 12]
+  - [0xd8da74, 12]
+  - [0x108f834, 12]
+  - [0x108fd78, 8]
+  - [0x14130f8, 8]
+  - [0x1413184, 12]
+  - [0x3622b48, 8]
+  - [0x3622f94, 12]
+  - [0x5b81964, 12]
+patch_checked: "7074f5a235f55c21"

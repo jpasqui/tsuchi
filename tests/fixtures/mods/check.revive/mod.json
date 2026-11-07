@@ -1,0 +1,26 @@
+{
+  "id": "check.revive",
+  "name": "The isolated daytime check of creature defeat, carcass and revival",
+  "version": "1.0.0",
+  "meta": {
+    "check": "revive",
+    "check_explicit": true,
+    "checks": [
+      "found",
+      "class",
+      "made",
+      "life",
+      "hit",
+      "defeated",
+      "carcass",
+      "listed",
+      "asked",
+      "identified",
+      "living",
+      "removed",
+      "gone",
+      "released",
+      "originals"
+    ]
+  }
+}

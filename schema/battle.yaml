@@ -1,0 +1,705 @@
+service: battle
+layer: game
+acts_on: game
+lifetime: match
+brief: Reads and controls Dandori Battle and replays its random outcomes.
+tutorials:
+- title: Control a battle
+  path: /develop/battle/
+description: 'Use this service during Dandori Battle. Player numbers are 0 and 1.
+
+  Pop, tug, and Bonus Find holds suspend the game''s own random choices until you release them.
+
+  The hold ends when your mod stops or the battle ends, restoring saved countdowns.
+
+  Replay calls use stable entity-kind IDs instead of native addresses.
+
+
+  Roulette holds own queued items. With no queued item, the roulette still draws normally.
+
+
+  Loaded classes can share a CID. Replaying that CID fails with unsupported instead of picking a
+  variant. A pop report preserves the CID but does not identify the blueprint variant.
+
+  '
+enums:
+  BattlePhase:
+    doc: The battle's phase.
+    open: false
+    values:
+    - name: none
+      value: 0
+      doc: No battle exists.
+    - name: prepared
+      value: 1
+      doc: A battle has loaded.
+    - name: running
+      value: 2
+      doc: The clock is running.
+    - name: time_up
+      value: 3
+      doc: The clock has ended.
+  BattleFlow:
+    doc: The stage in the battle flow.
+    open: false
+    values:
+    - name: none
+      value: 0
+      doc: none.
+    - name: loading
+      value: 1
+      doc: loading.
+    - name: countdown
+      value: 2
+      doc: countdown.
+    - name: playing
+      value: 3
+      doc: playing.
+    - name: results
+      value: 4
+      doc: results.
+    - name: closing
+      value: 5
+      doc: closing.
+    - name: other
+      value: 6
+      doc: other.
+  BattleOutcome:
+    doc: An outcome whose random choice you can hold.
+    open: false
+    values:
+    - name: pop
+      value: 0
+      doc: pop.
+    - name: tug
+      value: 1
+      doc: tug.
+    - name: bonus
+      value: 2
+      doc: bonus.
+    - name: roulette
+      value: 3
+      doc: roulette.
+  PopKind:
+    open: false
+    doc: The game's fixed pop category.
+    values:
+    - name: undef
+      value: 0
+      doc: The undefined category.
+    - name: treasure
+      value: 1
+      doc: A treasure.
+    - name: candy
+      value: 2
+      doc: A candy.
+    - name: pellet
+      value: 3
+      doc: A pellet.
+    - name: komush
+      value: 4
+      doc: The game's Komush category.
+    - name: happy_nut
+      value: 5
+      doc: The game's HappyNut category.
+    - name: creature
+      value: 6
+      doc: A creature.
+    - name: star
+      value: 7
+      doc: A star.
+    - name: sneak_bomb
+      value: 8
+      doc: A Sneak Bomb.
+    - name: none
+      value: 255
+      doc: A free pop place.
+  BonusTheme:
+    open: false
+    doc: The fixed theme chosen by the game.
+    values:
+    - name: creatures
+      value: 0
+      doc: Every creature.
+    - name: creature
+      value: 1
+      doc: One creature kind.
+    - name: treasures
+      value: 2
+      doc: Every treasure.
+    - name: treasure
+      value: 3
+      doc: One treasure kind.
+    - name: gold
+      value: 4
+      doc: Gold nuggets.
+    - name: pellets
+      value: 5
+      doc: Every pellet.
+    - name: pellet
+      value: 6
+      doc: One pellet kind.
+  BattleItem:
+    open: false
+    doc: A fixed item kind the game can grant.
+    values:
+    - name: none
+      value: 0
+      doc: No item.
+    - name: spicy_spray
+      value: 2
+      doc: Ultra-spicy spray.
+    - name: sprouts
+      value: 3
+      doc: Ten Pikmin sprouts.
+    - name: sensor_bomb
+      value: 4
+      doc: A sensor bomb.
+    - name: warp
+      value: 5
+      doc: A warp.
+    - name: falling_rocks
+      value: 6
+      doc: Falling rocks.
+    - name: bomb
+      value: 7
+      doc: A bomb rock.
+    - name: homing_bomb
+      value: 8
+      doc: A homing bomb.
+    - name: ice_blast
+      value: 9
+      doc: An ice blast.
+    - name: lightning
+      value: 10
+      doc: Lightning.
+    - name: bait
+      value: 11
+      doc: Bait.
+    - name: dog_food
+      value: 12
+      doc: Dog food.
+    - name: first_aid
+      value: 13
+      doc: A first-aid kit.
+    - name: glow_seed
+      value: 14
+      doc: A Glow Seed.
+    - name: glow_pikmin
+      value: 15
+      doc: Glow Pikmin.
+    - name: nectar
+      value: 16
+      doc: Nectar.
+    - name: trap
+      value: 18
+      doc: A trap.
+    - name: camera
+      value: 19
+      doc: A camera.
+structs:
+  BattleClock:
+    doc: The battle's clock in seconds.
+    fields:
+    - name: elapsed
+      type: f32
+      doc: Seconds elapsed.
+    - name: limit
+      type: f32
+      doc: The duration in seconds.
+    - name: time_up
+      type: bool
+      doc: If true, time has ended.
+  BattleStatus:
+    doc: The battle's flow.
+    fields:
+    - name: stage
+      type: enum<BattleFlow>
+      doc: The current stage.
+    - name: step
+      type: i32
+      doc: The internal results step, or -1.
+    - name: aborted
+      type: bool
+      doc: If true, the battle was aborted.
+    - name: play_again
+      type: bool
+      doc: If true, Play Again was chosen.
+  BattlePop:
+    doc: A queued pop outcome.
+    fields:
+    - name: group
+      type: u32
+      doc: The stage's pop group.
+    - name: place
+      type: u32
+      doc: The place within that group.
+    - name: kind
+      type: enum<PopKind>
+      doc: The pop category.
+    - name: of_class
+      type: enum<EntityKind>
+      doc: The entity-kind ID for the class. Empty when the place is free.
+    - name: alternate
+      type: bool
+      doc: If true, use the alternate pop flag.
+    - name: actor
+      type: handle<actor>
+      doc: The actor at this place, or an empty handle when the place is free.
+  BattleBonus:
+    doc: A Bonus Find record.
+    fields:
+    - name: index
+      type: u32
+      doc: The record index, from 0 to 15.
+    - name: theme
+      type: enum<BonusTheme>
+      doc: The theme ID.
+    - name: theme_data
+      type: u32
+      doc: The theme payload, from 0 to 16777215.
+    - name: addition
+      type: bool
+      doc: If true, use the game's BonusAddition flag.
+    - name: addition_data
+      type: u32
+      doc: The modifier payload, from 0 to 16777215.
+    - name: kind
+      type: enum<EntityKind>
+      doc: The target CID, or none for a category.
+    - name: first
+      type: i32
+      doc: Player 0's multiplier, from 0 to 100.
+    - name: second
+      type: i32
+      doc: Player 1's multiplier, from 0 to 100.
+functions:
+- name: phase
+  doc: Reads the current battle phase.
+  params: []
+  fails:
+    not_ready: The world or battle is not ready.
+    not_found: The actor or named entry no longer exists.
+    invalid: An argument is outside its range.
+    unsupported: This kind does not support the action.
+  users:
+  - online-coop
+  - world-tools
+  returns:
+    type: enum<BattlePhase>
+    doc: The requested value.
+- name: score
+  doc: Reads a player's points.
+  params:
+  - name: player
+    type: u32
+    doc: The player, 0 or 1.
+  fails:
+    not_ready: The world or battle is not ready.
+    not_found: The actor or named entry no longer exists.
+    invalid: An argument is outside its range.
+    unsupported: This kind does not support the action.
+  users:
+  - online-coop
+  - world-tools
+  returns:
+    type: i32
+    doc: The requested value.
+- name: add_score
+  doc: Adds points to a player. The game clamps the total at 0.
+  params:
+  - name: player
+    type: u32
+    doc: The player, 0 or 1.
+  - name: points
+    type: i32
+    doc: The change in points.
+  fails:
+    not_ready: The world or battle is not ready.
+    not_found: The actor or named entry no longer exists.
+    invalid: An argument is outside its range.
+    unsupported: This kind does not support the action.
+  users:
+  - online-coop
+  - world-tools
+- name: clock
+  doc: Reads the battle clock.
+  params: []
+  fails:
+    not_ready: The world or battle is not ready.
+    not_found: The actor or named entry no longer exists.
+    invalid: An argument is outside its range.
+    unsupported: This kind does not support the action.
+  users:
+  - online-coop
+  - world-tools
+  returns:
+    type: struct<BattleClock>
+    doc: The requested value.
+- name: set_clock
+  doc: Changes elapsed time without holding it.
+  params:
+  - name: seconds
+    type: f32
+    doc: Elapsed seconds, from 0 to the limit.
+  fails:
+    not_ready: The world or battle is not ready.
+    not_found: The actor or named entry no longer exists.
+    invalid: An argument is outside its range.
+    unsupported: This kind does not support the action.
+  users:
+  - online-coop
+  - world-tools
+- name: flow
+  doc: Reads the battle flow.
+  params: []
+  fails:
+    not_ready: The world or battle is not ready.
+    not_found: The actor or named entry no longer exists.
+    invalid: An argument is outside its range.
+    unsupported: This kind does not support the action.
+  users:
+  - online-coop
+  - world-tools
+  returns:
+    type: struct<BattleStatus>
+    doc: The requested value.
+- name: end_match
+  doc: Ends a running battle as when time runs out.
+  params: []
+  fails:
+    not_ready: The world or battle is not ready.
+    not_found: The actor or named entry no longer exists.
+    invalid: An argument is outside its range.
+    unsupported: This kind does not support the action.
+  users:
+  - online-coop
+  - world-tools
+- name: abort
+  doc: Leaves a running battle without results.
+  params: []
+  fails:
+    not_ready: The world or battle is not ready.
+    not_found: The actor or named entry no longer exists.
+    invalid: An argument is outside its range.
+    unsupported: This kind does not support the action.
+  users:
+  - online-coop
+  - world-tools
+- name: play_again
+  doc: Chooses Play Again while the results screen waits.
+  params: []
+  fails:
+    not_ready: The world or battle is not ready.
+    not_found: The actor or named entry no longer exists.
+    invalid: An argument is outside its range.
+    unsupported: This kind does not support the action.
+  users:
+  - online-coop
+  - world-tools
+- name: exit
+  doc: Chooses Exit while the results screen waits.
+  params: []
+  fails:
+    not_ready: The world or battle is not ready.
+    not_found: The actor or named entry no longer exists.
+    invalid: An argument is outside its range.
+    unsupported: This kind does not support the action.
+  users:
+  - online-coop
+  - world-tools
+- name: hold_outcome
+  doc: Holds one random outcome. Pop, tug, and Bonus Find choices wait. Roulette uses queued items
+    and draws normally when its queue is empty. The hold ends when your mod stops, restoring saved
+    countdowns.
+  params:
+  - name: outcome
+    type: enum<BattleOutcome>
+    doc: The random outcome.
+  fails:
+    not_ready: The world or battle is not ready.
+    not_found: The actor or named entry no longer exists.
+    invalid: An argument is outside its range.
+    unsupported: This kind does not support the action.
+    no_memory: There is no memory to keep the hold.
+    busy: Another mod holds this outcome.
+  users:
+  - online-coop
+  - world-tools
+  owns: true
+- name: release_outcome
+  doc: Releases your hold and restores the saved countdowns.
+  params:
+  - name: outcome
+    type: enum<BattleOutcome>
+    doc: The random outcome.
+  fails:
+    not_ready: The world or battle is not ready.
+    not_found: The actor or named entry no longer exists.
+    invalid: An argument is outside its range.
+    unsupported: This kind does not support the action.
+    no_memory: There is no memory to keep the hold.
+  users:
+  - online-coop
+  - world-tools
+  owns: true
+- name: outcome
+  doc: Reports whether any mod holds this outcome.
+  params:
+  - name: outcome
+    type: enum<BattleOutcome>
+    doc: The random outcome.
+  fails:
+    not_ready: The world or battle is not ready.
+    not_found: The actor or named entry no longer exists.
+    invalid: An argument is outside its range.
+    unsupported: This kind does not support the action.
+  users:
+  - online-coop
+  - world-tools
+  returns:
+    type: bool
+    doc: The requested value.
+- name: replay_pop
+  doc: Queues a pop with the supplied entity-kind ID. Refuses an ID shared by multiple loaded classes.
+  params:
+  - name: group
+    type: u32
+    doc: The stage's pop group.
+  - name: place
+    type: u32
+    doc: The place within that group.
+  - name: kind
+    type: enum<PopKind>
+    doc: The pop category.
+  - name: of_class
+    type: enum<EntityKind>
+    doc: The entity-kind ID for the class. Empty when the place is free.
+  - name: alternate
+    type: bool
+    doc: If true, use the alternate pop flag.
+  fails:
+    not_ready: The world or battle is not ready.
+    not_found: The actor or named entry no longer exists.
+    invalid: An argument is outside its range.
+    unsupported: This kind does not support the action.
+    busy: The pop place is occupied.
+  users:
+  - online-coop
+  - world-tools
+- name: replay_tug
+  doc: Decides a held tug-of-war once.
+  params:
+  - name: actor
+    type: handle<actor>
+    doc: The carried actor.
+  - name: winner
+    type: i32
+    doc: The winning player, 0 or 1, or -1 for a tie.
+  fails:
+    not_ready: The world or battle is not ready.
+    not_found: The actor or named entry no longer exists.
+    invalid: An argument is outside its range.
+    unsupported: This kind does not support the action.
+    denied: Another mod owns the tug outcome hold.
+  users:
+  - online-coop
+  - world-tools
+  owns: true
+- name: replay_bonus
+  doc: Writes a Bonus Find record and refreshes the HUD.
+  params:
+  - name: index
+    type: u32
+    doc: The record index, from 0 to 15.
+  - name: theme
+    type: enum<BonusTheme>
+    doc: The theme ID.
+  - name: theme_data
+    type: u32
+    doc: The theme payload, from 0 to 16777215.
+  - name: addition
+    type: bool
+    doc: If true, use the game's BonusAddition flag.
+  - name: addition_data
+    type: u32
+    doc: The modifier payload, from 0 to 16777215.
+  - name: kind
+    type: enum<EntityKind>
+    doc: The target CID, or none for a category.
+  - name: first
+    type: i32
+    doc: Player 0's multiplier, from 0 to 100.
+  - name: second
+    type: i32
+    doc: Player 1's multiplier, from 0 to 100.
+  fails:
+    not_ready: The world or battle is not ready.
+    not_found: The actor or named entry no longer exists.
+    invalid: An argument is outside its range.
+    unsupported: This kind does not support the action.
+    capacity: The native record list has no capacity for another record.
+  users:
+  - online-coop
+  - world-tools
+- name: replay_roulette
+  doc: Queues a held roulette item for a player.
+  params:
+  - name: player
+    type: u32
+    doc: The player, 0 or 1.
+  - name: item
+    type: enum<BattleItem>
+    doc: The item kind.
+  fails:
+    not_ready: The world or battle is not ready.
+    not_found: The actor or named entry no longer exists.
+    invalid: An argument is outside its range.
+    unsupported: This kind does not support the action.
+    no_memory: There is no memory to keep the hold.
+    capacity: Eight pending spins are already queued.
+    denied: Another mod owns the roulette outcome hold.
+  users:
+  - online-coop
+  - world-tools
+  owns: true
+- name: pop
+  doc: Reads a pop place and the kind ID of the actor that occupies it.
+  params:
+  - name: group
+    type: u32
+    doc: The stage's group.
+  - name: place
+    type: u32
+    doc: The place within that group.
+  returns:
+    type: struct<BattlePop>
+    doc: The place. The class ID is empty when the place is free.
+  fails:
+    not_ready: No battle is loaded.
+    not_found: The group or place does not exist.
+  users:
+  - online-coop
+  - world-tools
+- name: bonus
+  doc: Reads a Bonus Find record.
+  params:
+  - name: index
+    type: u32
+    doc: The record index, from 0 to 15.
+  returns:
+    type: struct<BattleBonus>
+    doc: The record.
+  fails:
+    not_ready: No battle is loaded.
+    not_found: The record does not exist.
+    invalid: The index is above 15.
+  users:
+  - online-coop
+  - world-tools
+events:
+- name: phase_changed
+  doc: Emitted when the battle phase changes.
+  fields:
+  - name: phase
+    type: enum<BattlePhase>
+    doc: The current phase.
+  - name: previous
+    type: enum<BattlePhase>
+    doc: The previous phase.
+  users:
+  - online-coop
+  - world-tools
+- name: score_changed
+  doc: Emitted when the game or a mod changes a score.
+  fields:
+  - name: player
+    type: u32
+    doc: The player.
+  - name: score
+    type: i32
+    doc: The current points.
+  - name: previous
+    type: i32
+    doc: The previous points.
+  users:
+  - online-coop
+  - world-tools
+- name: popped
+  doc: Emitted when an actor appears at a pop place after the opening layout.
+  fields:
+  - name: group
+    type: u32
+    doc: The stage's pop group.
+  - name: place
+    type: u32
+    doc: The place within that group.
+  - name: kind
+    type: enum<PopKind>
+    doc: The pop category.
+  - name: of_class
+    type: enum<EntityKind>
+    doc: The entity-kind ID for the class. Empty when the place is free.
+  - name: alternate
+    type: bool
+    doc: If true, use the alternate pop flag.
+  - name: actor
+    type: handle<actor>
+    doc: The actor at this place, or an empty handle when the place is free.
+  users:
+  - online-coop
+  - world-tools
+- name: bonus_changed
+  doc: Emitted when the game or a mod changes a Bonus Find record.
+  fields:
+  - name: index
+    type: u32
+    doc: The record index, from 0 to 15.
+  - name: theme
+    type: enum<BonusTheme>
+    doc: The theme ID.
+  - name: theme_data
+    type: u32
+    doc: The theme payload, from 0 to 16777215.
+  - name: addition
+    type: bool
+    doc: If true, use the game's BonusAddition flag.
+  - name: addition_data
+    type: u32
+    doc: The modifier payload, from 0 to 16777215.
+  - name: kind
+    type: enum<EntityKind>
+    doc: The target CID, or none for a category.
+  - name: first
+    type: i32
+    doc: Player 0's multiplier, from 0 to 100.
+  - name: second
+    type: i32
+    doc: Player 1's multiplier, from 0 to 100.
+  users:
+  - online-coop
+  - world-tools
+- name: roulette
+  doc: Emitted when a player's roulette chooses an item.
+  fields:
+  - name: player
+    type: u32
+    doc: The player.
+  - name: item
+    type: enum<BattleItem>
+    doc: The item kind.
+  users:
+  - online-coop
+  - world-tools
+- name: tug
+  doc: Emitted when a tug-of-war reaches a decision.
+  fields:
+  - name: actor
+    type: handle<actor>
+    doc: The carried actor.
+  - name: winner
+    type: i32
+    doc: The winning player, or -1 for a tie.
+  users:
+  - online-coop
+  - world-tools

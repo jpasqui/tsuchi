@@ -1,0 +1,23 @@
+{
+  "id": "check.switch",
+  "name": "The isolated check of player character switching",
+  "version": "1.0.0",
+  "meta": {
+    "check": "switch",
+    "check_explicit": true,
+    "checks": [
+      "found",
+      "listened",
+      "asked",
+      "changed",
+      "held",
+      "coalesced",
+      "ended",
+      "restored",
+      "returned",
+      "idempotent",
+      "quiet",
+      "cancelled"
+    ]
+  }
+}

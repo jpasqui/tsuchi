@@ -1,0 +1,14 @@
+{
+  "id": "check.squad",
+  "name": "The check of squad",
+  "version": "1.0.0",
+  "meta": {
+    "check": "squad",
+    "checks": [
+      "members",
+      "leaders",
+      "listed",
+      "refused"
+    ]
+  }
+}

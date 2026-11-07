@@ -1,0 +1,143 @@
+---
+title: Heal a captain
+description: Read a captain's health and restore it after a hit.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+Start with [your first mod](/develop/first-mod/), then replace its code with this
+example. We'll give the first player's captain one full heal after they take damage.
+
+## Health
+
+Read the captain's health through [`combat.life`](/reference/combat/#life), then pass
+its `max_life` to `set_life`. You won't need to guess how much health the captain has.
+The `extra` and `max_extra` fields describe bonus health, such as a shield, and this
+example leaves them alone.
+
+Wait until [`game.has_control`](/reference/game/#has_control) returns `true` before
+looking up the captain. Players start at `0`, so `player.captain(0)` finds the first
+player's captain.
+
+## Code
+
+For example, put this code in your mod. If the captain is at full health, it'll wait
+for a hit. If the captain is already down, it won't try to revive them.
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua title="main.lua"
+local tried = false
+
+time.on_step(function()
+    if tried or game.has_control() ~= true then return end
+    local leader = player.captain(0)
+    if not leader then return end
+    local health = combat.life(leader)
+    if not health or health.life <= 0 or health.life >= health.max_life then return end
+
+    tried = true
+    local healed, why = combat.set_life(leader, health.max_life, {smooth_gauge = true})
+    if healed then
+        print("Captain healed")
+    else
+        print("Couldn't heal the captain: " .. why)
+    end
+end)
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript title="main.js"
+let tried = false;
+
+time.on("step", () => {
+    if (tried) return;
+    let leader, health;
+    try {
+        if (!game.has_control()) return;
+        leader = player.captain(0);
+        health = combat.life(leader);
+    } catch (error) {
+        if (error.name === "not_found" || error.name === "not_ready") return;
+        throw error;
+    }
+    if (health.life <= 0 || health.life >= health.max_life) return;
+
+    tried = true;
+    try {
+        combat.set_life(leader, health.max_life, ["smooth_gauge"]);
+        print("Captain healed");
+    } catch (error) {
+        print("Couldn't heal the captain: " + error.name);
+    }
+});
+```
+
+</TabItem>
+<TabItem label="C">
+
+[Build this code](/develop/compiled-mod/) into `mod.nro`.
+
+```c title="main.c"
+#include "tsuchi/tsuchi.h"
+
+static const TSUCHI_Host *host;
+static TSUCHI_Mod *self;
+static TSUCHI_Subscription steps;
+static bool tried;
+
+static void on_step(void *user, const TSUCHI_TimeStep *event) {
+    (void)user;
+    (void)event;
+    bool control = false;
+    TSUCHI_Actor leader = {0};
+    TSUCHI_Life health = {0};
+    if (tried || host->game->has_control(self, &control) != TSUCHI_OK || !control) return;
+    if (host->player->captain(self, 0, &leader) != TSUCHI_OK) return;
+    if (host->combat->life(self, leader, &health) != TSUCHI_OK) return;
+    if (health.life <= 0 || health.life >= health.max_life) return;
+
+    tried = true;
+    TSUCHI_Result result = host->combat->set_life(
+        self, leader, health.max_life, TSUCHI_LIFE_FLAGS_SMOOTH_GAUGE);
+    host->mod->log(self, result == TSUCHI_OK ? "Captain healed" : "Couldn't heal the captain");
+}
+
+TSUCHI_Result tsuchi_mod_start(const TSUCHI_Host *given, TSUCHI_Mod *mod) {
+    host = given;
+    self = mod;
+    tried = false;
+    return host->time->on_step(mod, on_step, 0, &steps);
+}
+```
+
+</TabItem>
+</Tabs>
+
+[Install your mod](/players/install-a-mod/), enter a level, and let the captain take
+a hit. You should see the health gauge fill and `Captain healed` in the
+[log](/develop/logs/). The example attempts one heal each time your mod starts.
+
+## Hits
+
+If you want the target to react to an attack, call [`combat.damage`](/reference/combat/#damage)
+instead. The game scales the damage and credits the attacker. Some attack kinds use
+the target's damage values and ignore the amount you pass.
+
+If you need to track damage, subscribe to `on_damaged`. It reports health drops from
+both hits and `set_life`. After health reaches zero, `on_defeated` reports the defeat.
+Your handler runs at the start of the next world step, so check that an actor still exists
+before using its handle.
+
+Pikmin don't have health. Subscribe to `on_pikmin_died` for their deaths, and use
+`kill_pikmin` if your mod needs to cause one. If you call `entity.destroy` instead,
+the removal won't count as a death.
+
+## Cleanup
+
+When your mod stops, Tsuchi removes its subscriptions. The healed health stays, as
+`set_life` makes a change rather than taking a hold. See
+[Events and cleanup](/develop/events-and-cleanup/) for the difference.

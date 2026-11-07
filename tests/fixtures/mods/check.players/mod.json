@@ -1,0 +1,15 @@
+{
+  "id": "check.players",
+  "name": "The check of players",
+  "version": "1.0.0",
+  "meta": {
+    "check": "players",
+    "checks": [
+      "counted",
+      "characters",
+      "pads",
+      "held",
+      "refused"
+    ]
+  }
+}

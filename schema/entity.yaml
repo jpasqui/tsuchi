@@ -1,0 +1,303 @@
+service: entity
+tutorials:
+  - {title: Revive a creature, path: /develop/creatures/}
+  - {title: Events and cleanup, path: /develop/events-and-cleanup/}
+  - {title: Read physical ground contact, path: /develop/ground-contact/}
+layer: game
+acts_on: actor
+lifetime: world
+brief: "Lists the actors in the world, identifies them, and moves them."
+description: |
+  Use this service for the game's gameplay actors, such as a
+  captain, Oatchi, a Pikmin, a creature, a treasure, or a gate. Use this
+  service to list the actors in the world, check what each one is, and read or
+  change its position. A plain Engine actor, like scenery or a light, isn't a
+  game entity, so these calls refuse it with `invalid`. Use `actor` for those,
+  and `actor.alive` to check if an actor is still in the world.
+
+  A handle refers to one use of one actor. The game reuses some actors, like a
+  Pikmin that returns to its Onion. When that happens, the old handle stops
+  working, and the actor gets a new handle the next time it is used.
+
+  Every actor has a kind, which is the game's short name for its type. Each
+  kind is created from a class, and you can use `reflection` to reach everything
+  else about it.
+
+enums:
+  EntityKind:
+    open: true
+    doc: "The type of an actor, like a kind of creature, treasure, or Pikmin. The game's own kinds use the game's names. A creature or treasure that a mod adds uses its ID, like `example.zoo:stonehog` or `example.gems:ruby`."
+
+flags:
+  EntityParts:
+    doc: "The parts of an actor that a mod can suspend."
+    values:
+      - {name: logic, value: 1, doc: "The actor's AI. The actor no longer decides what to do or reacts to anything."}
+      - {name: movement, value: 2, doc: "The actor's own movement, like walking, turning, and following a path."}
+      - {name: physics, value: 4, doc: "Physics on the actor's body. The actor no longer falls, and nothing can push it."}
+      - {name: collision, value: 8, doc: "The whole actor's collision. Other objects pass through it, but it can still be found, hit, and whistled at. To turn off one collision component instead, use `collision.hold_off`."}
+
+structs:
+  Pose:
+    doc: "An entity's gameplay position and the direction its body faces. This differs from `actor.transform`, which is Unreal's root transform."
+    fields:
+      - {name: location, type: vec3, doc: "The actor's position in the world, in centimeters."}
+      - {name: rotation, type: rotation, doc: "The direction that its body faces. An actor faces along its own +X axis."}
+
+functions:
+  - name: list
+    doc: |
+      The game entities in the world, in the game's own order. You can list every
+      entity, or only the ones that belong to a class or to one of its subclasses.
+      This lists the game's entities only. To list every Unreal actor, including
+      scenery and lights, use `actor.list`.
+    params:
+      - {name: of_class, type: handle<object>, optional: true, doc: "The class, from `reflection.find_class`. If you leave it out, every entity is listed."}
+    returns: {type: list<handle<actor>>, doc: The entities.}
+    fails:
+      not_ready: No world is loaded.
+      not_found: "The class no longer exists."
+      invalid: "The handle isn't a class."
+    users: [groink, online-coop]
+
+  - name: find_placed
+    doc: |
+      The actor that a level placed with a placement number. The number is the same
+      every time that the level loads, so it refers to the same gate or treasure on
+      every visit and for every player.
+    params:
+      - {name: placement, type: u64, doc: "The placement number, from `placement`."}
+    returns: {type: handle<actor>, doc: The actor.}
+    fails:
+      not_ready: No world is loaded.
+      not_found: "No actor in the world has that placement number."
+      invalid: "The number is `0`, which no actor uses."
+    users: [groink, online-coop]
+
+  - name: kind
+    doc: "An actor's kind."
+    params:
+      - {name: actor, type: handle<actor>, doc: The actor to read.}
+    returns: {type: enum<EntityKind>, doc: The kind.}
+    fails:
+      not_found: "The actor no longer exists."
+      invalid: "The actor isn't a game entity."
+    users: [groink, online-coop]
+
+  - name: team
+    doc: "The actor's team. Actors on different teams can damage each other."
+    params:
+      - {name: actor, type: handle<actor>, doc: The actor to read.}
+    returns: {type: i32, doc: "The team's number."}
+    fails:
+      not_found: "The actor no longer exists."
+      invalid: "The actor isn't a game entity."
+    users: [groink, online-coop]
+
+  - name: placement
+    doc: "The placement number that a level gave an actor, for use with `find_placed`."
+    params:
+      - {name: actor, type: handle<actor>, doc: The actor to read.}
+    returns: {type: u64, doc: "The number, or `0` if no level placed the actor."}
+    fails:
+      not_found: "The actor no longer exists."
+      invalid: "The actor isn't a game entity."
+    users: [groink, online-coop]
+
+  - name: pose
+    doc: "An entity's gameplay position and the direction its body faces. A character's body can face away from its Unreal root, so this can differ from `actor.transform`."
+    params:
+      - {name: actor, type: handle<actor>, doc: The actor to read.}
+    returns: {type: struct<Pose>, doc: "The actor's position and rotation."}
+    fails:
+      not_found: "The actor no longer exists."
+      not_ready: "The actor has no position in the world yet."
+      invalid: "The actor isn't a game entity."
+    users: [groink, online-coop]
+
+  - name: set_pose
+    doc: |
+      Moves an entity to a position and turns its body instantly. The actor passes
+      through anything in between, and it isn't placed on the ground. To move an
+      actor's Unreal root instead, use `actor.set_transform`.
+    params:
+      - {name: actor, type: handle<actor>, doc: The actor to move.}
+      - {name: pose, type: struct<Pose>, doc: "The new position and rotation, in the same format that `pose` returns."}
+    fails:
+      not_found: "The actor no longer exists."
+      not_ready: "The actor has no position in the world yet."
+      invalid: "The actor isn't a game entity."
+    users: [groink, online-coop]
+
+  - name: warp
+    doc: |
+      Moves an actor the same way that the game does when it warps one. The actor is
+      placed on the ground at the position, and its physics body and its movement go
+      with it. The height might end up different from the one that you passed. If
+      the actor is in the middle of a throw, the throw is canceled.
+    params:
+      - {name: actor, type: handle<actor>, doc: The actor to move.}
+      - {name: location, type: vec3, doc: "The new position, in centimeters."}
+      - {name: rotation, type: rotation, doc: "Which way it faces."}
+    fails:
+      not_found: "The actor no longer exists, or it is being removed."
+      not_ready: No world is loaded.
+      unsupported: "The actor has no physics body of its own, or it is attached to another actor."
+      invalid: "The actor isn't a game entity."
+    users: [groink, online-coop]
+
+  - name: velocity
+    doc: "The actor's speed and direction, in centimeters per second."
+    params:
+      - {name: actor, type: handle<actor>, doc: The actor to read.}
+    returns: {type: vec3, doc: The velocity.}
+    fails:
+      not_found: "The actor no longer exists."
+      not_ready: "The actor has no position in the world yet."
+      invalid: "The actor isn't a game entity."
+    users: [groink, online-coop]
+
+  - name: launch
+    doc: |
+      Throws an actor. The game's physics takes over from there, so gravity pulls
+      the actor down, it bounces off of whatever it hits, and it lands. The actor's
+      own movement can't steer it until it has landed.
+    params:
+      - {name: actor, type: handle<actor>, doc: The actor to throw.}
+      - {name: velocity, type: vec3, doc: "The launch velocity, in centimeters per second. `z` is up."}
+    fails:
+      not_found: "The actor no longer exists."
+      unsupported: "The actor has no active physics body, or it is being carried, held, or attached to something."
+      invalid: "The actor isn't a game entity."
+    users: [groink, online-coop]
+
+  - name: hold_suspended
+    doc: |
+      Suspends parts of an actor so that your mod can control it. The actor stays
+      where it is, is still drawn and animated, and can still be found and hit, but
+      it stops doing things on its own. Only one mod at a time can suspend parts of
+      an actor. Everything is returned to the game when your mod stops or when the
+      actor leaves the world.
+    owns: true
+    params:
+      - {name: actor, type: handle<actor>, doc: The actor.}
+      - {name: parts, type: flags<EntityParts>, doc: "The parts to suspend, in addition to any that your mod has already suspended."}
+    fails:
+      not_found: "The actor no longer exists."
+      invalid: "You didn't pass any parts, or the actor isn't a game entity."
+      busy: "Another mod has suspended parts of this actor."
+      unsupported: "The actor's physics body can't be suspended safely. Nothing is changed."
+    users: [groink, online-coop]
+
+  - name: release_suspended
+    doc: "Returns the suspended parts of an actor to the game."
+    owns: true
+    params:
+      - {name: actor, type: handle<actor>, doc: The actor.}
+      - {name: parts, type: flags<EntityParts>, doc: "The parts to return to the game."}
+    fails:
+      not_found: "The actor no longer exists, or your mod hasn't suspended any part of it."
+      invalid: "You didn't pass any parts, or the actor isn't a game entity."
+    users: [groink, online-coop]
+
+  - name: suspended
+    doc: "The parts of an actor that are suspended by any mod."
+    params:
+      - {name: actor, type: handle<actor>, doc: "The actor to check."}
+    returns: {type: flags<EntityParts>, doc: "The parts, or none."}
+    fails:
+      not_found: "The actor no longer exists."
+      invalid: "The actor isn't a game entity."
+    users: [groink, online-coop]
+
+  - name: spawn
+    doc: |
+      Spawns an actor of a class in the world with the game's own spawner. The actor
+      belongs to your mod and is removed when your mod stops, unless you set `keep`
+      to give it to the game.
+    owns: true
+    params:
+      - {name: of_class, type: handle<object>, doc: "The actor's class, from `reflection.find_class` or `reflection.class_of`."}
+      - {name: location, type: vec3, doc: "The spawn position, in centimeters."}
+      - {name: rotation, type: rotation, doc: "Which way it faces."}
+      - {name: team, type: i32, default: -1, doc: "The actor's team, or `-1` to use the class's default."}
+      - {name: keep, type: bool, default: false, doc: "`true` to keep the actor in the world after your mod stops."}
+    returns: {type: handle<actor>, doc: The new actor.}
+    fails:
+      not_ready: No world is loaded.
+      not_found: "The class no longer exists."
+      invalid: "The handle isn't an actor class, or the team is below `-1`."
+      unsupported: "The game didn't create anything. Some classes can't be spawned this way."
+    users: [groink, online-coop]
+
+  - name: destroy
+    doc: |
+      Removes an actor from the world without a death, drops, or score. The actor is
+      removed at the start of the game's next world update. If the game reuses
+      actors of that kind, it goes back into the game's pool. Your mod can remove
+      its own actors and any actor that the game created, but not another mod's.
+    owns: true
+    params:
+      - {name: actor, type: handle<actor>, doc: The actor to remove.}
+    fails:
+      not_found: "The actor no longer exists."
+      busy: "The actor is already being removed."
+      denied: Another mod spawned the actor.
+      not_ready: "The game can't remove actors right now."
+      invalid: "The actor isn't a game entity."
+    users: [groink, online-coop]
+
+  - name: grounded
+    doc: |
+      Reports whether the game's latest completed contact update accepted upward
+      support for the actor. The actor needs an independent physics body and
+      its own update running. Wall
+      and ceiling contacts do not count. The game's support angle and contact
+      filters apply; this query does not attribute contact to one component.
+
+      The first query starts observing the actor. Wait for its next physics
+      update before a result is available. A sample from before the preceding
+      world step is refused. A body that is asleep, displaced, stopped, waiting
+      for a launch, or has its physics or collision suspended has no result
+      until a fresh update. Suspending actor logic also stops that contact update.
+      This query does not wake or move the actor. Use `world.ground` to search
+      navigation surfaces near a point instead.
+    params:
+      - {name: actor, type: handle<actor>, doc: The actor to read.}
+    returns: {type: bool, doc: "`true` for supporting contact, or `false` for a completed update without support."}
+    fails:
+      not_found: "The actor no longer exists or is leaving play."
+      invalid: "The actor isn't a game entity."
+      unsupported: "The actor has no supported independent physics body, or its body is attached to something."
+      not_ready: "There is no fresh completed contact update for the actor's current body and pose."
+      no_memory: "There is no memory to observe another actor."
+    users: [captain-jump, motion-checks]
+
+events:
+  - name: spawned
+    doc: |
+      Emitted when an actor enters the world, either because the game created it or
+      because the game reused one from its pool. Your handler is called at the start
+      of the next world step, with the actor's state at that time.
+    fields:
+      - {name: actor, type: handle<actor>, doc: "The actor. It might already be removed."}
+      - {name: kind, type: enum<EntityKind>, doc: "The actor's kind. Empty if the actor has already been removed."}
+      - {name: team, type: i32, doc: "The actor's team."}
+      - {name: placement, type: u64, doc: "The actor's placement number, or `0`."}
+      - {name: location, type: vec3, doc: "The actor's position, in centimeters."}
+    users: [groink, online-coop]
+
+  - name: destroyed
+    doc: |
+      Emitted when an actor leaves the world, either because the game destroyed it
+      or because the game put it back into its pool. Your handler is called at the
+      start of the next world step. The handle has stopped working by then, so you can
+      only use it to identify the actor. The other values are from when the actor
+      left.
+    fields:
+      - {name: actor, type: handle<actor>, doc: "The handle that the actor had."}
+      - {name: kind, type: enum<EntityKind>, doc: "The actor's kind."}
+      - {name: team, type: i32, doc: "The actor's team."}
+      - {name: placement, type: u64, doc: "The actor's placement number, or `0`."}
+      - {name: location, type: vec3, doc: "The actor's last position, in centimeters."}
+    users: [groink, online-coop]

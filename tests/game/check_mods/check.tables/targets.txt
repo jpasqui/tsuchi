@@ -1,0 +1,8 @@
+/G/Sheet.Sheet
+CHAPPY
+MaxLife
+Species
+/G/Refs.Refs
+CHAPPY
+Mesh
+/G/Idol.Idol

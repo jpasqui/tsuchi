@@ -1,0 +1,60 @@
+{
+  "id": "check.settings",
+  "name": "Check settings",
+  "version": "1.0.0",
+  "requires": {
+    "check.library": "1.0.0"
+  },
+  "meta": {
+    "check": "settings",
+    "checks": [
+      "found",
+      "public",
+      "refused",
+      "changed",
+      "heard"
+    ]
+  },
+  "settings": {
+    "loud": {
+      "type": "toggle",
+      "default": true,
+      "name": "Loud",
+      "description": "Whether the check is loud."
+    },
+    "runs": {
+      "type": "integer",
+      "default": 0,
+      "min": 0
+    },
+    "speed": {
+      "type": "number",
+      "default": 1.5,
+      "min": 0,
+      "max": 4
+    },
+    "mode": {
+      "type": "choice",
+      "default": "calm",
+      "choices": [
+        "calm",
+        "wild"
+      ]
+    },
+    "extras": {
+      "type": "set",
+      "default": [
+        "hats"
+      ],
+      "choices": [
+        "hats",
+        "boots"
+      ]
+    },
+    "greeting": {
+      "type": "text",
+      "default": "hello",
+      "max_length": 16
+    }
+  }
+}

@@ -1,0 +1,62 @@
+service: actor
+tutorials:
+  - {title: Inspect a loaded asset, path: /develop/reflection-and-assets/}
+layer: engine
+acts_on: actor
+lifetime: world
+brief: "Lists Unreal actors and reads or sets their root position and rotation."
+description: |
+  Use this service for Unreal actors, including scenery and lights. You can
+  list the actors in the active world, check a handle, and read or set an
+  actor's root position and rotation. You can also pass the owner returned
+  by `component.owner` to these calls.
+
+  Use `entity` for gameplay kinds, teams, placement numbers, body facing,
+  spawning, removal, and suspension. Both services use the same Actor handle.
+  When the game returns an actor to its pool, the old handle stops working.
+
+structs:
+  Transform:
+    doc: "An Unreal actor's root position and rotation."
+    fields:
+      - {name: location, type: vec3, doc: "The root's position in the world, in centimeters."}
+      - {name: rotation, type: rotation, doc: "The root's rotation in the world, in degrees."}
+
+functions:
+  - name: list
+    doc: "Lists the Unreal actors in the active world, scenery and lights included. You can filter by a class or any of its subclasses. To list only the game's entities, use `entity.list`."
+    params:
+      - {name: of_class, type: handle<object>, optional: true, doc: "The class, from `reflection.find_class`. If you leave it out, every actor is listed."}
+    returns: {type: list<handle<actor>>, doc: "The actors."}
+    fails:
+      not_ready: "No world is loaded."
+      not_found: "The class no longer exists."
+      invalid: "The handle isn't an actor class."
+    users: [component-owner-inspection, scene-root-transforms]
+
+  - name: alive
+    doc: "Checks if an Actor handle is still valid. A handle that no longer refers to an actor returns `false`."
+    params:
+      - {name: actor, type: handle<actor>, doc: "The actor to check."}
+    returns: {type: bool, doc: "`true` while the handle refers to an actor."}
+    users: [component-owner-inspection, scene-root-transforms]
+
+  - name: transform
+    doc: "Reads an actor's root position and rotation in the world. A character's body can face a different direction, which you can read with `entity.pose`."
+    params:
+      - {name: actor, type: handle<actor>, doc: "The actor to read."}
+    returns: {type: struct<Transform>, doc: "The root's position and rotation."}
+    fails:
+      not_found: "The actor no longer exists."
+      not_ready: "The actor has no root position in the world yet."
+    users: [component-owner-inspection, scene-root-transforms]
+
+  - name: set_transform
+    doc: "Sets an actor's root position and rotation in the world. The actor passes through anything in between, and its scale stays unchanged. Use `reflection` to read or change scale."
+    params:
+      - {name: actor, type: handle<actor>, doc: "The actor to move."}
+      - {name: transform, type: struct<Transform>, doc: "The new root position and rotation, in the format that `transform` returns."}
+    fails:
+      not_found: "The actor no longer exists."
+      not_ready: "The actor has no root position in the world yet."
+    users: [component-owner-inspection, scene-root-transforms]

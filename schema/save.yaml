@@ -1,0 +1,168 @@
+service: save
+tutorials:
+  - {title: Save your mod data, path: /develop/save-data/}
+layer: game
+acts_on: game
+lifetime: process
+brief: "Reads the active save slot and its files, blocks saving, and swaps in replacement save files."
+description: |
+  The game has six save slots and plays one at a time. It writes the slot's
+  files at the end of a day, when you travel between areas, and at a few other
+  times. Use this service to check which slot is active, list and read a
+  slot's files, and stop the game from writing to the slots. You can also
+  replace a slot with your own files, which the game then loads as if they
+  were the slot. This is meant for mods that put the player into a game that
+  isn't their own, like a guest in another player's story.
+
+  Refer to a slot's files by their paths inside of the slot, like `single.sav`
+  or `hero/001/fow/Area001_P.sav`.
+
+functions:
+  - name: slot
+    doc: "The save slot that is in use, from `0` for the first slot to `5` for the last."
+    returns: {type: u32, doc: The slot.}
+    fails:
+      not_found: No slot is in use yet.
+      not_ready: "The game isn't ready."
+    users: [online-coop, dog-coop]
+
+  - name: hold
+    doc: |
+      Stops the game from writing to the save slots. While any mod is holding, the
+      game's writes and deletions of a slot's files do nothing and report success,
+      so the game continues as if it had saved. The game's settings aren't in a
+      slot, so they are still written. The hold ends when your mod releases it. If
+      your mod stops while it is holding, the slots stay blocked until the game is
+      back at its title screen. This way, the data that your mod was keeping out of
+      the save isn't written as soon as your mod stops.
+    owns: true
+    fails:
+      not_ready: "The game's save functions don't match what Tsuchi expects, so Tsuchi doesn't touch them."
+    users: [online-coop, dog-coop]
+
+  - name: release
+    doc: "Ends your mod's hold. The game writes to the slots again after every mod has released its hold."
+    owns: true
+    fails:
+      not_found: "Your mod isn't holding saves."
+    users: [online-coop, dog-coop]
+
+  - name: list
+    doc: "The paths of the files in a save slot, including the ones inside of folders, in no particular order."
+    params:
+      - {name: slot, type: u32, doc: "The slot, from `0`."}
+    returns: {type: list<text>, doc: The paths.}
+    fails:
+      invalid: "That slot doesn't exist."
+      busy: "The game is reading or writing a save, or it is changing scenes."
+      not_found: "The slot has no files."
+      not_ready: "Tsuchi couldn't find the game's file functions."
+      io: "The save couldn't be opened."
+    users: [online-coop, dog-coop]
+
+  - name: exists
+    doc: "Checks if a slot has a file at a path."
+    params:
+      - {name: slot, type: u32, doc: "The slot, from `0`."}
+      - {name: path, type: text, doc: "The file's path inside of the slot."}
+    returns: {type: bool, doc: "`true` if there is a file at that path. A folder doesn't count as a file."}
+    fails:
+      invalid: "That slot doesn't exist, or the path points outside of it."
+      busy: "The game is reading or writing a save, or it is changing scenes."
+      not_ready: "Tsuchi couldn't find the game's file functions."
+      io: "The save or the file couldn't be opened."
+    users: [online-coop, dog-coop]
+
+  - name: size
+    doc: "The size of a file in a slot, in bytes."
+    params:
+      - {name: slot, type: u32, doc: "The slot, from `0`."}
+      - {name: path, type: text, doc: "The file's path inside of the slot."}
+    returns: {type: u64, doc: The size.}
+    fails:
+      invalid: "That slot doesn't exist, or the path points outside of it."
+      busy: "The game is reading or writing a save, or it is changing scenes."
+      not_found: "The slot has no file at that path."
+      not_ready: "Tsuchi couldn't find the game's file functions."
+      io: "The save or the file couldn't be opened."
+    users: [online-coop, dog-coop]
+
+  - name: read
+    doc: "Reads part of a file in a slot."
+    params:
+      - {name: slot, type: u32, doc: "The slot, from `0`."}
+      - {name: path, type: text, doc: "The file's path inside of the slot."}
+      - {name: offset, type: u64, doc: "The offset in the file to start at, from `0`."}
+    returns: {type: bytes, doc: "The bytes starting at `offset`. You get fewer than requested at the end of the file, and none past it."}
+    fails:
+      invalid: "That slot doesn't exist, or the path points outside of it."
+      busy: "The game is reading or writing a save, or it is changing scenes."
+      not_found: "The slot has no file at that path."
+      not_ready: "Tsuchi couldn't find the game's file functions."
+      io: "The save or the file couldn't be opened, or reading it failed."
+    users: [online-coop, dog-coop]
+
+  - name: restore
+    doc: |
+      Puts a saved copy back into the game's current save of the same kind, the
+      way the game retries a day. The game copies the copy's data into its
+      current save object and then applies it, so everything that reads the save
+      afterward reads the restored data. The game's save objects stay the same
+      objects. Make the copy with `GameplayStatics.LoadGameFromSlot` through
+      `reflection`. Use this to return to a starting state instead of setting the
+      game instance's `CarrotSaveGames` through `reflection`: the game keeps places
+      in its current saves, and new objects would leave those places in objects
+      the engine frees. The quest save's apply finds its places in the story save
+      again, so restore the story before the quest.
+    params:
+      - {name: copy, type: handle<object>, doc: "The saved copy. Its class must be one of the game's save classes."}
+    fails:
+      invalid: "The object isn't a save object, or it is the game's current save itself."
+      not_found: "The game has no current save of that kind."
+      busy: "The game is reading or writing a save, or it is changing scenes."
+      not_ready: "The game isn't ready."
+      unsupported: "The save's copy or apply function isn't where Tsuchi expects it."
+    users: [kadan, remote-content-tools]
+
+  - name: add_stand_in_file
+    doc: |
+      Adds one file to your mod's replacement for a slot, by its path inside of the
+      slot. The first file creates the replacement, and passing a path again
+      replaces that file. Nothing changes for the game until `use_stand_in`. There
+      is only one replacement at a time, and it ends with `end_stand_in` or when
+      your mod stops.
+    owns: true
+    params:
+      - {name: slot, type: u32, doc: "The slot that it replaces, from `0`."}
+      - {name: path, type: text, doc: "The file's path inside of the slot."}
+      - {name: data, type: bytes, doc: "The file's contents. The service keeps its own copy."}
+    fails:
+      invalid: "That slot doesn't exist, or the path points outside of it."
+      busy: "Another mod has a replacement, or your mod's replacement is for a different slot."
+      no_memory: "The game is out of memory."
+    users: [online-coop, dog-coop]
+
+  - name: use_stand_in
+    doc: |
+      Puts your mod's replacement in place of its slot. Until the replacement ends,
+      the game gets the replacement's files whenever it lists or reads the slot's
+      files, as if the slot had exactly those files. Nothing is written to the save
+      slots during this time, the same as with `hold`. After this, load the slot the
+      same way that the game does. Files that you add afterward count too.
+    owns: true
+    fails:
+      not_found: "Your mod has no replacement."
+      not_ready: "The game's save functions don't match what Tsuchi expects, so Tsuchi doesn't touch them."
+    users: [online-coop, dog-coop]
+
+  - name: end_stand_in
+    doc: |
+      Ends your mod's replacement and discards its files. The game reads the real
+      slot again. If the replacement was in use, nothing is written to the save
+      slots until the game is back at its title screen. The game might still have
+      the replacement's data loaded, and its next save would write that data into
+      the slot. The same applies if the replacement ends because your mod stopped.
+    owns: true
+    fails:
+      not_found: "Your mod has no replacement."
+    users: [online-coop, dog-coop]

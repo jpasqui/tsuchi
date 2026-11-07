@@ -1,0 +1,18 @@
+{
+  "id": "check.saves",
+  "name": "The check of saves",
+  "version": "1.0.0",
+  "meta": {
+    "check": "saves",
+    "checks": [
+      "slot",
+      "listed",
+      "read",
+      "held",
+      "released",
+      "prepared",
+      "ended",
+      "refused"
+    ]
+  }
+}

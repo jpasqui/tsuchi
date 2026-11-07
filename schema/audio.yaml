@@ -1,0 +1,85 @@
+service: audio
+tutorials:
+  - {title: Inspect a loaded asset, path: /develop/reflection-and-assets/}
+  - {title: Events and cleanup, path: /develop/events-and-cleanup/}
+  - {title: Play custom sounds, path: /develop/custom-sounds/}
+layer: game
+acts_on: game
+lifetime: process
+brief: "Plays actor sounds and owns global audio game parameters."
+description: |
+  The game plays its sounds by key. Each kind of actor has its own keys. For
+  example, a captain has `Whistle_Charge`, and Pikmin and creatures have
+  others. A sound that you play on an actor comes from the actor's position
+  and follows it.
+
+  A global game parameter is a number that a loaded Wwise bank uses to change
+  its sound. Parameter names and meanings belong to the bank. A value accepted
+  by the engine does not prove that the bank routes it to audible output.
+  Parameter holds persist across world changes and end when their mod stops.
+
+functions:
+  - name: play_on
+    doc: "Plays one of an actor's sounds at the actor's position."
+    params:
+      - {name: actor, type: handle<actor>, doc: "The actor that the sound comes from."}
+      - {name: key, type: text, doc: "The sound's key. It has to be one that this kind of actor has."}
+    fails:
+      not_found: "The actor no longer exists, or that kind of actor doesn't have a sound with that key."
+      invalid: "The key is empty, or it has characters that the game can't store."
+      not_ready: "The game's audio isn't running yet."
+    users: [groink, groink-lua]
+
+  - name: parameter
+    doc: "Reads a global audio parameter, or its bank default when there is no global override."
+    params:
+      - {name: name, type: text, doc: "The parameter's name, one to 127 printable ASCII bytes. Names are not case-sensitive."}
+    returns: {type: f32, doc: "The current value. This is not a measurement of the audio output."}
+    fails:
+      invalid: "The name is empty or contains a control or non-ASCII character."
+      capacity: "The name exceeds 127 bytes."
+      not_found: "The sound engine has no registered parameter with that name."
+      not_ready: "The sound engine is unavailable."
+    users: [better-settings, audio-channel-checks]
+
+  - name: hold_parameter
+    owns: true
+    doc: |
+      Owns a global audio parameter and queues its value. The first call retains
+      the previous global override or default behavior. Call again to change
+      the value. The hold ends on release or mod stop, and persists across world
+      changes. Replacing the audio engine ends the hold. A successful call means
+      that the engine accepted the command;
+      the audio thread applies the command later. It does not confirm audible
+      routing. No more than 64 parameters can be active or await cleanup.
+    params:
+      - {name: name, type: text, doc: "The parameter's name, one to 127 printable ASCII bytes. Names are not case-sensitive."}
+      - {name: value, type: f32, doc: "The requested finite value, in the parameter's own units."}
+    fails:
+      invalid: "The name or value is invalid, or the sound engine rejects the value."
+      capacity: "The name exceeds 127 bytes, or all 64 parameter records are in use."
+      not_found: "The sound engine has no registered parameter with that name."
+      busy: "Another mod owns the parameter, a different name has the same engine ID, or a previous hold awaits cleanup."
+      not_ready: "The sound engine or its checked command-queue observer is unavailable."
+      no_memory: "The framework cannot retain the hold."
+    users: [better-settings, audio-channel-checks]
+
+  - name: release_parameter
+    owns: true
+    doc: |
+      Ends the mod's parameter hold and restores its previous global value or
+      default behavior. Cleanup may finish later on the audio thread. If a
+      settled value from another engine writer is observed, cleanup preserves
+      that value. While a restore is pending, another hold for the parameter
+      fails with busy. If
+      the sound engine is unavailable, the framework retains cleanup for the
+      same instance. A replacement instance does not receive the old restore.
+    params:
+      - {name: name, type: text, doc: "The parameter's name, one to 127 printable ASCII bytes. Names are not case-sensitive."}
+    fails:
+      invalid: "The name is empty or contains a control or non-ASCII character."
+      capacity: "The name exceeds 127 bytes."
+      not_found: "The mod has no hold for that parameter."
+      denied: "A different name has the same engine ID."
+      busy: "The mod is applying an isolated declaration update."
+    users: [better-settings, audio-channel-checks]

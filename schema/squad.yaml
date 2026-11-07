@@ -1,0 +1,180 @@
+service: squad
+tutorials:
+  - {title: Watch a captain's squad, path: /develop/squad-and-captain/}
+  - {title: Add a squad type, path: /develop/custom-squads/}
+layer: game
+acts_on: actor
+lifetime: world
+brief: "Reads which leader each Pikmin follows, and adds, removes, or dismisses squad members."
+description: |
+  A Pikmin follows a captain, a dog, or nobody. The Pikmin that follow the
+  same leader are that leader's squad. Use this service to check which leader
+  a Pikmin follows, add a Pikmin to a squad or remove it, and dismiss a squad
+  the same way that the player's dismiss button does.
+
+enums:
+  SquadType:
+    open: true
+    doc: "A squad type declared by a mod under `content.squad`."
+
+structs:
+  SquadMember:
+    doc: A member of a declared squad type.
+    fields:
+      - {name: kind, type: enum<SquadType>, doc: Its declared type.}
+      - {name: leader, type: handle<actor>, doc: Its captain or dog.}
+
+functions:
+  - name: leader
+    doc: "The captain or dog that a Pikmin is following."
+    params:
+      - {name: pikmin, type: handle<actor>, doc: The Pikmin.}
+    returns: {type: handle<actor>, doc: Its leader., none: "The Pikmin isn't following anyone."}
+    fails:
+      not_found: "The actor no longer exists or isn't a Pikmin."
+      not_ready: "The game isn't ready."
+    users: [groink, online-coop]
+  - name: members
+    doc: "The Pikmin that are following a leader, in the game's own order."
+    params:
+      - {name: leader, type: handle<actor>, doc: A captain or a dog.}
+    returns: {type: list<handle<actor>>, doc: "The Pikmin in its squad."}
+    fails:
+      not_found: "The actor no longer exists or isn't a captain or a dog."
+      not_ready: "No world is loaded, or the game isn't ready."
+    users: [groink, online-coop]
+
+  - name: join
+    doc: |
+      Makes a Pikmin follow a leader right away, no matter what it was doing. It is
+      in `members` from then on, and the game gives it a place in the formation on
+      the Pikmin's next update. A dog only keeps followers while it is leading, like
+      when a player is controlling it. If you make a Pikmin follow a dog that is
+      only following its captain, the Pikmin stops following a moment later.
+    params:
+      - {name: pikmin, type: handle<actor>, doc: The Pikmin.}
+      - {name: leader, type: handle<actor>, doc: The captain or dog to follow.}
+    fails:
+      not_found: "The Pikmin or the leader no longer exists, or the actors aren't a Pikmin and a captain or a dog."
+      not_ready: "The game isn't ready."
+    users: [online-coop, groink]
+
+  - name: leave
+    doc: "Makes a Pikmin stop following and stand idle where it is. The game applies this on the Pikmin's next update, which is one world step later."
+    params:
+      - {name: pikmin, type: handle<actor>, doc: The Pikmin.}
+    fails:
+      not_found: "The actor no longer exists or isn't a Pikmin."
+      not_ready: "The game isn't ready."
+    users: [online-coop, groink]
+
+  - name: dismiss
+    doc: |
+      Dismisses a leader's squad, the same way that the player's button does. Its
+      Pikmin stop following and gather by type next to the leader.
+    params:
+      - {name: leader, type: handle<actor>, doc: A captain or a dog.}
+    fails:
+      not_found: "The actor no longer exists or isn't a captain or a dog."
+      not_ready: "The game isn't ready."
+    users: [online-coop, dog-coop]
+
+  - name: hold_member
+    owns: true
+    doc: |
+      Keeps a gameplay actor in a declared squad type until you release it or your
+      mod stops. The actor follows the leader and appears in the throw list.
+      Its AI resumes when the hold ends. Captains, dogs, and Pikmin use their own
+      squad rules and cannot join a declared type.
+    params:
+      - {name: kind, type: enum<SquadType>, doc: The declared type.}
+      - {name: leader, type: handle<actor>, doc: The captain or dog.}
+      - {name: member, type: handle<actor>, doc: The gameplay actor.}
+    fails:
+      invalid: The type ID is malformed, or the member leads a squad.
+      not_found: The type or an actor no longer exists.
+      not_ready: The member has no physics body, or the native hooks are unavailable.
+      busy: Another mod holds this member.
+      capacity: Four leaders already have declared squad members.
+    users: [groink, online-coop]
+
+  - name: release_member
+    owns: true
+    doc: "Ends your hold and restores the member's AI update and velocity."
+    params:
+      - {name: member, type: handle<actor>, doc: The held actor.}
+    fails:
+      not_found: Your mod holds no membership on this actor.
+    users: [groink, online-coop]
+
+  - name: type_members
+    doc: "Returns the actors in a declared type that follow a leader."
+    params:
+      - {name: kind, type: enum<SquadType>, doc: The declared type.}
+      - {name: leader, type: handle<actor>, doc: The captain or dog.}
+    returns: {type: list<handle<actor>>, doc: The members.}
+    fails:
+      invalid: The type ID is malformed.
+      not_found: The type or the leader no longer exists.
+    users: [groink, online-coop]
+
+  - name: member_type
+    doc: "Returns the held actor's declared type and leader."
+    params:
+      - {name: member, type: handle<actor>, doc: The actor.}
+    returns: {type: struct<SquadMember>, doc: Its membership.}
+    fails:
+      not_found: No mod holds this actor in a declared squad type.
+    users: [groink, online-coop]
+
+  - name: selected
+    doc: "Returns the selected declared type. Returns an empty ID for a stock type."
+    params:
+      - {name: leader, type: handle<actor>, doc: The captain or dog.}
+    returns: {type: text, doc: "The selected declared type's ID. An empty string names a stock type."}
+    fails:
+      not_found: The leader no longer exists.
+      not_ready: The leader has no formation yet.
+    users: [groink, online-coop]
+
+  - name: hold_selection
+    owns: true
+    doc: "Keeps a declared type selected for throwing. Restores the earlier selection when the hold ends."
+    params:
+      - {name: leader, type: handle<actor>, doc: The captain or dog.}
+      - {name: kind, type: enum<SquadType>, doc: The declared type.}
+    fails:
+      invalid: The type ID is malformed.
+      not_found: The type or the leader no longer exists.
+      not_ready: The type has no members with this leader.
+      busy: Another mod holds this leader's selection.
+    users: [groink, online-coop]
+
+  - name: release_selection
+    owns: true
+    doc: "Releases your selection hold and restores the earlier type when its node still exists."
+    params:
+      - {name: leader, type: handle<actor>, doc: The captain or dog.}
+    fails:
+      not_found: Your mod holds no selection on this leader.
+    users: [groink, online-coop]
+
+  - name: type_name
+    doc: "Returns the display name that the type's mod declared."
+    params:
+      - {name: kind, type: enum<SquadType>, doc: The declared type.}
+    returns: {type: text, doc: Its display name in UTF-8.}
+    fails:
+      invalid: The type ID is malformed.
+      not_found: The type is unknown or its mod has stopped.
+    users: [groink, online-coop]
+
+events:
+  - name: membership_changed
+    doc: Emitted when a held member joins, moves to another type or leader, or leaves.
+    fields:
+      - {name: member, type: handle<actor>, doc: The actor.}
+      - {name: leader, type: handle<actor>, doc: The leader of the held membership.}
+      - {name: kind, type: enum<SquadType>, doc: Its declared type's ID.}
+      - {name: joined, type: bool, doc: "If `true`, the membership began or changed. If `false`, it ended."}
+    users: [groink, online-coop]

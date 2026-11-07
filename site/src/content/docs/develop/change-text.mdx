@@ -1,0 +1,88 @@
+---
+title: Change text
+description: Replace a piece of the game's text.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+The game finds each piece of text using a namespace and a key. For example, creature names
+are in the `GenseiName` namespace, and the key for the Dwarf Bulborb's name is `KOCHAPPY`.
+
+To follow along, you'll need a mod with a manifest. If you don't have one yet, see
+[Write your first mod](/develop/first-mod/).
+
+## Manifest
+
+To replace text without writing any code, add a `text` key to your manifest with the
+namespace, the key, and your new text:
+
+```json title="mod.json"
+{
+  "id": "olimar.renames",
+  "name": "Field Names",
+  "version": "1.0.0",
+  "text": {
+    "GenseiName": {"KOCHAPPY": "Wee Bulborb"}
+  }
+}
+```
+
+The game will use your replacement while the mod runs. When its override ends, Tsuchi
+reveals another mod's replacement or the game's original text. You can also add text
+under a key the game doesn't have, for example when your mod adds
+something that needs a name. A new key keeps the last text it was given after its last
+override ends.
+
+## Code
+
+To replace text while the game is running, you can use the [`text`](/reference/text/)
+service.
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua title="main.lua"
+print("Original name: " .. text.get("GenseiName", "KOCHAPPY"))
+
+text.override("GenseiName", "KOCHAPPY", "Wee Bulborb")
+
+-- Bring back the original text when you no longer need yours.
+text.restore("GenseiName", "KOCHAPPY")
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript title="main.js"
+print("Original name: " + text.get("GenseiName", "KOCHAPPY"));
+
+text.override("GenseiName", "KOCHAPPY", "Wee Bulborb");
+
+// Bring back the original text when you no longer need yours.
+text.restore("GenseiName", "KOCHAPPY");
+```
+
+</TabItem>
+<TabItem label="C">
+
+```c title="main.c"
+host->text->override(self, "GenseiName", "KOCHAPPY", "Wee Bulborb");
+
+/* Bring back the original text when you no longer need yours. */
+host->text->restore(self, "GenseiName", "KOCHAPPY");
+```
+
+</TabItem>
+</Tabs>
+
+## Markup
+
+Some of the game's text includes markup in square brackets that controls how the text is
+displayed. Before you replace a piece of text, read the original with `text.get`, and make
+sure to copy any markup that you want to keep.
+
+## Conflicts
+
+If two mods replace the same text, then the game will show the text from the mod that loaded
+last. If that mod stops or brings back the original, then the other mod's text will be shown
+again.

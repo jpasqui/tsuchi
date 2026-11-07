@@ -1,0 +1,62 @@
+---
+// The site's name as Starlight draws it, followed by a link to each section and to each other
+// site. On a narrow screen the links are left out here: they are at the top of the menu.
+import Default from '@astrojs/starlight/components/SiteTitle.astro';
+import { sections } from '../data/sections.mjs';
+
+const icons = import.meta.glob<string>('../assets/icons/*.svg', { query: '?raw', import: 'default', eager: true });
+const here = Astro.url.pathname;
+---
+
+<Default><slot /></Default>
+<nav class="sections" aria-label="Sections">
+  {
+    sections.map((section) => (
+      <a href={section.link} aria-current={here.startsWith(section.link) ? 'page' : undefined}>
+        <span class="icon" aria-hidden="true" set:html={icons[`../assets/icons/${section.icon}.svg`]} />
+        {section.label}
+      </a>
+    ))
+  }
+</nav>
+
+<style>
+  .sections {
+    display: none;
+    gap: 0.25rem;
+    margin-inline-start: 1.5rem;
+    align-items: center;
+  }
+  @media (min-width: 50rem) {
+    .sections {
+      display: flex;
+    }
+  }
+  a {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.7rem;
+    border-radius: 0.4rem;
+    font-size: var(--sl-text-sm);
+    font-weight: 600;
+    text-decoration: none;
+    color: var(--sl-color-gray-2);
+    white-space: nowrap;
+  }
+  a:hover {
+    color: var(--sl-color-white);
+    background-color: var(--sl-color-gray-6);
+  }
+  a[aria-current='page'] {
+    color: var(--sl-color-accent-high);
+    background-color: var(--sl-color-accent-low);
+  }
+  .icon {
+    display: flex;
+  }
+  .icon :global(svg) {
+    width: 1.35rem;
+    height: 1.35rem;
+  }
+</style>

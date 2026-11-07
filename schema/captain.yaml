@@ -1,0 +1,156 @@
+service: captain
+tutorials:
+  - {title: Watch a captain's squad, path: /develop/squad-and-captain/}
+layer: game
+acts_on: actor
+lifetime: world
+brief: "Controls a captain's whistle, cursor, throws, and riding."
+description: |
+  A captain can whistle, aim a cursor, throw the Pikmin in its squad, and ride
+  its dog. Use this service to read those actions and to make a captain
+  perform them. This works for a captain that a player controls, and for one
+  that your mod has taken over with `entity.hold_suspended`.
+
+  Every function takes a captain. To get a player's captain, use
+  `player.captain`.
+
+structs:
+  Whistle:
+    doc: A captain's whistle.
+    fields:
+      - {name: active, type: bool, doc: Whether the captain is whistling now.}
+      - {name: radius, type: f32, doc: "The whistle's radius, in centimeters. While the captain's logic is suspended, a held whistle grows. A player-controlled captain repeats small whistles instead."}
+      - {name: center, type: vec3, doc: "The center of the whistle on the ground, in centimeters."}
+      - {name: count, type: u32, doc: "The number of whistles that the captain has started since it entered the world. If it changes, a new whistle has started."}
+
+functions:
+  - name: whistle
+    doc: "A captain's whistle, including whether it is active and its position."
+    params:
+      - {name: captain, type: handle<actor>, doc: The captain.}
+    returns: {type: struct<Whistle>, doc: The whistle.}
+    fails:
+      not_found: "The actor no longer exists or isn't a captain."
+    users: [online-coop, dog-coop]
+
+  - name: hold_whistle
+    doc: |
+      Makes a captain whistle at its cursor until the hold ends. If a mod has
+      suspended the captain's AI, the captain keeps one whistle going, and it grows
+      the same way that a player's does. If the player is controlling the captain,
+      the game ends a whistle on its next update unless the player is holding the
+      button, so the whistle is started again every world step and stays small. Only one
+      mod at a time can hold a captain's whistle.
+    owns: true
+    params:
+      - {name: captain, type: handle<actor>, doc: The captain.}
+    fails:
+      not_found: "The actor no longer exists or isn't a captain."
+      busy: "Another mod is holding this captain's whistle."
+      not_ready: "The game isn't ready."
+    users: [online-coop, dog-coop]
+
+  - name: release_whistle
+    doc: "Ends your mod's hold and stops the whistle."
+    owns: true
+    params:
+      - {name: captain, type: handle<actor>, doc: The captain.}
+    fails:
+      not_found: "Your mod isn't holding this captain's whistle."
+    users: [online-coop, dog-coop]
+
+  - name: cursor
+    doc: "A captain's cursor, which is the point that its throws and its whistle are aimed at. While the captain is riding, this is the dog's cursor."
+    params:
+      - {name: captain, type: handle<actor>, doc: The captain.}
+    returns: {type: vec3, doc: "The point, in centimeters."}
+    fails:
+      not_found: "The actor no longer exists or isn't a captain."
+      not_ready: "The captain doesn't have a cursor yet."
+    users: [groink, online-coop]
+
+  - name: hold_cursor
+    doc: |
+      Keeps a captain's cursor on a point. The game moves the cursor with the
+      player's stick on every update, so the cursor is put back on the point every
+      world step. Holding it again moves the hold to the new point. Only one mod at a
+      time can hold a captain's cursor, and a hold on an actor counts as the same
+      hold.
+    owns: true
+    params:
+      - {name: captain, type: handle<actor>, doc: The captain.}
+      - {name: point, type: vec3, doc: "The point, in centimeters."}
+    fails:
+      not_found: "The actor no longer exists or isn't a captain."
+      busy: "Another mod is holding this captain's cursor."
+      not_ready: "The captain doesn't have a cursor yet."
+    users: [groink, online-coop]
+
+  - name: hold_cursor_on
+    doc: |
+      Keeps a captain's cursor on an actor and follows it as it moves, the same way
+      that the game's lock-on does. The hold ends when the target leaves the world.
+    owns: true
+    params:
+      - {name: captain, type: handle<actor>, doc: The captain.}
+      - {name: target, type: handle<actor>, doc: The actor to aim at.}
+    fails:
+      not_found: "The captain or the target no longer exists, or the actor isn't a captain."
+      busy: "Another mod is holding this captain's cursor."
+      not_ready: "The captain doesn't have a cursor yet, or the target has no position."
+    users: [groink, online-coop]
+
+  - name: release_cursor
+    doc: "Ends your mod's hold on a captain's cursor."
+    owns: true
+    params:
+      - {name: captain, type: handle<actor>, doc: The captain.}
+    fails:
+      not_found: "Your mod isn't holding this captain's cursor."
+    users: [groink, online-coop]
+
+  - name: throw_pikmin
+    doc: |
+      Makes a captain throw one Pikmin from its squad at its cursor. The captain
+      selects the Pikmin's type first, the same way that a player switching types
+      does, and throws on its next update.
+    params:
+      - {name: captain, type: handle<actor>, doc: The captain.}
+      - {name: pikmin, type: handle<actor>, doc: "A Pikmin that is following the captain."}
+    fails:
+      not_found: "The captain or the Pikmin no longer exists, or the actors aren't a captain and a Pikmin."
+      invalid: "The Pikmin isn't following this captain."
+      busy: "The captain can't select that Pikmin's type right now."
+      not_ready: "The captain has no squad to throw from right now, or the game isn't ready yet."
+    users: [groink, online-coop]
+
+  - name: riding
+    doc: "The dog that a captain is riding."
+    params:
+      - {name: captain, type: handle<actor>, doc: The captain.}
+    returns: {type: handle<actor>, doc: The dog., none: "The captain isn't riding."}
+    fails:
+      not_found: "The actor no longer exists or isn't a captain."
+    users: [online-coop, groink]
+
+  - name: ride
+    doc: |
+      Makes a captain get on its dog, the same way that the player's button does.
+      The captain has to be next to the dog, and the game has to allow it. Use
+      `riding` to check if the captain is riding yet.
+    params:
+      - {name: captain, type: handle<actor>, doc: The captain.}
+    fails:
+      not_found: "The actor no longer exists or isn't a captain."
+      busy: "The captain is already riding, or a ride has already been requested."
+      not_ready: "The captain has no dog, is too far from it, or the game won't allow it."
+    users: [online-coop, groink]
+
+  - name: dismount
+    doc: "Makes a captain get off of the dog that it is riding."
+    params:
+      - {name: captain, type: handle<actor>, doc: The captain.}
+    fails:
+      not_found: "The actor no longer exists or isn't a captain."
+      not_ready: "The captain isn't riding."
+    users: [online-coop, groink]

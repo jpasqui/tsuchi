@@ -1,0 +1,130 @@
+---
+title: Install Tsuchi
+description: How to install Tsuchi in your emulator.
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+For a console, use [Install on a console](/players/install-console/).
+
+Before you start, make sure that you have Pikmin 4 version 1.1.1 or 2.0.0, or Pikmin 4 Nintendo Switch 2 Edition, and an emulator that
+can load mods.
+
+## Steps
+
+<Steps>
+
+1. Extract the Tsuchi release archive, then open `emulator/Tsuchi`. Its `exefs` folder contains `subsdk9` and a `.pchtxt` file for each version of the game.
+2. In your emulator, right-click Pikmin 4 and open the game's mod folder.
+3. Create a new folder in there named `Tsuchi`, and move the `exefs` folder into it.
+
+</Steps>
+
+Your mod folder should now look like this:
+
+```text
+Tsuchi/
+  exefs/
+    subsdk9
+    1.1.1.pchtxt
+    2.0.0.pchtxt
+    sw2.pchtxt
+    sw2-demo.pchtxt
+```
+
+The archive holds one `.pchtxt` file for each version of Pikmin 4 that this release supports.
+Keep them all. Each one applies only to its own version.
+
+The Nintendo Switch 2 Edition has its own mod folder in the emulator. Install Tsuchi and your
+mods in that folder too, with the same files.
+
+## Testing
+
+To make sure that Tsuchi installed correctly, start the game and then close it. There should
+now be a log file at `tsuchi/tsuchi.log` in the game's save folder. If the file isn't there,
+check the emulator's debug output and double-check that the `exefs` folder is in the
+right place. Tsuchi can write debug output before the save is available.
+
+Now that Tsuchi is installed, you can [install a mod](/players/install-a-mod/).
+
+## Frame rate
+
+Tsuchi can show the game at 60 frames a second. The world still updates 30 times a second,
+as it does without Tsuchi, and Tsuchi draws the frames in between, so the game plays the
+same at either rate.
+
+Experimental. Higher frame rates are still being worked on.
+
+To change the frame rate, create a folder named `romfs` next to the `exefs` folder, then a
+folder named `tsuchi` inside it, and a file named `settings.json` in there with this in it:
+
+```json
+{"frame_limit": 60}
+```
+
+Your mod folder should now look like this:
+
+```text
+Tsuchi/
+  exefs/
+    subsdk9
+    1.1.1.pchtxt
+    2.0.0.pchtxt
+    sw2.pchtxt
+    sw2-demo.pchtxt
+  romfs/
+    tsuchi/
+      settings.json
+```
+
+Restart the game for a change to take effect. `frame_limit` can be one of these:
+
+| Value | Frame rate |
+| --- | --- |
+| `30` | 30 frames a second, as the game ships. This is the default, and Tsuchi changes nothing about the frames. |
+| `60` | 60 frames a second. Experimental. Higher frame rates are still being worked on. |
+| `120` | Up to 120 frames a second, if the emulator and your computer keep up. Experimental. Higher frame rates are still being worked on. |
+| `0` | No limit. Experimental. Higher frame rates are still being worked on. |
+
+VSync is a separate optional boolean in the same file:
+
+```json
+{"frame_limit": 120, "vsync": false}
+```
+
+With `"vsync": true`, each frame waits for the screen to refresh, so a limit of 120 still
+shows 60 frames a second on a 60 Hz screen. With `"vsync": false`, frames don't wait, and
+the frame limit still applies. Without `vsync`, the game's own setting is used. Eden has a
+VSync setting of its own, which can add another wait. Deleting `settings.json` goes back
+to 30 frames a second and the game's own VSync setting.
+
+Above 30, the camera, characters, Pikmin, their leaves and flowers, particles, life gauges,
+the cursor and the other markers, and the moving textures are smooth. These still move 30
+times a second: water, trails, and some shadows.
+
+If the game doesn't reach the frame rate you chose, add `"presenter_log": true` to the same
+file, like `{"frame_limit": 60, "presenter_log": true}`. Tsuchi then writes a line to
+`atmosphere/contents/0100B7C00933A000/tsuchi.log` (`0400B7C00933A000` for the Switch 2 Edition) on the SD card every second with the
+frames it drew, the steps the world took, and how long the frames took. Emulators keep
+the SD card in a folder on the computer. If Tsuchi can't write to the SD card, the log is
+in the game's save folder at `tsuchi/tsuchi.log` instead. The log shows the frame limit and
+VSync choice apart from the frames actually drawn each second. Those counts aren't the
+screen's own refreshes.
+
+## Update
+
+Close the game, then replace the files in `Tsuchi/exefs` with the new archive's
+`emulator/Tsuchi/exefs` files. Replace the module and patch together.
+Keep the `romfs` folder next to `exefs`, so your `settings.json` stays. Your mods are
+in their own folders and don't change.
+
+## Remove
+
+Follow each mod author's save instructions before removing Tsuchi or any
+map or content mod. Leave an added area and finish the day before removing it.
+Then close the game and delete its Tsuchi mod folder.
+
+Saved content IDs and Piklopedia progress remain after removal and don't prevent
+loading. Absent creature entries stay hidden, and added Pikmin use their saved donors.
+A saved destination in an added map, or a saved placement that needs the mod's
+class, still needs that mod. Reinstall Tsuchi and the mod to load that destination.

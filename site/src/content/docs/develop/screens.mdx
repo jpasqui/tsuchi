@@ -1,0 +1,411 @@
+---
+title: Create a screen
+description: Add a screen with buttons, selectors, and text.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+Use [`ui`](/reference/ui/) to add a screen over the game's **Settings** menu.
+Open **Settings** before you show the screen. If the menu isn't taking input,
+`hold_open` returns `not_ready`. If another screen is open, it returns `busy`.
+
+## Controls
+
+For example, create a screen with a button, a choice, an integer, and a read-only
+text row. Give each control an ID, then use that ID in its events.
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua title="main.lua"
+local screen = assert(ui.create("Garden"))
+assert(ui.add_button(screen, "done", "Done"))
+assert(ui.add_choice(screen, "difficulty", "Difficulty",
+    '[{"id":"normal","label":"Normal"},{"id":"hard","label":"Hard"}]', "normal"))
+assert(ui.add_integer(screen, "count", "Pikmin count", 0, 100, 5, 20))
+assert(ui.add_text(screen, "note", "Status", "Ready"))
+
+ui.on_activated(function(event)
+    if event.screen == screen and event.control == "done" then
+        ui.release_open(screen)
+    end
+end)
+ui.on_choice_changed(function(event)
+    if event.screen == screen then
+        print(event.control .. ": " .. event.previous .. " -> " .. event.choice)
+    end
+end)
+ui.on_integer_changed(function(event)
+    if event.screen == screen then
+        print(event.control .. ": " .. event.previous .. " -> " .. event.integer)
+    end
+end)
+
+local opening
+opening = time.on_presented(function()
+    local opened, why = ui.hold_open(screen)
+    if opened then
+        opening:cancel()
+    elseif why ~= "not_ready" and why ~= "busy" then
+        opening:cancel()
+        print("Can't open Garden: " .. why)
+    end
+end)
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript title="main.js"
+const screen = ui.create("Garden");
+ui.add_button(screen, "done", "Done");
+ui.add_choice(screen, "difficulty", "Difficulty",
+    '[{"id":"normal","label":"Normal"},{"id":"hard","label":"Hard"}]', "normal");
+ui.add_integer(screen, "count", "Pikmin count", 0n, 100n, 5n, 20n);
+ui.add_text(screen, "note", "Status", "Ready");
+
+ui.on("activated", (event) => {
+    if (event.screen === screen && event.control === "done") ui.release_open(screen);
+});
+ui.on("choice_changed", (event) => {
+    if (event.screen === screen) print(event.control + ": " + event.previous + " -> " + event.choice);
+});
+ui.on("integer_changed", (event) => {
+    if (event.screen === screen) print(event.control + ": " + event.previous + " -> " + event.integer);
+});
+
+const opening = time.on("presented", () => {
+    try {
+        ui.hold_open(screen);
+        opening.cancel();
+    } catch (error) {
+        if (error.name !== "not_ready" && error.name !== "busy") {
+            opening.cancel();
+            print("Can't open Garden: " + error.name);
+        }
+    }
+});
+```
+
+</TabItem>
+<TabItem label="C">
+
+```c title="main.c"
+#include "tsuchi/tsuchi.h"
+
+static const TSUCHI_Host *host;
+static TSUCHI_Mod *self;
+static TSUCHI_Screen screen;
+static TSUCHI_Subscription opening, activated, choices, integers;
+
+static bool same(const char *a, const char *b) {
+    while (*a && *a == *b) { ++a; ++b; }
+    return *a == *b;
+}
+static void on_activated(void *user, const TSUCHI_UiActivated *event) {
+    (void)user;
+    if (event->screen.id == screen.id && same(event->control, "done"))
+        host->ui->release_open(self, screen);
+}
+static void on_choice(void *user, const TSUCHI_UiChoiceChanged *event) {
+    (void)user;
+    if (event->screen.id == screen.id) {
+        host->mod->log(self, event->previous);
+        host->mod->log(self, event->choice);
+    }
+}
+static void on_integer(void *user, const TSUCHI_UiIntegerChanged *event) {
+    (void)user;
+    if (event->screen.id == screen.id && event->integer != event->previous)
+        host->mod->log(self, "Pikmin count changed");
+}
+static void on_frame(void *user, const TSUCHI_TimePresented *event) {
+    (void)user; (void)event;
+    TSUCHI_Result result = host->ui->hold_open(self, screen);
+    if (result == TSUCHI_OK) host->cancel(self, opening);
+    else if (result != TSUCHI_NOT_READY && result != TSUCHI_BUSY) {
+        host->cancel(self, opening);
+        host->mod->log(self, "Can't open Garden");
+    }
+}
+#define TRY(call) do { TSUCHI_Result result = (call); if (result != TSUCHI_OK) return result; } while (0)
+
+TSUCHI_Result tsuchi_mod_start(const TSUCHI_Host *given, TSUCHI_Mod *mod) {
+    host = given; self = mod;
+    TRY(host->ui->create(self, "Garden", &screen));
+    TRY(host->ui->add_button(self, screen, "done", "Done"));
+    TRY(host->ui->add_choice(self, screen, "difficulty", "Difficulty",
+        "[{\"id\":\"normal\",\"label\":\"Normal\"},{\"id\":\"hard\",\"label\":\"Hard\"}]", "normal"));
+    TRY(host->ui->add_integer(self, screen, "count", "Pikmin count", 0, 100, 5, 20));
+    TRY(host->ui->add_text(self, screen, "note", "Status", "Ready"));
+    TRY(host->ui->on_activated(self, on_activated, 0, &activated));
+    TRY(host->ui->on_choice_changed(self, on_choice, 0, &choices));
+    TRY(host->ui->on_integer_changed(self, on_integer, 0, &integers));
+    return host->time->on_presented(self, on_frame, 0, &opening);
+}
+```
+
+</TabItem>
+</Tabs>
+
+After you open **Settings**, you should see **Garden**. Use the arrows to change a
+selector, or select **Done** to close the screen. The game restores **Settings**
+when the screen closes.
+
+Events arrive on the game thread at the next world step. Only your mod receives
+your screen's events. Compare `event.screen` to distinguish your own screens. Choice and integer
+events include the new value and `previous`, copied when the player made the edit.
+Setters change the displayed value without emitting a player change event.
+
+Use `ui.add_text` for information that has no action. Generated messages wrap
+within the row, and the native scroller accounts for their arranged height.
+On a page containing only messages, Up and Down scroll through the information;
+Confirm and left/right do not activate a row. Back closes the page.
+
+## Button icons and footer guides
+
+Use [`ui.glyph`](/reference/ui/#glyph) to get a button icon token. The supported
+buttons are `a`, `b`, `x`, `y`, `l`, `r`, and `zr`. Combine the token with your
+own captions in control labels, choice labels, read-only values, or a footer.
+Your mod supplies and localizes the captions. These are native controller icons;
+Tsuchi does not switch them to keyboard icons.
+
+By default, a screen's footer describes its available actions. Call
+[`ui.set_footer`](/reference/ui/#set_footer) to replace that guide while your
+screen is open. For example, set a guide for the Garden screen:
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua
+local select_icon = assert(ui.glyph("a"))
+local back_icon = assert(ui.glyph("b"))
+assert(ui.set_footer(screen, select_icon .. " Select    " .. back_icon .. " Back"))
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript
+const selectIcon = ui.glyph("a");
+const backIcon = ui.glyph("b");
+ui.set_footer(screen, selectIcon + " Select    " + backIcon + " Back");
+```
+
+</TabItem>
+</Tabs>
+
+Tsuchi copies the footer text. Keep a custom guide in step with your screen's
+actions, and pass an empty string to `ui.set_footer(screen, "")` to restore the
+automatic guide. Setting a guide changes its text; your event handlers still
+implement the actions.
+
+## Files
+
+Put `screen.json` in [your mod's folder](/develop/manifest/). The file and code forms
+use the same controls and renderer.
+
+```json title="screen.json"
+{
+  "title": "Garden",
+  "footer": "[PictureFont:IconData key=\"B_Button\" scale=\"0.76\"/] Back",
+  "controls": [
+    {"id": "done", "kind": "button", "label": "Done"},
+    {
+      "id": "difficulty",
+      "kind": "choice",
+      "label": "Difficulty",
+      "options": [
+        {"id": "normal", "label": "Normal"},
+        {"id": "hard", "label": "Hard"}
+      ],
+      "initial": "normal"
+    },
+    {
+      "id": "count",
+      "kind": "integer",
+      "label": "Pikmin count",
+      "minimum": 0,
+      "maximum": 100,
+      "step": 5,
+      "initial": 20
+    },
+    {"id": "note", "kind": "text", "label": "Status", "initial": "Ready"}
+  ]
+}
+```
+
+The optional `footer` uses the same text format as `ui.set_footer`. The example
+contains the exact token returned by `ui.glyph("b")`, with its quotes escaped for
+JSON. Omit `footer`, or set it to an empty string, to use the automatic guide.
+
+Replace the creation and control calls in the example with the file loader, then
+keep the listeners and opening callback:
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua
+local screen = assert(ui.load("screen.json"))
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript
+const screen = ui.load("screen.json");
+```
+
+</TabItem>
+<TabItem label="C">
+
+```c
+TRY(host->ui->load(self, "screen.json", &screen));
+```
+
+</TabItem>
+</Tabs>
+
+## Limits
+
+Each title, caption, read-only value, and custom footer has a limit of 640 UTF-8
+bytes. Token bytes count toward that limit. Titles use plain text and must be
+nonempty. Control and choice captions must also be nonempty.
+
+Captions, read-only values, and footers accept plain UTF-8 plus exact tokens from
+`ui.glyph`. Preserve every attribute of a token. Other markup, altered attributes,
+malformed tokens, stray brackets, control characters, and invalid UTF-8 are
+refused. Screen titles do not accept tokens or brackets.
+
+Give each choice at least two options with distinct IDs. The initial ID must name
+one of those options. Give an integer a positive `step`, and keep its initial value
+between `minimum` and `maximum` on the step grid from `minimum`.
+
+Add controls before you open a screen. Content scrolls as focus moves; read-only
+messages do not take focus. Only
+one screen can be open at a time. Call `release_open` to close it, or `destroy` to
+remove its definition. When your mod stops, Tsuchi closes and destroys its screens
+and ends its listeners.
+
+
+## A Settings tab
+
+After adding a screen's controls, call `ui.hold_settings_tab(screen)` to add the
+screen between Game and Mods in Settings. Its title is the tab label. The player
+selects it with L / R. Up to six custom tabs fit. Call
+`ui.release_settings_tab(screen)` to remove it. Destroying the screen or stopping
+its mod also removes the tab.
+
+The tab uses the native Settings input guards. A screen that has not registered
+a tab can still be opened with `hold_open` while Settings takes input.
+
+## Reset requests
+
+The stock Y action emits [`reset_requested`](/reference/ui/#reset_requested) to
+the screen's owner on the next world step. A custom form must handle this event:
+reset its settings through [`settings.reset`](/reference/settings/#reset), then
+synchronize its controls. Initial control values are current values, so Tsuchi
+does not assume that they are defaults. Generated declared-settings forms already
+handle reset. Informational text is displayed without selector arrows or focus.
+
+## Authored widgets
+
+A generated settings form is one use of `ui`. A cooked UMG widget authored in
+Kadan has its own tree, layout and Blueprint behavior. Install its container with
+the mod, or mount a supported [asset bundle](/reference/asset/#begin_bundle).
+[`asset.load`](/reference/asset/#load) loads its class;
+[`ui.create_widget`](/reference/ui/#create_widget) creates an owned instance;
+[`ui.hold_widget`](/reference/ui/#hold_widget) attaches it to the viewport.
+This path works independently of the Settings menu.
+
+For example, call this function with a live actor or widget from the loaded world:
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua
+local function show_panel(context)
+    local of_class = assert(asset.load("/Game/MyMod/WBP_Garden.WBP_Garden_C"))
+    local widget = assert(ui.create_widget(context, of_class))
+    assert(ui.hold_widget(widget, 0))
+    return widget
+end
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript
+function showPanel(context) {
+    const ofClass = asset.load("/Game/MyMod/WBP_Garden.WBP_Garden_C");
+    const widget = ui.create_widget(context, ofClass);
+    ui.hold_widget(widget, 0);
+    return widget;
+}
+```
+
+</TabItem>
+</Tabs>
+
+`ui.release_widget` detaches the instance so it can be shown again.
+`ui.destroy_widget` detaches and releases it and its constructed children. Context
+or world loss and mod stop end its ownership. Finding a child with
+[`ui.find_widget`](/reference/ui/#find_widget) returns a normal object handle for
+reflection. `ui.construct_widget` and `ui.add_child` build native children inside
+an owned tree; reflected slot properties control their layout. `set_root_widget`
+can populate an empty tree before its first presentation. Once Slate content has
+been built, create a new instance to assign a different root. The base `UserWidget` class is abstract: supply a
+loaded concrete widget class.
+
+### Text and button icons
+
+In Kadan, add a `CarrotRichTextBlock` to your widget and configure its
+`PictureFontDecorator` before cooking the asset. Give the child a name, such as
+`FooterGuide`, so your script can find it. For example, set its text after
+creating the owned widget:
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua
+local function set_panel_guide(widget)
+    local label = assert(ui.find_widget(widget, "FooterGuide"))
+    local back_icon = assert(ui.glyph("b"))
+    assert(ui.set_widget_text(label, back_icon .. " Back"))
+end
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript
+function setPanelGuide(widget) {
+    const label = ui.find_widget(widget, "FooterGuide");
+    const backIcon = ui.glyph("b");
+    ui.set_widget_text(label, backIcon + " Back");
+}
+```
+
+</TabItem>
+</Tabs>
+
+[`ui.set_widget_text`](/reference/ui/#set_widget_text) accepts an owned
+`CarrotRichTextBlock` inside a UserWidget your mod created. It uses the same
+640-byte text format as generated captions and footers. Empty text clears the
+label. The value stays when you hide the widget and ends with its owning root.
+The setter changes the text property; layout and decorators remain configured
+by the authored widget. Generic reflection's existing FText limits still apply.
+
+### Button events
+
+To observe a native UMG Button, call `ui.hold_button_events(button)` and listen
+for [`button_event`](/reference/ui/#button_event), comparing its widget handle.
+The event's signal is `clicked`, `pressed`, `released`, `hovered`, or `unhovered`.
+These are real native events, delivered only to the owner on the next world step.
+Other Blueprint delegates and event payloads are not covered by this bridge.
+Showing a widget does not assign controller focus or consume gameplay input;
+the authored widget and its reflected input functions control those behaviors.
+
+An edited stock widget can instead replace its existing package and be created
+by the game in the usual way. A widget asset does not need a gameplay declaration
+in [`content`](/reference/content/); a Settings entry still needs its UI placement.

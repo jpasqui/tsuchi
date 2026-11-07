@@ -1,0 +1,187 @@
+---
+title: Inspect a loaded asset
+description: Load a data table, read its class and path, and release it.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+Start with [your first mod](/develop/first-mod/). We'll load the creature parameter
+data table and write its class name and object path to the log.
+
+## Path
+
+Pass an object path to [`asset.load`](/reference/asset/#load). Write the package name,
+a dot, then the object name. For example, the creature parameter table uses
+`/Game/Carrot4/Core/GActor/DT_TekiParameter.DT_TekiParameter`.
+
+For a Blueprint class, add `_C` to the object name. If an object is already loaded,
+read its path with [`reflection.path`](/reference/reflection/#path). If a class is
+already loaded, you can find it by name with `reflection.find_class`.
+
+## Code
+
+For example, load the table after the player gets control, read its class name and
+path, then release it. We'll only do this once each time the mod starts, as loading
+an asset from storage stops the game until the load finishes.
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua title="main.lua"
+local tried = false
+
+time.on_step(function()
+    if tried or game.has_control() ~= true then return end
+    tried = true
+    local sheet, why = asset.load(
+        "/Game/Carrot4/Core/GActor/DT_TekiParameter.DT_TekiParameter")
+    if not sheet then
+        print("Couldn't load the table: " .. why)
+        return
+    end
+
+    local path = reflection.path(sheet)
+    local kind = reflection.class_of(sheet)
+    local name = kind and reflection.name(kind)
+    if path then print(path) end
+    if name then print("Class: " .. name) end
+    if not path or not name then print("Couldn't inspect the table") end
+
+    local released, reason = asset.release(sheet)
+    if not released then print("Couldn't release the table: " .. reason) end
+end)
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript title="main.js"
+let tried = false;
+
+time.on("step", async () => {
+    if (tried || !game.has_control()) return;
+    tried = true;
+    let sheet;
+    try {
+        sheet = await asset.load(
+            "/Game/Carrot4/Core/GActor/DT_TekiParameter.DT_TekiParameter");
+    } catch (error) {
+        print("Couldn't load the table: " + error.name);
+        return;
+    }
+
+    try {
+        print(reflection.path(sheet));
+        print("Class: " + reflection.name(reflection.class_of(sheet)));
+    } catch (error) {
+        print("Couldn't inspect the table: " + error.name);
+    }
+
+    try {
+        asset.release(sheet);
+    } catch (error) {
+        print("Couldn't release the table: " + error.name);
+    }
+});
+```
+
+</TabItem>
+<TabItem label="C">
+
+[Build this code](/develop/compiled-mod/) into `mod.nro`.
+
+```c title="main.c"
+#include "tsuchi/tsuchi.h"
+
+static const TSUCHI_Host *host;
+static TSUCHI_Mod *self;
+static TSUCHI_Subscription steps;
+static bool tried;
+
+static void on_step(void *user, const TSUCHI_TimeStep *event) {
+    (void)user;
+    (void)event;
+    bool control = false;
+    if (tried || host->game->has_control(self, &control) != TSUCHI_OK || !control) return;
+    tried = true;
+    TSUCHI_Object sheet = {0}, kind = {0};
+    TSUCHI_Result result = host->asset->load(self,
+        "/Game/Carrot4/Core/GActor/DT_TekiParameter.DT_TekiParameter", &sheet);
+    if (result != TSUCHI_OK) {
+        host->mod->log(self, "Couldn't load the table");
+        return;
+    }
+
+    char text[512];
+    uint64_t needed = 0;
+    if (host->reflection->path(self, sheet, text, sizeof text, &needed) == TSUCHI_OK) {
+        host->mod->log(self, text);
+    } else {
+        host->mod->log(self, "Couldn't read the table's path");
+    }
+    if (host->reflection->class_of(self, sheet, &kind) == TSUCHI_OK &&
+        host->reflection->name(self, kind, text, sizeof text, &needed) == TSUCHI_OK) {
+        host->mod->log(self, text);
+    } else {
+        host->mod->log(self, "Couldn't read the table's class");
+    }
+    if (host->asset->release(self, sheet) != TSUCHI_OK) {
+        host->mod->log(self, "Couldn't release the table");
+    }
+}
+
+TSUCHI_Result tsuchi_mod_start(const TSUCHI_Host *given, TSUCHI_Mod *mod) {
+    host = given;
+    self = mod;
+    tried = false;
+    return host->time->on_step(mod, on_step, 0, &steps);
+}
+```
+
+</TabItem>
+</Tabs>
+
+[Install your mod](/players/install-a-mod/) and enter a level. You should see the
+table's path and class name in the [log](/develop/logs/). If the C text
+buffer is too small, the read returns `TSUCHI_CAPACITY` and `needed` tells you how
+many bytes to allow, including the terminating zero.
+
+## Fields
+
+If you need a field that another service doesn't cover, read it through
+`reflection.get`. Write names separated by dots, and use a zero-based index for an
+array entry. For example, `RootComponent.RelativeLocation.X` reads one coordinate.
+Names aren't case-sensitive.
+
+In Lua, you'll get structs as tables and arrays as lists. In C, read their members
+by path. For text fields, use `get_text`. Lua and JavaScript call a reflected
+function with `reflection.call`. Lua receives its result and a table of output
+arguments. JavaScript receives `[result, outputs]` and uses `null` for no result,
+and API failures throw an `Error` named by the result code. C prepares a call with
+`begin_call`, fills its arguments, invokes it, reads the results, and ends it with
+`end_call`.
+
+If another service covers the change, use that service, as it follows the game's
+rules. For example, use [`datatable`](/reference/datatable/) for table overrides.
+`reflection.set` writes memory without telling the game, and it doesn't restore
+fields when your mod stops.
+
+## Lifetime
+
+After `asset.load` succeeds, Tsuchi keeps the asset loaded until your mod releases
+it or stops. Loading it twice gives you the same object and doesn't add another hold.
+After release, the game can unload it once nothing else needs it. Don't keep using a
+released asset's handle without checking that the object still exists.
+
+
+## Renderer console values
+
+`reflection.console_variable(name)` reads a numeric console variable.
+`reflection.hold_console_variable(name, value)` holds its value and preserves its
+priority. `reflection.release_console_variable(name)` restores its last game
+value, and stopping the mod releases its holds. Another mod's hold returns
+`busy`, and read-only values return `denied`.
+
+These calls read back the engine value. A scene may use a different renderer
+path, so verify the visual effect in the game. Frame cap and VSync use the
+presenter policy in [time](/develop/time/).

@@ -1,0 +1,21 @@
+{
+  "id": "check.cleanup",
+  "name": "The check of failed startup cleanup",
+  "version": "1.0.0",
+  "meta": {
+    "check": "cleanup",
+    "check_explicit": true,
+    "checks": [
+      "setup",
+      "prepared",
+      "ticks",
+      "body",
+      "visibility",
+      "material",
+      "components",
+      "owned",
+      "callbacks",
+      "reused"
+    ]
+  }
+}

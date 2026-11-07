@@ -1,0 +1,393 @@
+service: reflection
+tutorials:
+  - {title: Inspect a loaded asset, path: /develop/reflection-and-assets/}
+layer: engine
+acts_on: object
+lifetime: process
+brief: "Reads and writes any field of any object by name, and calls any function the engine exposes."
+description: |
+  The engine stores reflection data for every class, including its fields,
+  their types, and the functions that scripts can call. This service uses that
+  data, so your mod can reach things that no other service covers without
+  knowing their memory layout.
+
+  You refer to a field by its path. A path is a list of field names joined by
+  dots, with `[n]` for an array element, starting from `0`. For example,
+  `RootComponent.RelativeLocation.X` or `Tags[2]`. If a field refers to
+  another object, a dot after it continues into that object. Names aren't
+  case-sensitive.
+
+  In Lua, values have their natural types: a boolean, a number, a string, a
+  handle, `nil` for an empty object reference, a table of fields for a struct,
+  and a list for an array. In JavaScript, structs are objects, arrays are Arrays,
+  integer fields are BigInt, and an empty object reference is `null`. Both languages
+  call a reflected function in one step with `call`.
+
+  In a compiled mod, you read and write one value at a time: a boolean, an
+  integer, a number, an object, or nothing for an empty object reference.
+  Reading a struct or an array returns its kind, and for an array it also
+  returns the length. Their members have their own paths, and `field_at` lists
+  a struct's fields. Text has its own functions. To call a function, you begin
+  a call, set its arguments by name, invoke it, read its results by name, and
+  end the call. A function's return value is named `ReturnValue`.
+
+  This service doesn't check what a field or a function means to the game. If
+  another service can do the job, use that one instead, as it follows the
+  rules that go with the change.
+
+functions:
+  - name: find_class
+    doc: |
+      Finds a class by its name, like `Actor`. Keep the handle, as finding a class
+      searches every object in the game.
+    params:
+      - {name: name, type: text, doc: "The class's name, without a prefix."}
+    returns: {type: handle<object>, doc: The class.}
+    fails:
+      not_found: "No class with that name is loaded."
+    users: [groink, online-coop]
+
+  - name: class_of
+    doc: "The class that an object belongs to."
+    params:
+      - {name: object, type: handle<object>, doc: "The object to check."}
+    returns: {type: handle<object>, doc: The object's class.}
+    fails:
+      not_found: "The object no longer exists."
+    users: [groink, online-coop]
+
+  - name: is_a
+    doc: "Checks if an object belongs to a class or to one of its subclasses."
+    params:
+      - {name: object, type: handle<object>, doc: "The object to check."}
+      - {name: of_class, type: handle<object>, doc: The class.}
+    returns: {type: bool, doc: "`true` when it does."}
+    fails:
+      not_found: "The object or the class no longer exists."
+    users: [groink, online-coop]
+
+  - name: name
+    doc: "An object's name."
+    params:
+      - {name: object, type: handle<object>, doc: The object to read.}
+    returns: {type: text, doc: The name.}
+    fails:
+      not_found: "The object no longer exists."
+    users: [groink, online-coop]
+
+  - name: path
+    doc: "An object's path, with its package, then the object, then anything inside of it. You can pass an asset's path to `asset.load`."
+    params:
+      - {name: object, type: handle<object>, doc: The object.}
+    returns: {type: text, doc: The path.}
+    fails:
+      not_found: "The object no longer exists."
+    users: [groink, online-coop]
+
+  - name: get
+    doc: |
+      Reads a field.
+
+      In Lua, a struct is a table of its fields, an array is a list, and text is a
+      string. In JavaScript, structs are objects, arrays are Arrays, and text is a
+      string. Any struct member that can't be read is left out.
+    params:
+      - {name: object, type: handle<object>, doc: The object to read.}
+      - {name: path, type: text, doc: The path to the field.}
+    returns: {type: value, doc: The field's value.}
+    fails:
+      not_found: "The object no longer exists, it has no field with that name, an index is out of range, or an object reference in the path is empty."
+      invalid: "The path isn't valid."
+      unsupported: "The field is a kind that this service can't read."
+    users: [groink, online-coop]
+
+  - name: set
+    doc: |
+      Writes a field. This only changes the memory, and the game isn't notified. If
+      the game copies the field somewhere else or reacts to it through a function,
+      call that function instead.
+
+      In Lua, pass a table for a struct or a list for an array. In JavaScript, pass
+      an object for a struct or an Array. Named struct fields are written and the
+      others stay unchanged. An array replaces the whole contents. If the call
+      fails, nothing changes.
+    params:
+      - {name: object, type: handle<object>, doc: The object to change.}
+      - {name: path, type: text, doc: The path to the field.}
+      - {name: value, type: value, doc: "The new value. You can pass an integer where a number is expected."}
+    fails:
+      not_found: "The object no longer exists, it has no field with that name, an index is out of range, or an object reference in the path is empty. This also happens if the value is an object that no longer exists."
+      invalid: "The path isn't valid, or the value doesn't fit the field. This means the wrong kind, an integer outside of the field's range, or an object of the wrong class."
+      unsupported: "The field is a kind that this service can't write."
+      capacity: "Text is too long for a name, or a list has more than 1,000,000 elements."
+      no_memory: "The game is out of memory."
+    users: [groink, online-coop]
+
+  - name: call
+    only: script
+    returns_outputs: true
+    doc: |
+      Calls one of an object's functions. To call a function that belongs to the
+      class itself, pass a class instead of an object. The function runs
+      immediately.
+
+      In Lua, returns the function's result, or `nil` if it has none, followed by a
+      table of the arguments the function wrote. A failed call returns `nil` and
+      the result's name. In JavaScript, returns `[result, outputs]`, with `null`
+      for no result and an object of written arguments. Failures throw an `Error`
+      whose `name` is the result code.
+    params:
+      - {name: object, type: handle<object>, doc: "The object to call the function on, or a class."}
+      - {name: name, type: text, doc: "The function's name, like `K2_GetActorLocation`."}
+      - {name: args, type: value, optional: true, doc: "A table of arguments by name, like `{NewLocation = {X = 0, Y = 0, Z = 100}}`. Any arguments that you leave out are zero."}
+    returns: {type: value, doc: "The function's result."}
+    fails:
+      not_found: "The object no longer exists, its class has no function with that name, or the function has no argument with one of the names."
+      invalid: "An argument doesn't fit the function."
+      unsupported: "An argument is a kind that this service can't write."
+      not_ready: "The engine can't make the call right now."
+      no_memory: "The game is out of memory."
+    users: [groink, online-coop]
+
+  - name: get_text
+    only: native
+    doc: The text of a name or string field.
+    params:
+      - {name: object, type: handle<object>, doc: The object to read.}
+      - {name: path, type: text, doc: The path to the field.}
+    returns: {type: text, doc: The text.}
+    fails:
+      not_found: "The object no longer exists, or the path doesn't lead to a field."
+      invalid: "The path isn't valid, or the field doesn't hold text."
+    users: [groink, online-coop]
+
+  - name: set_text
+    only: native
+    doc: Writes a name or string field.
+    params:
+      - {name: object, type: handle<object>, doc: The object to change.}
+      - {name: path, type: text, doc: The path to the field.}
+      - {name: text, type: text, doc: "The new text, as null-terminated UTF-8."}
+    fails:
+      not_found: "The object no longer exists, or the path doesn't lead to a field."
+      invalid: "The path isn't valid, the field doesn't hold text, or the text isn't valid UTF-8."
+      capacity: The text is too long for a name.
+      no_memory: "The game is out of memory."
+    users: [groink, online-coop]
+
+  - name: resize
+    only: native
+    doc: |
+      Changes the length of an array. New elements are zero, empty, or a new struct
+      with the engine's defaults. Elements past the new length are destroyed.
+    params:
+      - {name: object, type: handle<object>, doc: The object to change.}
+      - {name: path, type: text, doc: The path to the array.}
+      - {name: count, type: u32, doc: The new length.}
+    fails:
+      not_found: "The object no longer exists, or the path doesn't lead to a field."
+      invalid: "The path isn't valid, or the field isn't a resizable array."
+      unsupported: "The array holds a kind of element that this service can't create or destroy."
+      capacity: "The length is more than 1,000,000."
+      no_memory: "The game is out of memory."
+    users: [groink, online-coop]
+
+  - name: field_at
+    only: native
+    doc: |
+      The name of one field of an object or a struct, by its index. To list every
+      field, count up from `0` until the call fails. A class's own fields come
+      before its parent's.
+    params:
+      - {name: object, type: handle<object>, doc: The object to read.}
+      - {name: path, type: text, doc: "The path to a struct, or an empty string for the object itself."}
+      - {name: index, type: u32, doc: "The index."}
+    returns: {type: text, doc: "The field's name."}
+    fails:
+      not_found: "The object no longer exists, the path doesn't lead to a field, or the index is past the last field."
+      invalid: "The path isn't valid, or it doesn't lead to a struct."
+    users: [groink, online-coop]
+
+  - name: begin_call
+    only: native
+    doc: |
+      Prepares a call to one of an object's functions. To call a function that
+      belongs to the class itself, pass a class instead of an object. The call lasts
+      until `end_call` or until your mod stops.
+    owns: true
+    params:
+      - {name: object, type: handle<object>, doc: "The object to call the function on, or a class."}
+      - {name: name, type: text, doc: "The function's name, like `K2_GetActorLocation`."}
+    returns: {type: handle<prepared_call>, doc: "The call, to pass to the functions below."}
+    fails:
+      not_found: "The object no longer exists, or its class has no function with that name."
+      not_ready: "The engine can't make the call right now."
+      no_memory: "The game is out of memory."
+    users: [groink, online-coop]
+
+  - name: call_set
+    only: native
+    doc: "Sets one argument of a call, or one member of an argument. Any arguments that you don't set are zero."
+    owns: true
+    params:
+      - {name: call, type: handle<prepared_call>, doc: The call.}
+      - {name: path, type: text, doc: "The argument's name, or a path that starts with it, like `NewLocation.X`."}
+      - {name: value, type: value, doc: The value.}
+    fails:
+      not_found: "Your mod has no call with that handle, or the function has no argument with that name."
+      invalid: "The path isn't valid, or the value doesn't fit the argument."
+      unsupported: "The argument is a kind that this service can't write."
+    users: [groink, online-coop]
+
+  - name: call_set_text
+    only: native
+    doc: Sets a name or string argument of a call.
+    owns: true
+    params:
+      - {name: call, type: handle<prepared_call>, doc: The call.}
+      - {name: path, type: text, doc: "The argument's name, or a path that starts with it."}
+      - {name: text, type: text, doc: "The text, as null-terminated UTF-8."}
+    fails:
+      not_found: "Your mod has no call with that handle, or the function has no argument with that name."
+      invalid: "The path isn't valid, the argument doesn't hold text, or the text isn't valid UTF-8."
+      capacity: The text is too long for a name.
+      no_memory: "The game is out of memory."
+    users: [groink, online-coop]
+
+  - name: call_resize
+    only: native
+    doc: "Changes the length of an array argument of a call, the same way that `resize` does for a field."
+    owns: true
+    params:
+      - {name: call, type: handle<prepared_call>, doc: The call.}
+      - {name: path, type: text, doc: "The argument's name, or a path that starts with it."}
+      - {name: count, type: u32, doc: The new length.}
+    fails:
+      not_found: "Your mod has no call with that handle, or the function has no argument with that name."
+      invalid: "The path isn't valid, or the argument isn't a resizable array."
+      unsupported: "The array holds a kind of element that this service can't create or destroy."
+      capacity: "The length is more than 1,000,000."
+      no_memory: "The game is out of memory."
+    users: [groink, online-coop]
+
+  - name: invoke
+    only: native
+    doc: |
+      Runs the function with the arguments that have been set so far. You can invoke
+      a call more than once. The function runs immediately, in the middle of your
+      mod's own code, so only invoke from the game's own thread. That is the thread
+      that your event and frame handlers run on.
+    owns: true
+    params:
+      - {name: call, type: handle<prepared_call>, doc: The call.}
+    fails:
+      not_found: "Your mod has no call with that handle, or the object no longer exists."
+      not_ready: "The engine can't make the call right now."
+    users: [groink, online-coop]
+
+  - name: call_get
+    only: native
+    doc: "Reads a result of a call after `invoke`, or reads an argument."
+    owns: true
+    params:
+      - {name: call, type: handle<prepared_call>, doc: The call.}
+      - {name: path, type: text, doc: "`ReturnValue`, the name of an output argument, or a path that starts with either one."}
+    returns: {type: value, doc: The value.}
+    fails:
+      not_found: "Your mod has no call with that handle, or the function has no result with that name."
+      invalid: "The path isn't valid."
+      unsupported: "The result is a kind that this service can't read."
+    users: [groink, online-coop]
+
+  - name: call_get_text
+    only: native
+    doc: A text result of a call.
+    owns: true
+    params:
+      - {name: call, type: handle<prepared_call>, doc: The call.}
+      - {name: path, type: text, doc: The path to the result.}
+    returns: {type: text, doc: The text.}
+    fails:
+      not_found: "Your mod has no call with that handle, or the function has no result with that name."
+      invalid: "The path isn't valid, or the result doesn't hold text."
+    users: [groink, online-coop]
+
+  - name: call_field_at
+    only: native
+    doc: |
+      The name of one argument or result of a call, or of one field of a struct
+      inside of them, by its index. Count up from `0` until the call fails.
+    owns: true
+    params:
+      - {name: call, type: handle<prepared_call>, doc: The call.}
+      - {name: path, type: text, doc: "The path to a struct, or an empty string for the function's own arguments and results."}
+      - {name: index, type: u32, doc: "The index."}
+    returns: {type: text, doc: The name.}
+    fails:
+      not_found: "Your mod has no call with that handle, the path doesn't lead to a field, or the index is past the last one."
+      invalid: "The path isn't valid, or it doesn't lead to a struct."
+    users: [groink, online-coop]
+
+  - name: call_output_at
+    only: native
+    doc: |
+      The name of one of the values that a function returns, by its index. These are
+      its result and the arguments that it writes. Count up from `0` until the call
+      fails.
+    owns: true
+    params:
+      - {name: call, type: handle<prepared_call>, doc: The call.}
+      - {name: index, type: u32, doc: "The index."}
+    returns: {type: text, doc: The name.}
+    fails:
+      not_found: "Your mod has no call with that handle, or the index is past the last one."
+    users: [groink, online-coop]
+
+  - name: end_call
+    only: native
+    doc: "Ends a call and frees its memory."
+    owns: true
+    params:
+      - {name: call, type: handle<prepared_call>, doc: The call.}
+    fails:
+      not_found: "Your mod has no call with that handle."
+    users: [groink, online-coop]
+
+  - name: console_variable
+    doc: "Reads a numeric engine console variable, such as r.Shadow.MaxResolution. This reads the engine value, not evidence that a scene uses the option."
+    params:
+      - {name: name, type: text, doc: "The variable's ASCII name, at most 127 bytes, with no whitespace."}
+    returns: {type: f32, doc: "The value."}
+    fails:
+      invalid: "The name is empty, too long, or contains whitespace."
+      not_found: "The variable does not exist."
+      not_ready: "The console registry is unavailable."
+    completes: get
+  - name: hold_console_variable
+    doc: |
+      Holds a numeric engine console variable at a value until release or mod
+      stop. Another mod's hold returns busy. The variable's existing priority
+      is preserved. Later game writes become the new restoration baseline,
+      and the hold is reapplied on the next world step. A replaced registry
+      entry ends the hold. Frame limit and VSync use time.hold_presentation.
+    owns: true
+    params:
+      - {name: name, type: text, doc: "The variable's ASCII name, at most 127 bytes, with no whitespace."}
+      - {name: value, type: f32, doc: "The finite numeric value."}
+    fails:
+      invalid: "The name or numeric value is invalid."
+      not_found: "The variable does not exist."
+      not_ready: "The registry is unavailable or the variable refused the value."
+      denied: "The variable is read-only, or belongs to the presenter."
+      busy: "Another mod holds the variable."
+      no_memory: "The hold could not be recorded."
+    completes: set
+  - name: release_console_variable
+    doc: "Releases your numeric console-variable hold. It restores the last game value if the current value still belongs to this hold."
+    owns: true
+    params:
+      - {name: name, type: text, doc: "The variable's name."}
+    fails:
+      invalid: "The name is invalid."
+      not_found: "Your mod has no hold on the variable."
+    completes: set

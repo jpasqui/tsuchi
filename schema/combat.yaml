@@ -1,0 +1,200 @@
+service: combat
+tutorials:
+  - {title: Heal a captain, path: /develop/combat/}
+layer: game
+acts_on: actor
+lifetime: world
+brief: "Reads and changes health, and deals damage and knockback."
+description: |
+  Captains, Oatchi, creatures, and some objects have health. Use this service
+  to read and change it. Damage goes through the game's own damage handling,
+  so the target reacts, the attacker gets credit, and a Dandori Battle scores
+  the hit.
+
+  Pikmin don't have a health value. A Pikmin is either alive or dead.
+
+enums:
+  AttackKind:
+    open: false
+    doc: "The kind of hit. This decides how the target reacts."
+    values:
+      - {name: normal, value: 0, doc: An ordinary hit.}
+      - {name: direct_hit, value: 1, doc: A thrown Pikmin landing on its target.}
+      - {name: freeze, value: 2, doc: "Ice. Enough of it freezes the target."}
+      - {name: fire, value: 3, doc: Fire.}
+      - {name: water, value: 4, doc: Water.}
+      - {name: electric, value: 5, doc: Electricity.}
+      - {name: poison, value: 6, doc: Poison.}
+      - {name: bubble, value: 7, doc: "A bubble that traps the target."}
+      - {name: bomb, value: 8, doc: "A bomb rock. The target is knocked back."}
+      - {name: ice_bomb, value: 18, doc: An ice blast.}
+      - {name: strong, value: 26, doc: "A heavy hit. Unlike `normal`, it also hits a captain that is riding Oatchi."}
+      - {name: cannon, value: 34, doc: A cannon shot.}
+
+  DeathCause:
+    open: false
+    doc: "The cause of a Pikmin's death, as recorded by the game."
+    values:
+      - {name: other, value: 0, doc: "The game's default cause, used when no other cause applies."}
+      - {name: swallowed, value: 1, doc: Eaten.}
+      - {name: crushed, value: 2, doc: Crushed.}
+      - {name: fire, value: 3, doc: Burned.}
+      - {name: water, value: 4, doc: "Killed by water that it can't survive in."}
+      - {name: gas, value: 5, doc: Poisoned.}
+      - {name: electric, value: 6, doc: Electrocuted.}
+      - {name: bomb, value: 7, doc: Caught in a blast.}
+      - {name: drowned, value: 8, doc: Drowned.}
+      - {name: swamp, value: 9, doc: Sunk in a swamp.}
+      - {name: day_end, value: 10, doc: Left out when the day ended.}
+      - {name: fell, value: 11, doc: Fell out of the world.}
+      - {name: player_down, value: 12, doc: Lost when its leader went down.}
+      - {name: left_behind, value: 13, doc: Left behind.}
+  MessageKind:
+    open: false
+    classified: true
+    doc: "A hit, a knockback, or a whistle that an actor received."
+    values:
+      - {name: hit, value: 0, doc: A hit.}
+      - {name: knock, value: 1, doc: "A knockback."}
+      - {name: whistle, value: 2, doc: A whistle.}
+      - {name: other, value: 3, doc: Anything else.}
+
+flags:
+  LifeFlags:
+    doc: Options for `set_life`.
+    values:
+      - {name: smooth_gauge, value: 1, doc: "The health gauge animates to the new value. Without this, the gauge jumps to it."}
+
+structs:
+  Life:
+    doc: "An actor's health."
+    fields:
+      - {name: life, type: f32, doc: "Current health."}
+      - {name: max_life, type: f32, doc: "Maximum health."}
+      - {name: extra, type: f32, doc: "Current bonus health, like a shield. `0` for actors that don't have any."}
+      - {name: max_extra, type: f32, doc: "Maximum bonus health."}
+
+functions:
+  - name: life
+    doc: "The actor's current and maximum health."
+    params:
+      - {name: actor, type: handle<actor>, doc: The actor to read.}
+    returns: {type: struct<Life>, doc: "The actor's health."}
+    fails:
+      not_found: "The actor no longer exists or has no health. Pikmin don't have health."
+    users: [groink, online-coop]
+
+  - name: set_life
+    doc: |
+      Changes an actor's health without a hit. The actor doesn't react, and no one
+      is credited. Raising its health heals it. Setting its health to `0` downs or
+      defeats the actor on its next update.
+    params:
+      - {name: actor, type: handle<actor>, doc: The actor to change.}
+      - {name: life, type: f32, doc: "The new health, from `0` to the actor's maximum health."}
+      - {name: flags, type: flags<LifeFlags>, default: 0, doc: Options.}
+    fails:
+      not_found: "The actor no longer exists or has no health."
+      invalid: "The health is negative, or it is more than the actor's maximum health."
+      not_ready: "The game isn't ready."
+    users: [groink, online-coop]
+
+  - name: damage
+    doc: |
+      Hits an actor. The target reacts to the kind of hit, and then loses health
+      after the game's own scaling. Some kinds of hit use the target's own damage
+      values and ignore `amount`.
+    params:
+      - {name: actor, type: handle<actor>, doc: The actor to hit.}
+      - {name: amount, type: f32, doc: "The damage before scaling."}
+      - {name: kind, type: enum<AttackKind>, default: normal, doc: The kind of hit.}
+      - {name: attacker, type: handle<actor>, optional: true, doc: "The actor that gets credit for the hit."}
+    fails:
+      not_found: "The target no longer exists or has no health, or the attacker no longer exists."
+      invalid: The amount is negative.
+      not_ready: "The target can't be hit right now, like when it is asleep or the game is stopped."
+      no_memory: "The game is out of memory."
+    users: [groink, online-coop]
+
+  - name: knockback
+    doc: |
+      Knocks back a captain, Oatchi, or a Pikmin. Creatures ignore knockback.
+    params:
+      - {name: actor, type: handle<actor>, doc: The actor to throw.}
+      - {name: velocity, type: vec3, doc: "The knockback velocity, in centimeters per second."}
+      - {name: damage, type: f32, default: 0, doc: "Damage to deal along with it."}
+      - {name: attacker, type: handle<actor>, optional: true, doc: The actor that caused it.}
+    fails:
+      not_found: "The target or the attacker no longer exists."
+      invalid: The damage is negative.
+      not_ready: "The target can't be hit right now, like when it is asleep or the game is stopped."
+      no_memory: "The game is out of memory."
+    users: [groink, online-coop]
+
+  - name: kill_pikmin
+    doc: |
+      Kills a Pikmin the same way that the game does. It dies from the cause that
+      you pass, leaves a ghost, counts as a death, and is reported by `pikmin_died`.
+      This happens at the start of the game's next world update. To remove a Pikmin
+      without any of that, use `entity.destroy`.
+    params:
+      - {name: pikmin, type: handle<actor>, doc: The Pikmin.}
+      - {name: cause, type: enum<DeathCause>, doc: "The cause of death."}
+      - {name: attacker, type: handle<actor>, optional: true, doc: The actor to blame.}
+    fails:
+      not_found: "The Pikmin or the killer no longer exists, the actor isn't a Pikmin, or the Pikmin is already being removed."
+      not_ready: "The game can't remove actors right now."
+    users: [groink, online-coop]
+
+events:
+  - name: damaged
+    doc: |
+      Emitted when an actor's health drops, whether from a hit or from being set
+      lower, and whether the game or a mod caused it. Your handler is called at the
+      start of the next world step.
+    fields:
+      - {name: actor, type: handle<actor>, doc: The actor that was hurt.}
+      - {name: attacker, type: handle<actor>, optional: true, doc: "The actor that the game credited with the hit."}
+      - {name: previous, type: f32, doc: "Health before the hit."}
+      - {name: life, type: f32, doc: "Health after the hit."}
+    users: [groink, online-coop]
+
+  - name: defeated
+    doc: "Emitted after `damaged` when the damage brought an actor's health to `0`. Pikmin don't have health, so they aren't reported here."
+    fields:
+      - {name: actor, type: handle<actor>, doc: The actor that was defeated.}
+      - {name: attacker, type: handle<actor>, optional: true, doc: "The actor that the game credited with the hit."}
+      - {name: previous, type: f32, doc: "Health before the final hit."}
+      - {name: life, type: f32, doc: "The health after the final hit, which is `0` or less."}
+    users: [groink, online-coop]
+
+  - name: pikmin_died
+    doc: |
+      Emitted when the game counts a Pikmin's death. Pikmin don't have health, so
+      this is the only event that reports their deaths. A Pikmin that goes back into
+      its Onion or is removed with `entity.destroy` isn't reported. Your handler is
+      called at the start of the next world step, and the Pikmin might no longer exist by
+      then.
+    fields:
+      - {name: pikmin, type: handle<actor>, doc: The Pikmin.}
+      - {name: kind, type: enum<EntityKind>, doc: "The Pikmin's kind, in the same format that `entity.kind` returns. It includes the Pikmin's type."}
+      - {name: pikmin_type, type: enum<PikminType>, doc: "The Pikmin's type, in the same format that `pikmin.info` returns. Empty if the game no longer had it when the death was counted."}
+      - {name: attacker, type: handle<actor>, optional: true, doc: "The actor that the game blames."}
+      - {name: cause, type: enum<DeathCause>, doc: "The cause of death that the game recorded."}
+      - {name: location, type: vec3, doc: "The Pikmin's last position, in centimeters."}
+    users: [groink, online-coop]
+
+  - name: intercepted
+    doc: |
+      Emitted for each hit, knockback, or whistle that an actor receives while a mod
+      has suspended its AI with `entity.hold_suspended`. The actor doesn't react on
+      its own, so the mod that controls the actor decides what to do. Your handler
+      is called during the world step's update, as each one is received.
+    fields:
+      - {name: actor, type: handle<actor>, doc: The suspended actor.}
+      - {name: attacker, type: handle<actor>, optional: true, doc: "The actor that sent it."}
+      - {name: kind, type: enum<MessageKind>, doc: "Its kind."}
+      - {name: amount, type: f32, doc: "For a hit, the damage before scaling. For a knockback, the damage that comes with it."}
+      - {name: attack, type: enum<AttackKind>, doc: "For a hit, the kind of hit. The game has some kinds that `AttackKind` doesn't list."}
+      - {name: vector, type: vec3, doc: "For a hit, the position that it came from. For a knockback, the velocity that it would apply."}
+    users: [groink, online-coop]

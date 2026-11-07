@@ -1,0 +1,223 @@
+service: component
+tutorials:
+  - {title: Inspect a loaded asset, path: /develop/reflection-and-assets/}
+layer: engine
+acts_on: component
+lifetime: world
+brief: "Lists an actor's components and owns changes to visibility, materials and instance culling."
+description: |
+  An actor is built from components, like the mesh that is drawn, the
+  collision shapes, lights, attach points, and components that move the actor
+  or control its AI. Use this service to list an actor's components, hide
+  them, add your own, and swap the materials in a mesh's slots.
+
+  A component is an object, so you can also use `reflection` to read its fields
+  and call its functions. Use this service when the change has to be undone
+  when your mod stops. Use `collision` to hold gameplay collision off.
+
+functions:
+  - name: list
+    doc: "All of an actor's components, in the engine's own order."
+    params:
+      - {name: actor, type: handle<actor>, doc: The actor.}
+    returns: {type: list<handle<component>>, doc: "The components."}
+    fails:
+      not_found: "The actor no longer exists."
+      not_ready: "The engine isn't ready."
+    users: [groink, online-coop]
+
+  - name: find
+    doc: "One of an actor's components, found by its name, like `Mesh`. The name isn't case-sensitive."
+    params:
+      - {name: actor, type: handle<actor>, doc: The actor.}
+      - {name: name, type: text, doc: "The component's name, in the same format that `reflection.name` returns."}
+    returns: {type: handle<component>, doc: "The component."}
+    fails:
+      not_found: "The actor no longer exists, or it has no component with that name."
+      not_ready: "The engine isn't ready."
+    users: [groink, online-coop]
+
+  - name: owner
+    doc: "The actor that a component belongs to."
+    params:
+      - {name: component, type: handle<component>, doc: "The component."}
+    returns: {type: handle<actor>, doc: The actor.}
+    fails:
+      not_found: "The component no longer exists, or it doesn't belong to an actor."
+    users: [groink, online-coop]
+
+  - name: hold_hidden
+    doc: |
+      Hides a component and keeps it hidden. With `children`, the components of the
+      same actor that are attached under it are hidden too. Components of another
+      actor that is attached to it aren't hidden. The game can show components for
+      its own reasons, so a held component is hidden again every world step.
+
+      A component stays hidden while any mod is holding it. It goes back to its
+      original state when the last hold ends, which is when every mod has released
+      it or stopped, or when the actor leaves the world.
+    owns: true
+    params:
+      - {name: component, type: handle<component>, doc: "The component."}
+      - {name: children, type: bool, default: true, doc: "Whether to also hide the components that are attached under it."}
+    fails:
+      not_found: "The component no longer exists."
+      unsupported: "The component has no position in the world, so it is never drawn, some of the components under it couldn't be found, or the framework can't restore its actor's components when the actor leaves the world. Nothing is changed."
+      not_ready: "The engine isn't ready. Nothing is changed."
+    users: [groink, online-coop]
+
+  - name: release_hidden
+    doc: "Ends your mod's hold on a component that it hid. The components that were hidden with it are shown again too, unless another hold is on them."
+    owns: true
+    params:
+      - {name: component, type: handle<component>, doc: "The component that you passed to `hold_hidden`."}
+    fails:
+      not_found: "The component no longer exists, or your mod isn't holding it hidden."
+    users: [groink, online-coop]
+
+  - name: hidden
+    doc: "Checks if any mod is holding a component hidden. This doesn't count a component that the game itself hid. To check that, read its `bVisible` with `reflection`."
+    params:
+      - {name: component, type: handle<component>, doc: "The component to check."}
+    returns: {type: bool, doc: "`true` while a hold is on it."}
+    fails:
+      not_found: "The component no longer exists."
+    users: [groink, online-coop]
+
+  - name: add
+    doc: |
+      Creates a new component of a class on an actor, like another mesh. The
+      component belongs to your mod. It is destroyed when your mod removes it or
+      stops, or when the actor leaves the world.
+
+      A component that has a position in the world is attached under the actor's
+      root, or under `parent` if you pass one, and is placed exactly where that is.
+      With `socket`, it is placed at that socket or bone on the parent. Use
+      `reflection` to set it up from there.
+    owns: true
+    params:
+      - {name: actor, type: handle<actor>, doc: "The actor to add it to."}
+      - {name: of_class, type: handle<object>, doc: "The component's class, from `reflection.find_class`."}
+      - {name: parent, type: handle<component>, optional: true, doc: "One of the actor's own components to attach to."}
+      - {name: socket, type: text, default: "", doc: "A socket or bone on the parent, or empty to attach to the parent itself."}
+    returns: {type: handle<component>, doc: "The new component."}
+    fails:
+      not_found: "The actor, the class, or the parent no longer exists."
+      invalid: "The class isn't a component class, the parent isn't one of the actor's own components, or a parent was given for a component that has no position in the world."
+      not_ready: "The engine isn't ready."
+      unsupported: "The engine didn't create anything, like for an abstract class, it couldn't attach the component, or the framework can't remove the component when the actor leaves the world. Nothing is left behind."
+    users: [groink, online-coop]
+
+  - name: remove
+    doc: "Destroys a component that a mod added."
+    owns: true
+    params:
+      - {name: component, type: handle<component>, doc: "A part from `add`."}
+    fails:
+      not_found: "The component no longer exists, or it wasn't added by a mod."
+      denied: Another mod added it.
+    users: [groink, online-coop]
+
+  - name: material
+    doc: "The material in a slot of a mesh."
+    params:
+      - {name: component, type: handle<component>, doc: A mesh.}
+      - {name: slot, type: u32, doc: "The slot, counted from 0."}
+    returns: {type: handle<object>, doc: The material.}
+    fails:
+      not_found: "The component no longer exists, or the slot has no material."
+      unsupported: "The component isn't a mesh."
+      invalid: "The mesh doesn't have that slot."
+      not_ready: "The engine isn't ready."
+    users: [groink, online-coop]
+
+  - name: hold_material
+    doc: |
+      Puts a material in a slot of a mesh and holds it there. Only one mod at a time
+      can hold a slot. Setting it again changes the material that your mod is
+      holding there.
+
+      The game can change materials for its own reasons, so a held slot is set again
+      every world step. The hold ends when your mod releases it or stops, or when the
+      actor leaves the world. The slot then goes back to the material that the game
+      last set.
+    owns: true
+    params:
+      - {name: component, type: handle<component>, doc: A mesh.}
+      - {name: slot, type: u32, doc: "The slot, counted from 0."}
+      - {name: material, type: handle<object>, doc: "The material, from `asset` or created with `reflection`."}
+    fails:
+      not_found: "The component or the material no longer exists."
+      unsupported: "The component isn't a mesh, or the framework can't restore its actor's components when the actor leaves the world. Nothing is changed."
+      invalid: "The object isn't a material, or the mesh doesn't have that slot."
+      busy: "Another mod is holding this slot."
+      not_ready: "The engine isn't ready. Nothing is changed."
+    users: [groink, online-coop]
+
+  - name: release_material
+    doc: "Ends your mod's hold on a slot. The slot goes back to the material that the game last set."
+    owns: true
+    params:
+      - {name: component, type: handle<component>, doc: "The mesh that you passed to `hold_material`."}
+      - {name: slot, type: u32, doc: The slot.}
+    fails:
+      not_found: "The component no longer exists, or your mod isn't holding this slot."
+    users: [groink, online-coop]
+
+  - name: hold_instance_cull_scale
+    doc: |
+      Scales the native start/end cull distances of an InstancedStaticMeshComponent
+      or one of its subclasses, including hierarchical instances. Only one mod
+      can hold this pair. Calling again changes your accepted scale without
+      multiplying your previous result. This does not select foliage or change
+      other components: choose the components and world your mod intends to affect.
+
+      The scale must be finite and positive. Positive distances round to the
+      nearest integer, with halves rounded up, and must remain positive int32
+      values. Nonpositive native sentinel values remain unchanged. An increasing
+      start/end interval must remain increasing after rounding. An unrepresentable
+      request changes nothing and leaves a previous accepted hold in force.
+
+      Changed pairs use the engine's native setter, which updates both distances
+      and notifies the renderer. A pair already present needs no setter call.
+      Success accepts ownership after any required setter completes with a valid
+      lifetime; CPU readback is a separate confirmation. Success is not a synchronous
+      guarantee of readback, render-state recreation or material fade, shrink or
+      world-position-offset behavior. Unreadable fields retain the active request
+      and its last-written pair without further mutation until readable. The game
+      can assign another pair, which becomes the complete new baseline at the
+      next world-step hold pass. The accepted scale is reapplied
+      there. An unrepresentable new baseline ends the lease without changing it.
+
+      Release, mod stop and the existing admitted actor teardown end the hold.
+      The latest baseline is restored only while the same component and owner
+      generations survive and a readable pair is still the one this hold wrote.
+      A newer game assignment or unreadable state is left alone. Release and
+      stop end ownership even when restoration cannot be confirmed. Accepted
+      native destruction skips restoration. Unsupported owner teardown paths are refused before mutation.
+      There is no before-first-render or automatic current-world selection promise.
+    owns: true
+    params:
+      - {name: component, type: handle<component>, doc: "An instanced static mesh component, including a hierarchical subclass."}
+      - {name: scale, type: f32, doc: "Finite positive multiplier of the latest game-assigned distance pair; 1 preserves that pair."}
+    fails:
+      not_found: "The component no longer exists."
+      invalid: "The scale is not finite and positive, a positive distance cannot remain a positive int32, or rounding collapses an increasing interval."
+      unsupported: "The component is not an InstancedStaticMeshComponent subclass, or its owner's teardown path is not supported. Nothing is changed."
+      busy: "Another mod owns this pair, the same pair is inside a native operation, or the owner's lifecycle chain is busy."
+      not_ready: "The native setter, readable initial pair or lifetime association is not ready. A previous accepted request stays in force unless its lifetime ended."
+    completes: hold_hidden
+
+  - name: release_instance_cull_scale
+    doc: |
+      Ends your mod's instance-cull scale hold. The native setter restores the
+      latest game-assigned pair only if the surviving component's readable pair
+      still matches this hold's last write. A newer assignment or unreadable state
+      is left alone. Native restoration is guarded, but ending the lease is not a
+      readback or rendered-completion guarantee.
+    owns: true
+    params:
+      - {name: component, type: handle<component>, doc: "The component passed to hold_instance_cull_scale."}
+    fails:
+      not_found: "The component no longer exists, or your mod has no remaining hold on it."
+    completes: hold_hidden

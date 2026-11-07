@@ -1,0 +1,31 @@
+# game/fixtures.yaml's entries with Switch 1 2.0.0's numbers (build 1F66B876), for tools/stage_test_mods.py --build 2.0.0.
+# Nothing here reaches the module people run.
+
+data:
+  tick_state_actor_table: 0x08CA4210 # GActor's table: all 220 slots read hold the pairs of 1.1.1 0x08C26978's
+
+constants:
+  ai_order_placement: 0x123456789abcddb3 # Authored placement-list larva used by the SDK proof.
+  # The cosf/sinf import veneers (0x634AFC0, 0x634AFD0; 1.1.1 0x62EE120, 0x62EE130): the same four-word shape.
+  native_hook_branch_offset: 12
+  native_hook_cos_0: 0x90018050
+  native_hook_cos_1: 0xF941AE11
+  native_hook_cos_2: 0x910D6210
+  native_hook_cos_3: 0xD61F0220
+  native_hook_sin_0: 0x90018050
+  native_hook_sin_1: 0xF941B211
+  native_hook_sin_2: 0x910D8210
+  native_hook_sin_3: 0xD61F0220
+
+assets:
+  tick_state_actor: /Game/Carrot4/Placeables/Teki/GKochappy.GKochappy_C
+  cleanup_material: /Engine/EngineMaterials/DefaultMaterial.DefaultMaterial
+  ai_order_map: /Game/Carrot4/Maps/Madori/Cave/Cave000/Cave000_F00/Cave000_F00_P
+  ai_order_class: /Game/Carrot4/Placeables/Teki/GBaby.GBaby_C
+
+structs:
+  ai_start_observation:              # BabyAI start 0xF1C830 (1.1.1 0xF18240): the same reads, instruction for instruction
+    fields: {game_owner: 0x208, territory: 0x82C, patrol: 0xEEC, actions: 0x218, tree_context: 0x98, patrol_reference: 0x30}
+
+functions:
+  actor_request_tick: {address: 0x01BAEBF0, args: [pointer, bool]} # the matcher's pair of 1.1.1 0x01B85E40

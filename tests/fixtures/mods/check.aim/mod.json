@@ -1,0 +1,24 @@
+{
+  "id": "check.aim",
+  "name": "The isolated check of captain aim and whistle",
+  "version": "1.0.0",
+  "meta": {
+    "check": "aim",
+    "check_explicit": true,
+    "checks": [
+      "found",
+      "made",
+      "aimed",
+      "followed",
+      "point",
+      "whistle",
+      "coalesced",
+      "sounding",
+      "hushed",
+      "cursor_restored",
+      "ended",
+      "removed",
+      "gone"
+    ]
+  }
+}

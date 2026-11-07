@@ -1,0 +1,13 @@
+{
+  "id": "check.combat",
+  "name": "The check of combat",
+  "version": "1.0.0",
+  "meta": {
+    "check": "combat",
+    "checks": [
+      "read",
+      "put_back",
+      "refused"
+    ]
+  }
+}

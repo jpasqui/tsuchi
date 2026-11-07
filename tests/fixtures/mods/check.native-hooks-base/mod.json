@@ -1,0 +1,10 @@
+{
+  "id": "check.native-hooks-base",
+  "name": "Native inline hook base check",
+  "version": "1.0.0",
+  "meta": {
+    "check": "native-hooks",
+    "check_explicit": true,
+    "checks": ["setup", "registers", "ordinary", "self_remove"]
+  }
+}

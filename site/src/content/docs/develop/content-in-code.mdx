@@ -1,0 +1,113 @@
+---
+title: Declare content in code
+description: Add content while your mod runs and read the result.
+---
+
+You can declare content in `mod.json` before your mod starts. You can also call
+[`content.add`](/reference/content/#add) while your mod runs. Both forms use the
+same manifest formats and game paths.
+
+## Content, assets, and screens
+
+Use these services together when your mod needs them:
+
+- [`content`](/reference/content/) declares game kinds and data, such as a creature
+  species, treasure series, or map.
+- [`asset`](/reference/asset/) loads cooked assets, such as meshes, textures, and
+  Blueprint classes, and keeps them loaded for your mod.
+- [`ui`](/reference/ui/) creates screens, controls, and tabs in the game's
+  Settings menu. See [Create a screen](/develop/screens/).
+
+For example, a creature's Blueprint and icon are assets, its species and catalog
+entry are content declarations, and its mod's Settings page uses UI.
+
+## Declare a batch
+
+Pass a JSON object with `content`, `new_maps`, `maps`, `tables`, or `text` sections.
+The call checks every section and admits the batch. It returns a declaration
+handle. The framework applies the batch on the next world step. Your mod
+receives its batch's `ready` or `failed` event.
+
+```lua
+local declaration, result = content.add([[{
+  "text": {"MyMessages": {"welcome": "Welcome to the garden"}}
+}]])
+if not declaration then
+  mod.log(result)
+end
+
+content.on_ready(function(event)
+  if event.declaration == declaration then
+    mod.log("The declaration is ready")
+  end
+end)
+content.on_failed(function(event)
+  if event.declaration == declaration then
+    mod.log(event.reason)
+  end
+end)
+```
+
+Read `content.state(declaration)` to check the batch. Call
+`content.retract(declaration)` to cancel a queued batch or undo its reversible
+changes. The framework also retracts the batch when your mod stops.
+
+A refused `add` call changes nothing. A later native refusal marks an admitted
+batch as failed and removes its reversible work. Some copied rows stay inert for
+the run. Added Pikmin colors and map slots keep their ID assignments in the save.
+The game cannot safely reuse those numbers for another ID.
+Existing text goes back when its replacement ends. A new native text key keeps
+its last text after rollback, retraction, or stop. Its owned replacement record
+still ends.
+
+An admitted batch cannot change or reclaim a resource your mod already owns
+from the manifest or an earlier batch. That overlap reports `busy` through
+`content.failed`. Declare related content together. The earlier declaration
+keeps its values when the later batch fails or is retracted.
+If you call `add` from a native callback while your own batch is being applied,
+it returns `busy`. You can queue another batch from `ready` or `failed`.
+
+
+## Treasure series bonuses
+
+A treasure series can have a `bonus`, from `0` to `1`. The game multiplies the
+series members' Sparklium total by that fraction when it computes the bonus.
+`0.3` means 30 percent. Declare the series and its treasures together.
+
+```json
+"treasure_series": {
+  "gems": {"name": "Gem Collection", "bonus": 0.3}
+}
+```
+
+You can set `from` to a stock series row, such as `Series01`, and set `icon` to a
+texture path. The framework copies the row. The copied row stays for the run.
+The mod's bonus row leaves the current game's bonus cache when the mod stops.
+A successful treasure or creature declaration leaves its class-default identity
+in place for as long as that class stays loaded. A failed batch restores its
+provisional identity writes. Actors that already exist keep their own identities.
+
+Treasure `icon` and Pikmin `icon` both take your mod's `Texture2D` asset path.
+A Pikmin icon fills its selector cell and is restored to the stock atlas when
+the type or its owner ends.
+
+## Placement values
+
+An added creature, treasure, or Pikmin type can declare `placement_values`.
+Each entry has a short name, a `kind`, and a matching `default`. The kinds are
+`toggle`, `integer`, `number`, and `text`.
+
+```json
+"placement_values": {
+  "speed": {"kind": "number", "default": 1.0},
+  "friendly": {"kind": "toggle", "default": false}
+}
+```
+
+Another mod can list the keys with `content.placement_values(kind)` and read
+`content.placement_kind(kind, key)`. Read a default with `placement_toggle`,
+`placement_integer`, `placement_number`, or `placement_text`. These calls describe
+what the content declares. They do not change a live placement.
+
+For live members of an added squad type, read [Add a squad type](/develop/custom-squads/).
+For independent sound banks, read [Play custom sounds](/develop/custom-sounds/).

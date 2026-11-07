@@ -1,0 +1,11 @@
+{
+  "id": "check.native-hooks-observer",
+  "name": "Native inline startup cleanup observer",
+  "version": "1.0.0",
+  "requires": {"check.native-hooks-base": "*"},
+  "meta": {
+    "check": "native-hooks-observer",
+    "check_explicit": true,
+    "checks": ["setup", "startup_cleanup", "wrong_bytes", "reuse", "ordinary", "cleanup"]
+  }
+}

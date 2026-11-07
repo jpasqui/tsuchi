@@ -1,0 +1,25 @@
+service: hud
+tutorials:
+  - {title: Ask the player, path: /develop/dialog-and-hud/}
+layer: game
+acts_on: game
+lifetime: world
+brief: "Shows your text on the game's announcement banner."
+description: |
+  The game shows announcements on a banner that slides across the screen. Use
+  this service to show your own text on that banner.
+
+functions:
+  - name: banner
+    doc: |
+      Shows text on the game's announcement banner for a number of seconds. The game
+      keeps running while it is shown. The banner appears on the first player's
+      screen. A later banner replaces it, and so does one of the game's own
+      announcements.
+    params:
+      - {name: text, type: text, doc: The text to show.}
+      - {name: seconds, type: f32, default: 4, doc: "How long it stays on screen, in seconds."}
+    fails:
+      invalid: "`seconds` isn't greater than `0`, or the text isn't valid UTF-8."
+      not_ready: "The game has no banner right now, as no level is being played or the game isn't ready."
+    users: [online-coop, dog-coop]

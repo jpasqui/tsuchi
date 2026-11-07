@@ -1,0 +1,20 @@
+game: Hook stand-in
+version: test
+data:
+  status_words: 0x80
+constants:
+  code_size: 0x4000
+  stub_base: 0x3000
+  stub_end: 0x4000
+  dynamic_hook_slots: 4
+  native_jump_offset: 256
+code_sites:
+  fixed:
+    address: 0x200
+    instruction: 0xd503201f
+    returns: void
+    args: []
+native_routes:
+  fixed_inline:
+    address: 0x204
+    instruction: 0x91000400

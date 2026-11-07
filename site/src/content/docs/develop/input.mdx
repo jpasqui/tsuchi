@@ -1,0 +1,113 @@
+---
+title: Read and press buttons
+description: Read a player's controller and keyboard, press buttons for a player, and hide buttons from the game.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+Start with [your first mod](/develop/first-mod/). For this guide, we'll make the
+space bar on a keyboard press **A** for the first player.
+
+## Code
+
+Call [`input.key`](/reference/input/#key) on each world step with the key's USB
+HID usage. The space bar is `44`. While it's down, call
+[`input.hold_pressed`](/reference/input/#hold_pressed) for one step, so the game
+sees **A** held for as long as the key is down. If another mod holds this
+controller's input, the call returns `busy`.
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua title="main.lua"
+local SPACE = 44
+
+time.on_step(function()
+    if input.key(SPACE) then
+        input.hold_pressed(0, {a = true}, 1)
+    end
+end)
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript title="main.js"
+const SPACE = 44;
+
+time.on("step", () => {
+    try {
+        if (input.key(SPACE)) input.hold_pressed(0, ["a"], 1);
+    } catch (error) {
+        if (!["not_ready", "busy"].includes(error.name)) throw error;
+    }
+});
+```
+
+</TabItem>
+<TabItem label="C">
+
+[Build this code](/develop/compiled-mod/) into `mod.nro`.
+
+```c title="main.c"
+#include "tsuchi/tsuchi.h"
+
+#define SPACE 44
+
+static const TSUCHI_Host *host;
+static TSUCHI_Mod *self;
+static TSUCHI_Subscription steps;
+
+static void on_step(void *user, const TSUCHI_TimeStep *event) {
+    (void)user;
+    (void)event;
+    bool down = false;
+    if (host->input->key(self, SPACE, &down) == TSUCHI_OK && down) {
+        host->input->hold_pressed(self, 0, TSUCHI_BUTTONS_A, 1);
+    }
+}
+
+TSUCHI_Result tsuchi_mod_start(const TSUCHI_Host *given, TSUCHI_Mod *mod) {
+    host = given;
+    self = mod;
+    return host->time->on_step(self, on_step, 0, &steps);
+}
+```
+
+</TabItem>
+</Tabs>
+
+[Install your mod](/players/install-a-mod/), plug a USB keyboard into the Switch,
+and enter a level. Hold the space bar and the captain should act as if you held
+**A**. If you play in Eden, turn on Eden's keyboard emulation first, as Eden
+only passes the PC's keyboard to the game while it's on.
+
+## Controller
+
+Call [`input.pad`](/reference/input/#pad) to read a player's controller for this
+world step. `held` has the buttons down, `pressed` the ones that went down since
+the previous step, and `released` the ones that went up. The sticks' axes go from
+-32767 to 32767. The framework reads each controller once per step and keeps a
+tap that comes between two pictures, so your mod sees it at the next step at any
+frame rate. Buttons that a mod presses are in `held`, and
+[`input.pressed`](/reference/input/#pressed) tells you which ones they are.
+
+## Hidden buttons
+
+Call [`input.hold_hidden`](/reference/input/#hold_hidden) to keep the game from
+acting on buttons, for example to give **ZR** a new use in your mod. Your mod
+still sees the hidden buttons in `input.pad`, and
+[`input.hidden`](/reference/input/#hidden) tells you which ones are hidden. Call
+[`input.release_hidden`](/reference/input/#release_hidden) to give them back.
+
+Presses and hidden buttons belong to a controller. If two players share a
+controller, they share one hold, and either player can change it or release it.
+If the player moves to another controller, your hold stays on the one you took it
+on, and releasing it through that player still works.
+
+## Cleanup
+
+A press ends after its number of steps, and you can end it early with
+[`input.release_pressed`](/reference/input/#release_pressed). When your mod
+stops, Tsuchi releases every button it pressed or hid. See
+[Events and cleanup](/develop/events-and-cleanup/).

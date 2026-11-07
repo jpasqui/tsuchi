@@ -1,0 +1,134 @@
+service: player
+tutorials:
+  - {title: Watch a captain's squad, path: /develop/squad-and-captain/}
+layer: game
+acts_on: game
+lifetime: world
+brief: "Reads each player's captain, dog, and controller, and switches which one they control."
+description: |
+  The story has one player, and a Dandori Battle has two. Players are numbered
+  starting from `0`. Each player has a captain and might have a dog, controls
+  one of them at a time, and uses one controller. Use this service to find out
+  which captain, dog, and controller belong to a player, switch a player
+  between their captain and dog, and lock a player to one of them.
+
+functions:
+  - name: count
+    doc: "The number of players that have a captain in the loaded world."
+    returns: {type: u32, doc: "The number of players. This is `1` in the story, `2` in a battle, and `0` if no world is loaded."}
+    users: [dog-coop, online-coop]
+
+  - name: captain
+    doc: "A player's captain."
+    params:
+      - {name: player, type: u32, doc: "The player, from `0`."}
+    returns: {type: handle<actor>, doc: The captain.}
+    fails:
+      not_found: "That player doesn't exist in the loaded world."
+    users: [dog-coop, online-coop]
+
+  - name: dog
+    doc: "A player's dog, which is Oatchi or Moss."
+    params:
+      - {name: player, type: u32, doc: "The player, from `0`."}
+    returns: {type: handle<actor>, doc: The dog., none: The player has no dog.}
+    fails:
+      not_found: "That player doesn't exist in the loaded world."
+    users: [dog-coop, online-coop]
+
+  - name: character
+    doc: "The character that a player is controlling, which is their captain or their dog."
+    params:
+      - {name: player, type: u32, doc: "The player, from `0`."}
+    returns: {type: handle<actor>, doc: "The character that is being controlled."}
+    fails:
+      not_found: "That player doesn't exist, or they aren't controlling anything."
+      not_ready: "The game isn't ready."
+    users: [dog-coop, online-coop]
+
+  - name: pad
+    doc: "The controller that a player uses, with the console's numbering. `0` to `3` are the first four controllers, `32` is handheld mode, and `7` means none."
+    params:
+      - {name: player, type: u32, doc: "The player, from `0`."}
+    returns: {type: u32, doc: "The controller's number."}
+    fails:
+      invalid: "The game doesn't have that player slot."
+      not_ready: "The game isn't ready."
+    users: [dog-coop, online-coop]
+
+  - name: set_character
+    doc: |
+      Switches a player to their captain or their dog with the game's own switch and
+      its camera move, the same way that the player's button does. The player
+      controls the other character right away, and `character_changed` is emitted on
+      the next world step. The camera takes a moment longer.
+    params:
+      - {name: player, type: u32, doc: "The player, from `0`."}
+      - {name: character, type: handle<actor>, doc: "The player's captain or dog."}
+    fails:
+      not_found: "That player doesn't exist, or the actor no longer exists."
+      invalid: "The actor isn't the player's captain or their dog."
+      busy: "A switch is already in progress."
+      not_ready: "The game won't allow it, as the story hasn't unlocked switching, two people are playing the story, or the captain is riding."
+    users: [dog-coop, online-coop]
+
+  - name: hold_character
+    doc: |
+      Keeps a player on the character that they are controlling. The player's own
+      switch does nothing, and a switch that the game makes on its own is undone.
+      Only one mod at a time can hold a player. Holding again moves the hold. The
+      hold ends when your mod releases it or stops, or when the character leaves the
+      world.
+    owns: true
+    params:
+      - {name: player, type: u32, doc: "The player, from `0`."}
+      - {name: character, type: handle<actor>, doc: "The player's captain or dog. It has to be the one that they are currently controlling."}
+    fails:
+      not_found: "That player doesn't exist, or the actor no longer exists."
+      not_ready: "The player isn't controlling that actor. Call `set_character` first and wait for it to finish."
+      busy: "Another mod is holding this player."
+    users: [dog-coop, online-coop]
+
+  - name: release_character
+    doc: "Ends your mod's hold on a player."
+    owns: true
+    params:
+      - {name: player, type: u32, doc: "The player, from `0`."}
+    fails:
+      not_found: "Your mod isn't holding this player."
+    users: [dog-coop, online-coop]
+
+  - name: hold_pad
+    doc: |
+      Makes a different controller, or no controller, control a player, and holds it
+      that way. The game sets its own choice again from time to time, so the held
+      controller is set again every world step. Only one mod at a time can hold a
+      player's controller. When the hold ends, the player gets their original
+      controller back.
+    owns: true
+    params:
+      - {name: player, type: u32, doc: "The player, from `0`."}
+      - {name: pad, type: u32, doc: "The controller's number, in the same format that `pad` returns. It is `0` to `3`, `32`, or `7` for none."}
+    fails:
+      invalid: "The game doesn't have that player slot, or the number isn't a valid controller."
+      busy: "Another mod is holding this player's controller."
+      not_ready: "The game isn't ready."
+    users: [dog-coop, online-coop]
+
+  - name: release_pad
+    doc: "Ends your mod's hold on a player's controller."
+    owns: true
+    params:
+      - {name: player, type: u32, doc: "The player, from `0`."}
+    fails:
+      not_found: "Your mod isn't holding this player's controller."
+    users: [dog-coop, online-coop]
+
+events:
+  - name: character_changed
+    doc: "Emitted when a player starts controlling their other character, no matter what caused the switch. It is detected by checking once per world step while a mod is listening. The first check doesn't report anything, and a check is made before any switch that you request through this service."
+    fields:
+      - {name: player, type: u32, doc: "The player, from `0`."}
+      - {name: character, type: handle<actor>, optional: true, doc: "The current character."}
+      - {name: previous, type: handle<actor>, optional: true, doc: "The previous character."}
+    users: [dog-coop, online-coop]

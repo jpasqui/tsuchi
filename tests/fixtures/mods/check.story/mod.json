@@ -1,0 +1,22 @@
+{
+  "id": "check.story",
+  "name": "The check of story",
+  "version": "1.0.0",
+  "meta": {
+    "check": "story",
+    "checks": [
+      "day",
+      "clock",
+      "refused",
+      "treasure",
+      "travel",
+      "arrived",
+      "portal",
+      "entered",
+      "leave",
+      "left",
+      "released"
+    ],
+    "check_explicit": true
+  }
+}

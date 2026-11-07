@@ -1,0 +1,12 @@
+{
+  "id": "check.hud",
+  "name": "The check of hud",
+  "version": "1.0.0",
+  "meta": {
+    "check": "hud",
+    "checks": [
+      "shown",
+      "refused"
+    ]
+  }
+}

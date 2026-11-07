@@ -1,0 +1,16 @@
+{
+  "id": "check.assets",
+  "name": "The check of assets",
+  "version": "1.0.0",
+  "meta": {
+    "check": "assets",
+    "checks": [
+      "held",
+      "path",
+      "released",
+      "refused",
+      "nested",
+      "fresh"
+    ]
+  }
+}

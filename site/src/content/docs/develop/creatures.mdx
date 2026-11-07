@@ -1,0 +1,165 @@
+---
+title: Revive a creature
+description: Find a defeated creature and ask the game to bring it back.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+Start with [your first mod](/develop/first-mod/). We'll bring back one defeated
+creature each time the player visits a world.
+
+## List
+
+Call [`creature.list`](/reference/creature/#list) to get the loaded creatures,
+including defeated ones. If a creature is far from the player, the game might not
+have loaded it yet, so this list doesn't describe every placement in a level.
+
+Check `creature.defeated` before calling `revive`. If you only want to work with
+carcasses, check `creature.carcass` too. A defeated creature takes a couple of seconds
+to become a carcass. At night, it'll turn into glow pellets instead.
+
+## Code
+
+For example, look for a defeated creature once every 30 world steps. When the game
+accepts a revival, we'll stop searching until the world unloads.
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua title="main.lua"
+local revived = false
+
+game.on_world_unloaded(function()
+    revived = false
+end)
+
+time.on_step(function(event)
+    if revived or event.number % 30 ~= 0 then return end
+    local animals = creature.list()
+    if not animals then return end
+    for _, animal in ipairs(animals) do
+        if creature.defeated(animal) == true then
+            local accepted, why = creature.revive(animal)
+            if accepted then
+                revived = true
+                print("Creature revival requested")
+                return
+            elseif why ~= "busy" and why ~= "not_ready" and why ~= "not_found" then
+                print("Couldn't revive the creature: " .. why)
+            end
+        end
+    end
+end)
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript title="main.js"
+let revived = false;
+
+game.on("world_unloaded", () => { revived = false; });
+
+time.on("step", (event) => {
+    if (revived || event.number % 30n !== 0n) return;
+    let animals;
+    try {
+        animals = creature.list();
+    } catch (error) {
+        if (error.name === "not_ready") return;
+        throw error;
+    }
+    for (const animal of animals) {
+        try {
+            if (!creature.defeated(animal)) continue;
+            creature.revive(animal);
+            revived = true;
+            print("Creature revival requested");
+            return;
+        } catch (error) {
+            if (!["busy", "not_ready", "not_found"].includes(error.name)) {
+                print("Couldn't revive the creature: " + error.name);
+            }
+        }
+    }
+});
+```
+
+</TabItem>
+<TabItem label="C">
+
+[Build this code](/develop/compiled-mod/) into `mod.nro`.
+
+```c title="main.c"
+#include "tsuchi/tsuchi.h"
+
+static const TSUCHI_Host *host;
+static TSUCHI_Mod *self;
+static TSUCHI_Subscription steps, worlds;
+static TSUCHI_Actor animals[1024];
+static bool revived;
+
+static void on_unloaded(void *user, const TSUCHI_GameWorldUnloaded *event) {
+    (void)user;
+    (void)event;
+    revived = false;
+}
+
+static void on_step(void *user, const TSUCHI_TimeStep *event) {
+    (void)user;
+    if (revived || event->number % 30 != 0) return;
+    uint64_t count = 0;
+    if (host->creature->list(self, animals, 1024, &count) != TSUCHI_OK) return;
+    for (uint64_t i = 0; i < count; ++i) {
+        bool defeated = false;
+        if (host->creature->defeated(self, animals[i], &defeated) != TSUCHI_OK ||
+            !defeated) continue;
+        TSUCHI_Result result = host->creature->revive(self, animals[i]);
+        if (result == TSUCHI_OK) {
+            revived = true;
+            host->mod->log(self, "Creature revival requested");
+            return;
+        }
+        if (result != TSUCHI_BUSY && result != TSUCHI_NOT_READY &&
+            result != TSUCHI_NOT_FOUND) {
+            host->mod->log(self, "Couldn't revive the creature");
+        }
+    }
+}
+
+TSUCHI_Result tsuchi_mod_start(const TSUCHI_Host *given, TSUCHI_Mod *mod) {
+    host = given;
+    self = mod;
+    revived = false;
+    TSUCHI_Result result = host->game->on_world_unloaded(mod, on_unloaded, 0, &worlds);
+    if (result != TSUCHI_OK) return result;
+    return host->time->on_step(mod, on_step, 0, &steps);
+}
+```
+
+</TabItem>
+</Tabs>
+
+[Install your mod](/players/install-a-mod/), defeat a creature, and leave its carcass
+on the ground. You should see `Creature revival requested` in the
+[log](/develop/logs/) and a new creature at the defeated creature's home.
+If Pikmin are carrying the carcass, the example will try again later.
+
+If the C list needs more than 1024 entries, the call returns `TSUCHI_CAPACITY` and
+copies nothing. Increase the buffer to cover the count returned by the call.
+
+## Handles
+
+After revival, the creature has a new actor handle. If your mod needs the new
+creature, listen to [`entity.on_spawned`](/reference/entity/#spawned). Don't keep
+using the defeated creature's handle, as the game removes its carcass.
+
+To read a creature's kind, use `entity.kind`. To read its health or deal a hit, use
+[`combat`](/reference/combat/). To check its current action, use
+[`behavior`](/reference/behavior/).
+
+## Cleanup
+
+When your mod stops, Tsuchi removes its listeners. A revival you've already requested
+is a change to gameplay, so stopping your mod won't put the defeated creature back.
+See [Events and cleanup](/develop/events-and-cleanup/) before adding your own holds.

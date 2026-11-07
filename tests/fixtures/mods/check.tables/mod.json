@@ -1,0 +1,19 @@
+{
+  "id": "check.tables",
+  "name": "Check tables",
+  "version": "1.0.0",
+  "meta": {
+    "check": "tables",
+    "checks": [
+      "held",
+      "number",
+      "restored",
+      "fields",
+      "reference",
+      "text",
+      "row",
+      "refused",
+      "released"
+    ]
+  }
+}

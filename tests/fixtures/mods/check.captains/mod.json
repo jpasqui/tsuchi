@@ -1,0 +1,15 @@
+{
+  "id": "check.captains",
+  "name": "The check of captains",
+  "version": "1.0.0",
+  "meta": {
+    "check": "captains",
+    "checks": [
+      "whistle",
+      "cursor",
+      "held",
+      "ended",
+      "mount"
+    ]
+  }
+}

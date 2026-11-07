@@ -1,0 +1,12 @@
+{
+  "id": "check.behavior",
+  "name": "The check of behavior",
+  "version": "1.0.0",
+  "meta": {
+    "check": "behavior",
+    "checks": [
+      "read",
+      "listener"
+    ]
+  }
+}

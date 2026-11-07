@@ -1,0 +1,35 @@
+name: Discord release announcement
+
+on:
+  release:
+    types: [published]
+
+permissions: {}
+
+concurrency:
+  group: discord-release-${{ github.event.release.id }}
+  cancel-in-progress: false
+
+jobs:
+  announce:
+    name: Announce published release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+    steps:
+      - name: Report missing Discord configuration
+        if: env.DISCORD_WEBHOOK_URL == ''
+        run: echo '::notice::Set the DISCORD_WEBHOOK_URL repository secret to enable release announcements.'
+      - name: Post release notes
+        if: env.DISCORD_WEBHOOK_URL != ''
+        uses: tsickert/discord-webhook@b217a69502f52803de774ded2b1ab7c282e99645 # v7.0.0
+        with:
+          webhook-url: ${{ env.DISCORD_WEBHOOK_URL }}
+          thread-id: ${{ vars.DISCORD_THREAD_ID }}
+          wait: true
+          embed-title: ${{ github.event.release.name || github.event.release.tag_name }}
+          embed-url: ${{ github.event.release.html_url }}
+          embed-description: ${{ github.event.release.body || 'Release notes and downloads are available on GitHub.' }}
+          embed-timestamp: ${{ github.event.release.published_at }}
+          embed-footer-text: ${{ github.repository }}

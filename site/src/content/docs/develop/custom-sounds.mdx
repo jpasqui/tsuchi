@@ -1,0 +1,91 @@
+---
+title: Play custom sounds
+description: Load and play your mod's independent PCM sound bank.
+---
+
+You can ship an independent Wwise version 135 PCM16 bank in your mod's folder.
+It can hold 1 to 64 mono or stereo one-shots. Each sound can last up to 30 seconds.
+The bank can use up to 16 MiB. The framework can keep 16 banks and 128 voices at once.
+Use the target game's project metadata and an output bus present in its Init bank.
+A matching format version alone is insufficient: placeholder project or bus IDs
+can pass the format checks and still be refused or produce no sound.
+
+Declare a bank in the manifest's `content.sound_banks` object. The short name
+becomes an ID with your mod's prefix. Use `content.bank(id)` to find its handle.
+The manifest can load before the sound engine starts. The framework retains the
+file path, then reads, validates, and loads the bank once the engine is ready;
+it does not allocate the media from the small startup heap or block your mod.
+Until then, `content.bank` returns `not_ready`. Retry it on a later world step.
+Stopping the mod cancels a bank that has not loaded yet.
+`content.bank` also reports file and bank validation failures after that deferred
+read. A temporary `no_memory` result retries on a later world step.
+
+```json
+"content": {"sound_banks": {"sounds": "groink.bnk"}}
+```
+
+You can also read the file with `file.read` and pass the bytes to
+`content.load_bank("example.groink:sounds", bytes)`. The call checks the bank
+before Wwise parses it. Wwise copies the bank bytes before the call returns.
+
+```lua
+local bytes = file.read("groink.bnk", 0, file.size("groink.bnk"))
+local bank, result = content.load_bank("example.groink:sounds", bytes)
+if bank then
+  local events = content.bank_events(bank)
+  local voice = content.play_event(bank, events[1], {x = 0, y = 0, z = 0})
+  -- Keep voice if you want to stop it early.
+end
+```
+
+Event IDs come from `content.bank_events`. An unnamed native event uses an ID
+placeholder such as `#123456`. Pass the ID back to `play_event` with the bank
+that listed it. A voice stays at the world position you passed.
+
+Call `content.stop_event(voice)` to stop early. Call `content.unload_bank(bank)`
+to accept unloading and end your bank handle. The framework stops the bank's
+tracked voices and retries native cleanup until the engine accepts it. Your mod
+owns both handles. The same cleanup runs when your mod stops. Pending cleanup
+keeps the bank's native IDs reserved.
+
+Your bank, media, object, and event IDs must avoid stock IDs and other mod banks.
+Tsuchi checks overlap among the mod banks it tracks. It cannot prove that your IDs
+avoid stock banks. A retired bank keeps its IDs reserved until Wwise accepts its
+unload. A successful event post means Wwise accepted the sound.
+The bank's bus, mix, and listeners determine its audible output.
+
+## Global audio parameters
+
+A Wwise bank can bind a *game parameter*, a named number, to volume or another
+sound property. The audio service reads and owns these global parameters. The
+bank defines their names, units, and curves; a value of `0.5` does not always
+mean half volume.
+
+For example, once a bank with `GardenIntensity` has loaded:
+
+```lua
+local original, why = audio.parameter("GardenIntensity")
+if original ~= nil then
+    local ok, result = audio.hold_parameter("GardenIntensity", 0.5)
+    if not ok then mod.log(result) end
+else
+    mod.log(why)
+end
+```
+
+Call `audio.release_parameter("GardenIntensity")` to end the override. Tsuchi
+restores the previous global value, or removes the override if the bank default
+was in use. Mod stop performs the same cleanup. Parameter holds persist across
+world changes. Another mod cannot take the parameter while a hold or its native
+cleanup remains active.
+
+Set and Reset commands run later on Wwise's audio thread. A successful call
+reports command acceptance, rather than output volume or proof that a loaded
+bank uses the parameter. `audio.parameter` reads the engine's current value and
+can still return an earlier value before the command drains. Retry `not_ready`
+after the audio engine starts, and `busy` after an earlier hold finishes cleanup.
+
+An independent PCM bank does not replace the game's Init bank. A mod that adds
+volume curves to stock buses needs a compatible startup bank replacement that
+is visible before Wwise loads Init. Mounting replacement bytes afterward does
+not establish that Wwise reread them.

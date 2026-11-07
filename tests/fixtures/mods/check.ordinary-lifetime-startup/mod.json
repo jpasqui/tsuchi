@@ -1,0 +1,19 @@
+{
+  "id": "check.ordinary-lifetime-startup",
+  "name": "Ordinary authored startup cleanup observer",
+  "version": "1.0.0",
+  "meta": {
+    "check": "ordinary-lifetime-startup",
+    "check_explicit": true,
+    "checks": [
+      "setup",
+      "producer_stopped",
+      "identity",
+      "visibility",
+      "material",
+      "empty_blueprint_mode",
+      "exclusive_reuse",
+      "cleanup"
+    ]
+  }
+}

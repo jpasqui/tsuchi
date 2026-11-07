@@ -1,0 +1,651 @@
+service: ui
+layer: engine
+acts_on: screen
+lifetime: process
+brief: Hosts owned UMG widgets and defines settings screens in code or JSON.
+description: Load a concrete UserWidget class through asset, create an instance with create_widget,
+  and show it with hold_widget. Native child widgets and Button events belong to your mod.
+  These widgets keep their own layout and behaviour, independently of Settings.
+  Use glyph for native button icons in generated labels, messages, footers and owned rich-text widgets.
+  For a generated settings form, create a screen and add buttons, choices, integers, or read-only text. Open it while the
+  game's Settings menu takes input. Screen content scrolls. Their controls and values belong
+  to your mod and end when it stops. Every event is delivered at the next world step to the screen's
+  owner. Compare its screen handle when you define more than one screen.
+tutorials:
+- title: Create a screen
+  path: /develop/screens/
+enums:
+  Control:
+    open: true
+    doc: A control ID inside a screen. Each control has a different ID.
+  Choice:
+    open: true
+    doc: A choice ID inside a selector, such as `normal` or `hard`.
+  UiValueKind:
+    open: false
+    doc: The kind of value in a selector change.
+    values:
+    - name: choice
+      value: 1
+      doc: A named choice.
+    - name: integer
+      value: 2
+      doc: A signed integer.
+  ButtonSignal:
+    open: false
+    doc: An event from a native UMG Button.
+    values:
+    - {name: clicked, value: 0, doc: The button was clicked.}
+    - {name: pressed, value: 1, doc: The button was pressed.}
+    - {name: released, value: 2, doc: The button was released.}
+    - {name: hovered, value: 3, doc: The pointer entered the button.}
+    - {name: unhovered, value: 4, doc: The pointer left the button.}
+  GlyphButton:
+    open: false
+    doc: A native controller button with a verified PictureFont icon.
+    values:
+    - {name: a, value: 0, doc: The A button.}
+    - {name: b, value: 1, doc: The B button.}
+    - {name: x, value: 2, doc: The X button.}
+    - {name: y, value: 3, doc: The Y button.}
+    - {name: l, value: 4, doc: The L button.}
+    - {name: r, value: 5, doc: The R button.}
+    - {name: zr, value: 6, doc: The ZR button.}
+functions:
+- name: create
+  doc: Creates an empty screen. Add controls before you open it. The framework destroys the screen when
+    your mod stops.
+  params:
+  - name: title
+    type: text
+    doc: The title, as plain UTF-8 text.
+  fails:
+    invalid: The title is empty or is not plain UTF-8 text.
+    no_memory: The game is out of memory.
+  users: &id001
+  - custom-mod-menus
+  - mod-settings-screens
+  owns: true
+  returns:
+    type: handle<screen>
+    doc: The screen.
+- name: load
+  doc: Creates a screen from a JSON file in your mod folder. Data screens use the same controls and
+    renderer as code screens.
+  params:
+  - name: path
+    type: text
+    doc: The file path within your mod folder.
+  fails:
+    invalid: The path leaves your mod folder or the document has the wrong form.
+    not_found: The file does not exist.
+    not_ready: Files cannot be read yet.
+    io: The file could not be read.
+    no_memory: The game is out of memory.
+  users: *id001
+  owns: true
+  returns:
+    type: handle<screen>
+    doc: The screen.
+- name: destroy
+  doc: Destroys a screen and closes it if it is open.
+  params:
+  - name: screen
+    type: handle<screen>
+    doc: The screen.
+  fails:
+    not_found: The screen or control no longer exists.
+    invalid: An argument has the wrong form.
+    denied: Another mod owns the screen.
+  users: *id001
+  owns: true
+- name: add_button
+  doc: Adds a button that emits `activated` when the player selects it.
+  params:
+  - name: screen
+    type: handle<screen>
+    doc: The screen.
+  - name: control
+    type: enum<Control>
+    doc: The control ID, such as `difficulty`.
+  - name: label
+    type: text
+    doc: The button label.
+  fails:
+    not_found: The screen or control no longer exists.
+    invalid: An argument has the wrong form.
+    denied: Another mod owns the screen.
+    no_memory: The game is out of memory.
+    busy: The screen is open. Close it before adding controls.
+  users: *id001
+  owns: true
+- name: add_choice
+  doc: Adds a selector. Each option gives an ID and a label. The player changes one option at a time
+    with the stock arrows.
+  params:
+  - name: screen
+    type: handle<screen>
+    doc: The screen.
+  - name: control
+    type: enum<Control>
+    doc: The control ID, such as `difficulty`.
+  - name: label
+    type: text
+    doc: The row label.
+  - name: options
+    type: text
+    doc: A JSON array of objects with `id` and `label`, such as `[{"id":"normal","label":"Normal"},{"id":"hard","label":"Hard"}]`.
+  - name: initial
+    type: enum<Choice>
+    doc: The initial choice ID.
+  fails:
+    not_found: The screen or control no longer exists.
+    invalid: An argument has the wrong form.
+    denied: Another mod owns the screen.
+    no_memory: The game is out of memory.
+    busy: The screen is open. Close it before adding controls.
+  users: *id001
+  owns: true
+- name: add_integer
+  doc: Adds a signed integer selector. Each arrow moves by `step`. The value stays between `minimum`
+    and `maximum`.
+  params:
+  - name: screen
+    type: handle<screen>
+    doc: The screen.
+  - name: control
+    type: enum<Control>
+    doc: The control ID, such as `difficulty`.
+  - name: label
+    type: text
+    doc: The row label, with its unit.
+  - name: minimum
+    type: i64
+    doc: The lowest value.
+  - name: maximum
+    type: i64
+    doc: The highest value.
+  - name: step
+    type: i64
+    doc: The increment, greater than zero.
+  - name: initial
+    type: i64
+    doc: The initial value, on the step grid.
+  fails:
+    not_found: The screen or control no longer exists.
+    invalid: An argument has the wrong form.
+    denied: Another mod owns the screen.
+    no_memory: The game is out of memory.
+    busy: The screen is open. Close it before adding controls.
+  users: *id001
+  owns: true
+- name: add_text
+  doc: Adds a read-only row with a label and value.
+  params:
+  - name: screen
+    type: handle<screen>
+    doc: The screen.
+  - name: control
+    type: enum<Control>
+    doc: The control ID, such as `difficulty`.
+  - name: label
+    type: text
+    doc: The row label.
+  - name: initial
+    type: text
+    doc: The value as UTF-8 text, with optional exact glyph tokens.
+  fails:
+    not_found: The screen or control no longer exists.
+    invalid: An argument has the wrong form.
+    denied: Another mod owns the screen.
+    no_memory: The game is out of memory.
+    busy: The screen is open. Close it before adding controls.
+  users: *id001
+  owns: true
+- name: hold_open
+  doc: Shows a screen over the stock Settings menu. The hold ends when you close it, your mod stops,
+    or its host closes. Only one screen can be open at a time.
+  params:
+  - name: screen
+    type: handle<screen>
+    doc: The screen.
+  fails:
+    not_found: The screen no longer exists.
+    denied: Another mod owns the screen.
+    not_ready: The stock Settings menu is not open and taking input.
+    busy: A screen is already open.
+    no_memory: The game is out of memory.
+  users: *id001
+  owns: true
+- name: release_open
+  doc: Closes a screen and restores the Settings menu beneath it.
+  params:
+  - name: screen
+    type: handle<screen>
+    doc: The screen.
+  fails:
+    not_found: The screen or control no longer exists.
+    invalid: An argument has the wrong form.
+    denied: Another mod owns the screen.
+  users: *id001
+  owns: true
+- name: open
+  doc: Returns whether the screen is open.
+  params:
+  - name: screen
+    type: handle<screen>
+    doc: The screen.
+  fails:
+    not_found: The screen or control no longer exists.
+    invalid: An argument has the wrong form.
+    denied: Another mod owns the screen.
+  users: *id001
+  returns:
+    type: bool
+    doc: If `true`, the screen is open.
+  owns: true
+- name: choice
+  doc: Returns the selected choice ID.
+  params:
+  - name: screen
+    type: handle<screen>
+    doc: The screen.
+  - name: control
+    type: enum<Control>
+    doc: The control ID, such as `difficulty`.
+  fails:
+    not_found: The screen or control no longer exists.
+    invalid: An argument has the wrong form.
+    denied: Another mod owns the screen.
+  users: *id001
+  returns:
+    type: enum<Choice>
+    doc: The choice ID.
+  owns: true
+- name: set_choice
+  doc: Changes the selected choice without emitting a player change event.
+  params:
+  - name: screen
+    type: handle<screen>
+    doc: The screen.
+  - name: control
+    type: enum<Control>
+    doc: The control ID, such as `difficulty`.
+  - name: value
+    type: enum<Choice>
+    doc: The choice ID.
+  fails:
+    not_found: The screen or control no longer exists.
+    invalid: An argument has the wrong form.
+    denied: Another mod owns the screen.
+  users: *id001
+  owns: true
+- name: integer
+  doc: Returns the integer value.
+  params:
+  - name: screen
+    type: handle<screen>
+    doc: The screen.
+  - name: control
+    type: enum<Control>
+    doc: The control ID, such as `difficulty`.
+  fails:
+    not_found: The screen or control no longer exists.
+    invalid: An argument has the wrong form.
+    denied: Another mod owns the screen.
+  users: *id001
+  returns:
+    type: i64
+    doc: The value.
+  owns: true
+- name: set_integer
+  doc: Changes an integer without emitting a player change event.
+  params:
+  - name: screen
+    type: handle<screen>
+    doc: The screen.
+  - name: control
+    type: enum<Control>
+    doc: The control ID, such as `difficulty`.
+  - name: value
+    type: i64
+    doc: The value, in range and on the step grid.
+  fails:
+    not_found: The screen or control no longer exists.
+    invalid: An argument has the wrong form.
+    denied: Another mod owns the screen.
+  users: *id001
+  owns: true
+- name: text
+  doc: Returns a read-only row value.
+  params:
+  - name: screen
+    type: handle<screen>
+    doc: The screen.
+  - name: control
+    type: enum<Control>
+    doc: The control ID, such as `difficulty`.
+  fails:
+    not_found: The screen or control no longer exists.
+    invalid: An argument has the wrong form.
+    denied: Another mod owns the screen.
+  users: *id001
+  returns:
+    type: text
+    doc: The stored UTF-8 value, including any glyph tokens.
+  owns: true
+- name: set_text
+  doc: Replaces a read-only row value without emitting an event.
+  params:
+  - name: screen
+    type: handle<screen>
+    doc: The screen.
+  - name: control
+    type: enum<Control>
+    doc: The control ID, such as `difficulty`.
+  - name: value
+    type: text
+    doc: UTF-8 text with optional exact glyph tokens.
+  fails:
+    not_found: The screen or control no longer exists.
+    invalid: An argument has the wrong form.
+    denied: Another mod owns the screen.
+    no_memory: The game is out of memory.
+  users: *id001
+  owns: true
+- name: hold_settings_tab
+  doc: "Adds this screen as a tab in Settings, using its title. Up to six custom tabs fit beside Game and Mods. It ends when released, destroyed, or its mod stops."
+  owns: true
+  params:
+    - {name: screen, type: handle<screen>, doc: "The populated screen."}
+  fails:
+    not_found: "The screen no longer exists."
+    denied: "Another mod owns the screen."
+    invalid: "The screen has no controls."
+    capacity: "Six custom tabs are already registered."
+  completes: hold_open
+- name: release_settings_tab
+  doc: "Removes your screen's Settings tab and closes the screen if it is open."
+  owns: true
+  params:
+    - {name: screen, type: handle<screen>, doc: "The screen."}
+  fails:
+    not_found: "The screen no longer exists or has no Settings tab."
+    denied: "Another mod owns the screen."
+  completes: hold_open
+
+- name: create_widget
+  doc: Creates a UserWidget from a loaded class and keeps it for your mod. The context supplies its world;
+    it may be a world, actor, or widget. This creates an engine widget, independently of generated Settings
+    screens. Destroy it when finished. It ends when its context or loaded world ends, or your mod stops.
+  owns: true
+  params:
+  - {name: context, type: handle<object>, doc: The live world context.}
+  - {name: of_class, type: handle<object>, doc: "A loaded, concrete UserWidget class."}
+  returns: {type: handle<object>, doc: "The owned UserWidget, usable with reflection."}
+  fails:
+    invalid: The context or class has the wrong type, or the class is abstract.
+    not_found: The context or class no longer exists.
+    not_ready: No world is loaded, the engine cannot create the widget, or its owner ended during creation.
+    no_memory: The ownership or retention record could not be allocated.
+  users: [custom-mod-menus, kadan]
+- name: destroy_widget
+  doc: Detaches an owned UserWidget and releases it and the widgets made in its tree. Existing handles
+    cease to be owned by your mod. The engine collects them when nothing else keeps them.
+  owns: true
+  params:
+  - {name: widget, type: handle<object>, doc: The UserWidget created by create_widget.}
+  fails:
+    not_found: The widget no longer exists or has already been released.
+    denied: Another mod owns the widget.
+    invalid: The object is not an owned UserWidget root.
+    not_ready: The widget's context or world has ended and cleanup is pending.
+  completes: create_widget
+- name: construct_widget
+  doc: Constructs a concrete Widget in an owned UserWidget's tree and keeps it until that root ends.
+    Use create_widget for a UserWidget class instead. Layout and properties are available through reflection.
+  owns: true
+  params:
+  - {name: widget, type: handle<object>, doc: Your UserWidget root.}
+  - {name: of_class, type: handle<object>, doc: "A loaded concrete Widget class, other than UserWidget."}
+  returns: {type: handle<object>, doc: The constructed widget.}
+  fails:
+    not_found: The root or class no longer exists.
+    denied: Another mod owns the root.
+    invalid: The class has the wrong type or is abstract, or the root is not a UserWidget.
+    not_ready: The root has no tree, the engine could not construct the widget, or its owner ended.
+    no_memory: The ownership or retention record could not be allocated.
+  users: [custom-mod-menus, kadan]
+- name: find_widget
+  doc: Finds a named widget in your UserWidget's own tree. It does not descend into another UserWidget's
+    private tree. A missing name returns no object. The result remains owned by the same root.
+  owns: true
+  params:
+  - {name: widget, type: handle<object>, doc: Your UserWidget root.}
+  - {name: name, type: text, doc: The widget's exact engine name.}
+  returns: {type: handle<object>, doc: The widget., none: No widget has that name.}
+  fails:
+    not_found: The root no longer exists.
+    denied: Another mod owns the root.
+    invalid: The name is empty or the root is not a UserWidget.
+    not_ready: Its tree cannot be read, or the owner ended during the query.
+    no_memory: The ownership or retention record could not be allocated.
+  completes: construct_widget
+- name: set_root_widget
+  doc: Sets the root of your UserWidget's tree when that tree is empty. The new root must be a widget
+    constructed in that same tree, without a parent. Assign it before the UserWidget is parented or
+    first presented, as the engine caches its Slate content. After that content has been built, destroy
+    and recreate the UserWidget instead. An existing tree root is never replaced.
+  owns: true
+  params:
+  - {name: widget, type: handle<object>, doc: Your UserWidget root.}
+  - {name: root, type: handle<object>, doc: The widget constructed for its empty tree.}
+  fails:
+    not_found: A widget no longer exists or is not owned.
+    denied: A widget belongs to another mod or tree.
+    invalid: The root has a parent, or an argument has the wrong type.
+    busy: The tree already has a root, or the UserWidget is parented or has built its Slate content.
+    not_ready: The tree cannot be changed or the owner ended.
+  completes: construct_widget
+- name: add_child
+  doc: Adds an unparented widget to a PanelWidget in the same owned tree. Returns the engine's PanelSlot;
+    use reflection for the slot's layout. It refuses cycles and does not reparent existing children.
+  owns: true
+  params:
+  - {name: panel, type: handle<object>, doc: Your PanelWidget.}
+  - {name: child, type: handle<object>, doc: Your unparented child in the same tree.}
+  returns: {type: handle<object>, doc: The created PanelSlot.}
+  fails:
+    not_found: A widget no longer exists or is not owned.
+    denied: The widgets belong to different mods or trees.
+    invalid: The parent is not a panel, or the attachment would form a cycle.
+    busy: The child already has a parent or is the tree root.
+    not_ready: The engine could not attach it, or its owner ended during attachment.
+    no_memory: The slot retention record could not be allocated.
+  completes: construct_widget
+- name: hold_widget
+  doc: Adds your UserWidget to the viewport at the given draw order. This does not claim controller input
+    or open Settings. Configure focus, visibility, and input behaviour through the widget and reflection.
+    Repeating the same hold succeeds; release it before changing its draw order.
+  owns: true
+  params:
+  - {name: widget, type: handle<object>, doc: Your UserWidget root.}
+  - {name: z_order, type: i32, default: 0, doc: The viewport draw order.}
+  fails:
+    not_found: The widget no longer exists or is not owned.
+    denied: Another mod owns the widget.
+    invalid: The widget is not a UserWidget root.
+    busy: It is parented already, or held at another draw order.
+    not_ready: The viewport is unavailable or its owner ended during the call.
+  users: [custom-mod-menus, kadan]
+- name: release_widget
+  doc: Removes your UserWidget from the viewport. It stays owned and can be shown again.
+  owns: true
+  params:
+  - {name: widget, type: handle<object>, doc: Your UserWidget root.}
+  fails:
+    not_found: The widget no longer exists, is not owned, or has no viewport hold.
+    denied: Another mod owns the widget.
+    invalid: The object is not a UserWidget root.
+    not_ready: The viewport could not be detached or its owner ended during the call.
+    busy: A viewport addition or removal is already in progress.
+  completes: hold_widget
+- name: hold_button_events
+  doc: Observes the native clicked, pressed, released, hovered and unhovered events of an owned UMG Button.
+    Existing engine delegates still run once. Events are queued for the next world step and delivered only
+    to your mod. This does not consume input or invent clicks. The hold ends with the root or your mod.
+  owns: true
+  params:
+  - {name: widget, type: handle<object>, doc: A native Button in your owned tree.}
+  fails:
+    not_found: The widget no longer exists or is not owned.
+    denied: Another mod owns the widget.
+    invalid: The widget is not a native Button.
+    not_ready: The matching native event hook is unavailable.
+    no_memory: The observation record could not be allocated.
+  users: [custom-mod-menus, kadan]
+- name: release_button_events
+  doc: Ends your observation of this Button. Events queued by that observation are discarded.
+  owns: true
+  params:
+  - {name: widget, type: handle<object>, doc: Your observed Button.}
+  fails:
+    not_found: The widget no longer exists or has no observation.
+    denied: Another mod owns the widget.
+    invalid: The object is not a widget.
+    not_ready: The widget's context or world has ended and cleanup is pending.
+  completes: hold_button_events
+
+- name: glyph
+  doc: Returns a canonical native PictureFont button token. Combine it with text for generated
+    control labels, choice labels, messages, custom footers or owned CarrotRichTextBlock widgets.
+    These fields accept plain UTF-8 and exact tokens from this function, up to 640 bytes in total.
+    Other markup and altered token attributes are refused. Screen titles remain plain text.
+    Authored widgets need a PictureFont decorator. This does not imply keyboard icon adaptation.
+  params:
+  - {name: button, type: enum<GlyphButton>, doc: The native button icon.}
+  returns: {type: text, doc: The button token.}
+  fails:
+    invalid: The button has no verified icon.
+  users: [custom-mod-menus, mod-settings-screens, kadan]
+- name: set_footer
+  doc: Copies a custom footer guide for your generated screen. It replaces automatic guides while
+    that screen is open. Empty text restores automatic guides. Use glyph for native button icons;
+    captions and their localization belong to your mod. JSON screens accept the same optional footer.
+    A guide describes existing controls; it does not bind new input actions.
+  owns: true
+  params:
+  - {name: screen, type: handle<screen>, doc: Your generated screen.}
+  - {name: text, type: text, doc: "Plain UTF-8 with optional exact glyph tokens, at most 640 bytes."}
+  fails:
+    not_found: The screen no longer exists.
+    denied: Another mod owns the screen.
+    invalid: The text has invalid UTF-8, unsupported markup, ASCII control characters or excessive length.
+    no_memory: The text could not be copied.
+  users: *id001
+- name: set_widget_text
+  doc: Sets an owned CarrotRichTextBlock through the native FText setter. The widget must belong
+    to a UserWidget created by your mod; find_widget or construct_widget supplies such children.
+    Plain UTF-8 and exact glyph tokens are accepted, up to 640 bytes. Authored widgets keep their
+    own layout and decorator configuration; a PictureFont decorator renders the button icons.
+    Empty text clears the label. The value remains when the widget is hidden and ends with its root.
+  owns: true
+  params:
+  - {name: widget, type: handle<object>, doc: Your owned CarrotRichTextBlock.}
+  - {name: text, type: text, doc: Plain UTF-8 with optional exact glyph tokens.}
+  fails:
+    not_found: The widget no longer exists or is not owned.
+    denied: Another mod owns the widget.
+    invalid: The object is not a CarrotRichTextBlock, or the text has the wrong form.
+    not_ready: The native setter is unavailable, the world ended or the owner ended during the call.
+    no_memory: The widget could not be retained for the call.
+  completes: create_widget
+
+events:
+- name: activated
+  doc: Emitted when the player selects a button. Only the screen's owning mod receives this event.
+  fields:
+  - name: screen
+    type: handle<screen>
+    doc: The screen.
+  - name: control
+    type: enum<Control>
+    doc: The button ID.
+  users: *id001
+- name: changed
+  doc: Emitted when the player edits a selector. Use `choice_changed` or `integer_changed` for its new
+    and previous values. Changes made through setters emit no event. Only the screen's owning mod receives
+    this event.
+  fields:
+  - name: screen
+    type: handle<screen>
+    doc: The screen.
+  - name: control
+    type: enum<Control>
+    doc: The control ID.
+  - name: kind
+    type: enum<UiValueKind>
+    doc: The selector kind.
+  users: *id001
+- name: closed
+  doc: Emitted when a screen closes. A stopped mod receives no events. Only the screen's owning mod
+    receives this event.
+  fields:
+  - name: screen
+    type: handle<screen>
+    doc: The screen.
+  users: *id001
+- name: choice_changed
+  doc: Emitted when the player changes a choice selector. The values are copied when the edit happens
+    and delivered at the next world step. Only the screen's owning mod receives this event.
+  fields:
+  - name: screen
+    type: handle<screen>
+    doc: The screen.
+  - name: control
+    type: enum<Control>
+    doc: The control ID.
+  - name: choice
+    type: enum<Choice>
+    doc: The new value.
+  - name: previous
+    type: enum<Choice>
+    doc: The value before the edit.
+  users:
+  - custom-mod-menus
+  - mod-settings-screens
+- name: integer_changed
+  doc: Emitted when the player changes a integer selector. The values are copied when the edit happens
+    and delivered at the next world step. Only the screen's owning mod receives this event.
+  fields:
+  - name: screen
+    type: handle<screen>
+    doc: The screen.
+  - name: control
+    type: enum<Control>
+    doc: The control ID.
+  - name: integer
+    type: i64
+    doc: The new value.
+  - name: previous
+    type: i64
+    doc: The value before the edit.
+  users:
+  - custom-mod-menus
+  - mod-settings-screens
+- name: reset_requested
+  doc: Emitted when the player requests the stock Settings reset action. Only the screen's owner
+    receives it. Reset your declared values through settings.reset; the screen does not treat
+    initial control values as defaults. Delivered at the next world step.
+  fields:
+  - name: screen
+    type: handle<screen>
+    doc: The screen whose settings should be reset.
+  users: *id001
+- name: button_event
+  doc: A native UMG Button event observed through hold_button_events. Delivered to the owning mod
+    at the next world step. Released observations, ended roots and stopped mods receive no event.
+  fields:
+  - {name: widget, type: handle<object>, doc: The owned Button.}
+  - {name: signal, type: enum<ButtonSignal>, doc: The native event.}
+  users: [custom-mod-menus, kadan]

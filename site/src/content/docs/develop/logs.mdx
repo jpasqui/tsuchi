@@ -1,0 +1,90 @@
+---
+title: Logs and debugging
+description: Find the log and understand failures while testing your mod.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+[Install your mod](/players/install-a-mod/) and start the game. On an emulator, open
+the game's save folder and find `tsuchi/tsuchi.log`. On a console, use your save-data
+tool to export the game's save, then open the same file. Tsuchi also writes to the
+system's debug output, which an emulator or attached debugger can show.
+
+## Messages
+
+For example, write a line when your mod starts:
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua title="main.lua"
+print("Started " .. mod.id())
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript title="main.js"
+print("Started " + mod.id());
+```
+
+</TabItem>
+<TabItem label="C">
+
+```c title="main.c"
+#include "tsuchi/tsuchi.h"
+
+TSUCHI_Result tsuchi_mod_start(const TSUCHI_Host *host, TSUCHI_Mod *mod) {
+    return host->mod->log(mod, "Started");
+}
+```
+
+</TabItem>
+</Tabs>
+
+If your mod's ID is `olimar.clock`, its file log line starts with `[olimar.clock] `.
+The framework's own lines start with `[tsuchi] `. Look for its startup summary to see
+which mods are running and why any mod was blocked.
+
+The file holds one game run. Copy it before starting the game again, as the next
+run's first write replaces it. Lines can wait while the game saves or changes scenes.
+The file keeps up to 256 KiB per run, the waiting queue holds up to 256 KiB, and
+each line holds up to 1,000 bytes of text. Past either byte limit, Tsuchi counts
+and drops lines, and the file's last line reports that the log is full. Debug output
+continues to receive every line. A refused file write is retried after ten seconds.
+Log changes and failures instead of writing on every step.
+
+## Failures
+
+When an API call fails, Lua returns `nil` and a result name, JavaScript throws an
+`Error` whose `name` is that result, and C returns a `TSUCHI_Result`. A failed call
+leaves its target unchanged. Read the call's reference before deciding to retry it.
+
+| Result | Next step |
+| --- | --- |
+| `not_found` | Check the name or get a fresh handle. The actor may have left play. |
+| `not_ready` | Wait for the right game state, such as a loaded world. |
+| `busy` | Try later, as the game or another mod is using the resource. |
+| `invalid` | Check the argument's type, range, and accepted IDs. |
+| `denied` | Check who owns the resource. Your mod can't change another mod's private settings. |
+| `unsupported` | Check that the target supports the request. Retrying the same target won't add support. |
+| `capacity` | Check the documented limit. In C, resize an output buffer if the call reports its required size. |
+| `io` | Check the save or file operation and its path. |
+| `no_memory` | Reduce the data your mod keeps or creates. |
+
+If a manifest is blocked, the log names the key or dependency that failed. If Lua
+or JavaScript raises an error during startup, the mod won't start. An ordinary
+callback error is logged, and the callback can run again. If a callback runs
+too long, Tsuchi stops calling it, and catching the error won't give it more time.
+Each time Tsuchi calls your script, it can run twenty million instructions, and each
+mod can use up to 128 MiB of memory. In JavaScript, the Promise jobs your callback
+starts count toward that callback's twenty million instructions, and the stack is
+limited to 256 KiB. See [Lua limits](/develop/lua/#limits) and
+[JavaScript limits](/develop/javascript/#limits).
+
+## Checks
+
+Add a log line before and after the call you're investigating, then repeat the same
+game action. Check the result before reading an output value. If you keep an actor
+handle between events, log when you get it and when it stops working so you can
+tell an expired handle from a wrong argument.

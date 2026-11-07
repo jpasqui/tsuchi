@@ -1,0 +1,32 @@
+# Entries that only the checks' own mods read. tools/stage_test_mods.py loads them with
+# game/table.yaml to lay those mods out. The framework's header is generated from
+# game/table.yaml alone, so nothing here reaches the module people run.
+
+data:
+  tick_state_actor_table: 0x08C26978 # GActor/GKochappy requested-tick locator for SDK checks
+
+constants:
+  ai_order_placement: 0x123456789abcddb3 # Authored placement-list larva used by the SDK proof.
+  # Original 1.1.1 cosine/sine import veneers. Live SDK checks hook only BR x17.
+  native_hook_branch_offset: 12
+  native_hook_cos_0: 0xB0017F30
+  native_hook_cos_1: 0xF943DE11
+  native_hook_cos_2: 0x911EE210
+  native_hook_cos_3: 0xD61F0220
+  native_hook_sin_0: 0xB0017F30
+  native_hook_sin_1: 0xF943E211
+  native_hook_sin_2: 0x911F0210
+  native_hook_sin_3: 0xD61F0220
+
+assets:
+  tick_state_actor: /Game/Carrot4/Placeables/Teki/GKochappy.GKochappy_C
+  cleanup_material: /Engine/EngineMaterials/DefaultMaterial.DefaultMaterial
+  ai_order_map: /Game/Carrot4/Maps/Madori/Cave/Cave000/Cave000_F00/Cave000_F00_P
+  ai_order_class: /Game/Carrot4/Placeables/Teki/GBaby.GBaby_C
+
+structs:
+  ai_start_observation:              # retained native reads around BabyAI start, for the SDK ordering fixture
+    fields: {game_owner: 0x208, territory: 0x82C, patrol: 0xEEC, actions: 0x218, tree_context: 0x98, patrol_reference: 0x30}
+
+functions:
+  actor_request_tick: {address: 0x01B85E40, args: [pointer, bool]} # retains requested actor state while asleep

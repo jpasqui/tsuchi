@@ -1,0 +1,82 @@
+---
+title: Read physical ground contact
+description: Tell supporting contact apart from a wall hit, an airborne body, and an unavailable sample.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+Call [`entity.grounded`](/reference/entity/#grounded) to read whether the game's
+latest completed contact update accepted support for a gameplay actor. The actor
+needs an independent, awake physics body. A completed update returns `true` for support or `false` without
+support. Wall and ceiling contact do not count. The game's support angle and
+contact filters apply relative to the actor's up direction.
+
+The result describes the actor's accepted support; it does not identify which
+component made contact. The first call starts observing the actor. Call again after the next world
+update to obtain a result. A result that cannot be established returns
+`not_ready`: a body may be asleep, stopped, suspended, moved since its sample,
+or waiting for a launch. An actor without a supported independent body returns
+`unsupported`. Neither failure means that the actor is airborne.
+Suspending actor logic also stops the update that refreshes its contact sample.
+
+## Read a result
+
+These examples print a change in the first captain's observed contact state.
+They wait through unavailable samples. Start with [your first mod](/develop/first-mod/).
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua title="main.lua"
+local previous
+time.on_step(function()
+    if game.has_control() ~= true then previous = nil return end
+    local leader = player.captain(0)
+    if not leader then return end
+    local supported, why = entity.grounded(leader)
+    if supported == nil then return end
+    if supported ~= previous then
+        print(supported and "Supporting contact" or "No supporting contact")
+        previous = supported
+    end
+end)
+```
+
+Check for `nil` when handling failure. A successful `false` is an observed
+update without supporting contact.
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript title="main.js"
+let previous;
+time.on("step", () => {
+    try {
+        if (!game.has_control()) { previous = undefined; return; }
+        const supported = entity.grounded(player.captain(0));
+        if (supported !== previous) {
+            print(supported ? "Supporting contact" : "No supporting contact");
+            previous = supported;
+        }
+    } catch (error) {
+        if (!["not_ready", "not_found", "unsupported"].includes(error.name)) throw error;
+    }
+});
+```
+
+</TabItem>
+</Tabs>
+
+## Use contact for a jump
+
+A jump mod can require a successful `true` result before calling
+[`entity.launch`](/reference/entity/#launch). Calling `launch` invalidates the
+previous contact sample immediately. A fresh native update must follow before
+the actor can report support again. The mod still chooses its input, launch
+speed, mounting restrictions and whether another press is required after landing.
+
+The query does not wake or move a body, retain an actor, or search the level for
+ground. [`world.ground`](/reference/world/#ground) serves a different purpose:
+it projects a point onto the loaded navigation mesh. Zero vertical velocity and
+the game's collision counter cannot establish physical support at an apex or
+after a wall hit.

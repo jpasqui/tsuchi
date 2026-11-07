@@ -1,0 +1,124 @@
+---
+title: Send network messages
+description: Send UDP messages, fetch HTTPS data, and use a mod channel.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+Use [`net`](/reference/net/) to send bytes over IPv4 or fetch a small HTTPS
+response. Your sockets and requests close when your mod stops. All calls run
+on the game thread, including calls from compiled mods.
+
+## UDP
+
+A *datagram* is one message sent without a connection. It can be lost, duplicated,
+or delivered out of order. For example, send a position update to a local tool:
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua title="main.lua"
+local socket, why = net.udp_open(0, false)
+if not socket then error(why) end
+local sent, why = net.send(socket, { ipv4 = 0x7f000001, port = 47700 }, "captain")
+if not sent then print(why) end
+net.close(socket)
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript title="main.js"
+const socket = net.udp_open(0, false);
+if (socket) {
+    net.send(socket, { ipv4: 0x7f000001, port: 47700 },
+        new Uint8Array([99, 97, 112, 116, 97, 105, 110]));
+    net.close(socket);
+}
+```
+
+</TabItem>
+<TabItem label="C">
+
+```c title="main.c"
+#include "tsuchi/tsuchi.h"
+
+TSUCHI_Result tsuchi_mod_start(const TSUCHI_Host *host, TSUCHI_Mod *self) {
+    TSUCHI_Socket socket = {0};
+    TSUCHI_Result result = host->net->udp_open(self, 0, false, &socket);
+    if (result != TSUCHI_OK) return result;
+    const TSUCHI_NetAddress tool = {0x7f000001, 47700};
+    result = host->net->send(self, socket, &tool, "captain", 7);
+    host->net->close(self, socket);
+    return result;
+}
+```
+
+</TabItem>
+</Tabs>
+
+Keep the socket open if you want replies. Call `net.receive` from
+[`time.on_step`](/reference/time/#step) with the socket and the most bytes you
+want. A longer datagram is cut to that size. When no message waits, it returns
+`not_ready`. After a read, `net.sender` gives the sender's address.
+`net.resolve` accepts numeric dotted IPv4 addresses. It refuses hostnames
+because a DNS lookup must not stall gameplay.
+
+The IPv4 value stores four octets in most significant byte order. For example,
+`0x7f000001` is `127.0.0.1`. Ports range from 1 to 65535 when you send.
+The `connected` status accepts the system's connection report or a non-loopback
+IPv4 route through the socket transport. Checking status sends no data and starts
+no workers. A route does not guarantee that a particular server can be reached.
+
+## HTTPS
+
+Subscribe to [`net.completed`](/reference/net/#completed), then call `net.get`
+with an HTTPS URL, a response byte limit, and a timeout in milliseconds.
+The workers resolve names and verify the certificate chain, hostname, and dates.
+Your callback runs on the game thread and only receives your mod's requests.
+
+The first HTTPS request starts two request workers and two DNS helpers. Idle
+workers sleep until more work arrives. Their stacks stay allocated until the
+game exits. UDP and mods that do not request HTTPS start no workers.
+
+After completion, read `net.request_info`. If the state is `succeeded`, call
+`net.read` to copy the body, and then `net.release_request`. On failure, the
+`failure` field gives a fixed result name such as `io`. Cancel a pending request
+with `net.cancel_request`. Cancellation can lose a race with completion.
+
+JavaScript's `net.get` returns a Promise. Await the completion event, then read
+its `request` handle. A response can hold up to 4 MiB. Each mod can hold eight
+requests and sixteen sockets. Worker storage for a cancelled request stays
+reserved until that worker finishes.
+
+Response memory grows as bytes arrive. The response limit does not reserve that
+amount in advance. HTTPS has a shared 48 MiB memory budget, with up to 32 MiB
+for response payloads. A request can fail with `no_memory` when other requests
+use that budget. Release successful requests after reading them. Failed and
+cancelled requests free their response storage before their completion event.
+
+## Sessions
+
+Use [`session`](/reference/session/) when several machines need ordered messages
+and a shared clock. Call `session.open_channel` with your mod's protocol version
+before subscribing to its events. A channel is named by your mod ID, so its
+messages reach that mod on the other machines.
+
+One machine calls `session.host`. The others call `session.join` with the host's
+numeric address and port. Wait for `session.joined` before sending. Read the
+current peers and clock with `session.info`, and check a peer's protocol with
+`session.channel_version`.
+
+In `session.message`, call `session.read_message(event.size)` before the callback
+returns. Pass `true` to `session.send` for reliable, ordered delivery. Messages can
+hold up to 1024 bytes. If a peer leaves or times out after twenty seconds, resend
+your state after it joins again. Reliable messages in flight do not survive rejoining.
+
+The session keeps running in menus and on loading screens. When the game starts a
+scene change or a save on one machine, that machine tells the others it's loading
+for the next 30 seconds, as the game can hold its thread for several seconds at a
+time while it loads. The others wait up to 90 seconds after it last said so before
+the peer times out.
+
+Call `session.leave` to end the session your mod started, and
+`session.close_channel` to stop receiving its events. Both end when your mod stops.

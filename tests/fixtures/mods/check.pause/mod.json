@@ -1,0 +1,16 @@
+{
+  "id": "check.pause",
+  "name": "The check of pause holds",
+  "version": "1.0.0",
+  "meta": {
+    "check": "pause",
+    "checks": [
+      "listened",
+      "held",
+      "overlap",
+      "restored",
+      "events",
+      "refused"
+    ]
+  }
+}

@@ -1,0 +1,24 @@
+---
+// The site builder's footer, followed by a line that every page carries.
+import Default from '@astrojs/starlight/components/Footer.astro';
+---
+
+<Default><slot /></Default>
+<p class="site-footer">
+  Tsuchi is a fan project and is not affiliated with Nintendo.
+  <a href="https://discord.gg/Rg5BnvuwmQ">Discord</a>
+</p>
+
+<style>
+  .site-footer {
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--sl-color-hairline);
+    font-size: var(--sl-text-xs);
+    color: var(--sl-color-gray-3);
+  }
+  .site-footer a {
+    margin-inline-start: 0.75rem;
+    color: var(--sl-color-text-accent);
+  }
+</style>

@@ -1,0 +1,34 @@
+# Shared definitions every service uses. See DESIGN.md, "The schema".
+api_version: 0   # 0 until the first public release; one number for the whole API
+
+results:
+  - {name: ok, doc: "The call succeeded."}
+  - {name: not_found, doc: "The target doesn't exist, or it no longer exists."}
+  - {name: invalid, doc: "An argument is out of range or the wrong kind."}
+  - {name: busy, doc: "The game or another mod is using this right now. Try again later."}
+  - {name: not_ready, doc: "The game isn't in a state where this can happen, like before a world is loaded."}
+  - {name: capacity, doc: "A documented limit was reached."}
+  - {name: unsupported, doc: "The target exists but doesn't support this, like a creature that never sleeps."}
+  - {name: io, doc: An input or output operation failed.}
+  - {name: denied, doc: "The target belongs to another mod."}
+  - {name: no_memory, doc: "The game is out of memory. Any call that creates or stores something can fail this way."}
+
+# Handles name engine objects or resources owned by a mod. Only kinds marked
+# object can be used with calls that take any engine object.
+handles:
+  - {name: object, object: true, doc: "Any object that the engine tracks, like an actor, a component, a class, or an asset."}
+  - {name: actor, object: true, doc: "An Unreal actor, like scenery, a light, a captain, or a creature. Use the actor service for root poses and entity for gameplay operations."}
+  - {name: component, object: true, doc: "A component of an actor, like its mesh, a collision shape, a light, or an attach point."}
+  - {name: dialog, doc: "A dialog requested by your mod, also returned by its answer event."}
+  - {name: pause_hold, doc: "A pause hold owned by your mod until release or mod stop."}
+  - {name: hook_id, doc: "A hook owned by your mod until removal or mod stop."}
+  - {name: prepared_call, doc: "A prepared reflected call owned by your mod until end_call or mod stop."}
+  - {name: socket, doc: "A UDP socket held by your mod until close or mod stop."}
+  - {name: request, doc: "An HTTPS request held by your mod until release or mod stop."}
+  - {name: screen, doc: "A mod screen, owned until destroyed or the mod stops."}
+  - {name: asset_bundle, doc: "A cooked asset upload owned by your mod until release or mod stop. Mounted files stay until process exit."}
+  - {name: preview_scene, doc: "A temporary area reservation owned by your mod. Admitted native references stay until process exit."}
+  - {'name': 'effect', 'doc': 'A particle playback owned by your mod until it finishes or stops.'}
+  - {'name': 'sound_bank', 'doc': 'An independent sound bank held by your mod until unload or stop.'}
+  - {'name': 'sound_voice', 'doc': 'One playback from an independent sound bank.'}
+  - {name: content_declaration, doc: "An admitted batch of content declarations, until retract or mod stop."}

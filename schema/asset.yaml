@@ -1,0 +1,174 @@
+service: asset
+tutorials:
+  - {title: Inspect a loaded asset, path: /develop/reflection-and-assets/}
+layer: engine
+acts_on: object
+lifetime: process
+brief: "Loads assets and admits new cooked content while the game runs."
+description: |
+  Meshes, materials, data tables, sounds, and Blueprint classes are all
+  assets. The game loads them when a level needs them and unloads them
+  afterward. Use this service to load an asset by its path and keep it loaded
+  for your mod.
+
+  A path has the package name followed by the object name, like
+  `/Game/Dir/Thing.Thing`. For a Blueprint class, add `_C` to the object name,
+  like `/Game/Dir/Thing.Thing_C`. If a class is already loaded, you can find
+  it by name with `reflection.find_class`. To get the path of an object that
+  is already loaded, use `reflection.path`.
+
+  Asset bundles upload new cooked content to the SD card while the game runs.
+  Each bundle contains a complete UE4.26 pak, utoc, and ucas, and can include a
+  creator shader archive. Every package must have a new identity below the
+  bundle's `/Game/` creator root. `/Game/Carrot4/` is protected. Bundles cannot replace existing packages or redirect
+  them. Mounted files remain immutable until the process exits, including after
+  the calling mod stops. Load uploaded assets with `asset.load` after mounting.
+
+enums:
+  BundlePart:
+    open: false
+    doc: A file in a cooked asset bundle.
+    values:
+      - {name: pak, value: 0, doc: "The container's pak file, at most 16 MiB."}
+      - {name: utoc, value: 1, doc: "The container's table of contents, at most 16 MiB."}
+      - {name: ucas, value: 2, doc: "The container's cooked data, at most 256 MiB."}
+      - {name: shaders, value: 3, doc: "An optional creator shader archive, at most 64 MiB."}
+  BundleState:
+    open: false
+    doc: The state of a cooked asset bundle.
+    values:
+      - {name: uploading, value: 0, doc: Files can receive more bytes.}
+      - {name: mounted, value: 1, doc: The engine retains the immutable files.}
+      - {name: failed, value: 2, doc: A file could not be restored after an upload error. Release this bundle.}
+structs:
+  BundleInfo:
+    doc: The state and completed upload lengths of a cooked asset bundle.
+    fields:
+      - {name: state, type: enum<BundleState>, doc: The bundle's state.}
+      - {name: pak_bytes, type: u64, doc: Completed pak bytes.}
+      - {name: utoc_bytes, type: u64, doc: Completed table-of-contents bytes.}
+      - {name: ucas_bytes, type: u64, doc: Completed cooked-data bytes.}
+      - {name: shader_bytes, type: u64, doc: Completed shader archive bytes.}
+      - {name: failure, type: text, doc: "The last failed operation's result name, or empty after success."}
+
+functions:
+  - name: load
+    doc: |
+      Loads an asset, or finds it if it is already loaded, and keeps it loaded until
+      your mod releases it or stops. Loading from storage freezes the game until it
+      finishes, which players will notice during gameplay. Loading the same asset
+      again returns the same object and doesn't add a second hold.
+    owns: true
+    params:
+      - {name: path, type: text, doc: "The asset's path, starting with `/`."}
+    returns: {type: handle<object>, doc: The asset.}
+    waits: true
+    fails:
+      invalid: "The path doesn't start with `/`, or it has characters that the game can't store."
+      not_found: "The game has no asset at that path."
+      not_ready: "The game can't load assets yet."
+    users: [groink, treasure-demo]
+
+  - name: release
+    doc: "Ends your mod's hold on an asset. The game can unload it once nothing else is using it."
+    owns: true
+    params:
+      - {name: asset, type: handle<object>, doc: The asset.}
+    fails:
+      not_found: "Your mod isn't holding this asset."
+    users: [groink, treasure-demo]
+
+  - name: begin_bundle
+    doc: |
+      Begins an upload under a new generated SD spool directory. The framework
+      never writes a path chosen by the caller. The upload belongs to your mod
+      and ends on release or mod stop. A mod can own 8 unmounted uploads, and one process
+      can retain 32 mounted bundles and 1 GiB of uploaded files. A process can
+      issue 1024 upload handles, which also bounds generated spool directories.
+    owns: true
+    params:
+      - {name: name, type: text, doc: "The container's stem, 1 to 64 ASCII letters, digits, underscores, or hyphens, without a file extension."}
+      - {name: package_root, type: text, doc: "A canonical creator root such as `/Game/MyMeshes` or `/Game`, without a trailing slash. Segments use ASCII letters, digits, underscores, or hyphens. `/Game/Carrot4` is protected."}
+    returns: {type: handle<asset_bundle>, doc: Your upload.}
+    fails:
+      invalid: A name or package root is malformed.
+      capacity: A bundle or disk budget was reached.
+      unsupported: The SD filesystem cannot be mounted.
+      io: The spool directory could not be created.
+    users: [kadan, remote-content-tools]
+
+  - name: write_bundle
+    doc: |
+      Appends 1 to 32768 bytes at the file's completed length. Repeating bytes
+      already uploaded succeeds only when the bytes match, so a lost reply can
+      be retried. Writes cannot change a mounted bundle. The filename is the
+      bundle's stem with the chosen part's extension.
+    owns: true
+    params:
+      - {name: bundle, type: handle<asset_bundle>, doc: Your upload.}
+      - {name: part, type: enum<BundlePart>, doc: The file to append to.}
+      - {name: offset, type: u64, doc: The zero-based byte offset.}
+      - {name: data, type: bytes, doc: From 1 to 32768 bytes.}
+    fails:
+      invalid: The bytes or offset are invalid, or a retry differs from saved bytes.
+      not_found: The bundle has ended.
+      denied: The bundle belongs to another mod.
+      busy: The bundle is mounted.
+      capacity: The file or process disk budget was reached.
+      io: A file write or read failed.
+    users: [kadan, remote-content-tools]
+
+  - name: mount_bundle
+    doc: |
+      Validates the complete bundle and mounts its new packages. The pak, utoc,
+      and ucas must be nonempty, and every package must be below the declared
+      root. Shader instances must belong to the same bundle. Existing package identities, container identities, and redirects
+      are refused. An error leaves the upload available for release and does
+      not block your mod. Repeating a successful mount succeeds.
+      Mounted files stay on the SD card until the game closes; the next run
+      removes them before its first upload. Release ends the
+      bundle's shader sets; asset.load holds have their own release.
+    owns: true
+    params:
+      - {name: bundle, type: handle<asset_bundle>, doc: Your complete upload.}
+      - {name: shader_metadata, type: text, doc: "Empty without shaders, or the JSON shaders object from the creator export manifest. Its archive field names the bundle's shader file; bytes come from the generated spool."}
+    fails:
+      invalid: The bundle, package root, redirects, or shader metadata are invalid.
+      not_found: The bundle has ended, or a required donor material is absent.
+      denied: The bundle belongs to another mod.
+      busy: A container or package identity already exists.
+      capacity: A documented validation or mount limit was reached.
+      unsupported: The engine, startup census, or shader format cannot admit this bundle.
+      not_ready: The engine cannot load shader donor assets yet.
+      io: A file could not be read, or the engine refused the mount.
+    waits: true
+    users: [kadan, remote-content-tools]
+
+  - name: bundle_status
+    doc: |
+      Returns your bundle's state, completed lengths, and last failure. A failed
+      bundle accepts no writes or mount requests and must be released. Completed
+      lengths exclude any bytes retained after a failed write and rollback.
+    owns: true
+    params:
+      - {name: bundle, type: handle<asset_bundle>, doc: Your upload or mounted bundle.}
+    returns: {type: struct<BundleInfo>, doc: The upload status.}
+    fails:
+      not_found: The bundle has ended.
+      denied: The bundle belongs to another mod.
+    users: [kadan, remote-content-tools]
+
+  - name: release_bundle
+    doc: |
+      Ends your bundle and its shader sets. Unmounted uploads are removed from
+      the SD card. Mounted container files remain until the game closes because
+      the engine retains them; the next run removes them before its first upload. Asset holds made with asset.load have their own
+      release. The same cleanup runs when your mod stops.
+    owns: true
+    params:
+      - {name: bundle, type: handle<asset_bundle>, doc: Your bundle.}
+    fails:
+      not_found: The bundle has ended.
+      denied: The bundle belongs to another mod.
+      io: An unmounted upload could not be removed.
+    users: [kadan, remote-content-tools]

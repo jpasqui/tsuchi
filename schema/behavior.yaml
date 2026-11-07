@@ -1,0 +1,43 @@
+service: behavior
+tutorials:
+  - {title: Revive a creature, path: /develop/creatures/}
+layer: game
+acts_on: actor
+lifetime: world
+brief: "Reads what an actor is currently doing and reports when it changes."
+description: |
+  Captains, Oatchi, Pikmin, creatures, and most objects that Pikmin can work
+  on have an AI component that decides what they do. That component is always
+  running one action, which can be running another action inside of it, and so
+  on. This service returns the action names from the outermost to the
+  innermost, joined by `/`. For example, a captain that is throwing returns
+  `Control/Throw`, a Pikmin in a squad returns `Follow`, and a Pikmin that is
+  carrying returns `Carry`.
+
+  The action names are the game's own, and they are different for each kind of
+  actor. This service is read-only. To make an actor do something, use the
+  service for that kind of actor.
+
+functions:
+  - name: action
+    doc: "An actor's current action."
+    params:
+      - {name: actor, type: handle<actor>, doc: The actor.}
+    returns: {type: text, doc: "The actions that it is running, from the outermost to the innermost, joined by `/`. Empty if it isn't doing anything."}
+    fails:
+      not_found: "The actor no longer exists."
+      unsupported: "This actor has no AI, so it doesn't do anything on its own."
+    users: [groink, online-coop]
+
+events:
+  - name: changed
+    doc: |
+      Emitted when an actor starts a different action, whether the game or a mod
+      caused it. Every actor in the world is checked once per world step, so an action
+      that starts and ends within one world step isn't reported. The action that an actor
+      has when it enters the world isn't reported either.
+    fields:
+      - {name: actor, type: handle<actor>, doc: The actor.}
+      - {name: action, type: text, doc: "The current action, in the same format that `action` returns."}
+      - {name: previous, type: text, doc: "Its previous action."}
+    users: [groink, online-coop]

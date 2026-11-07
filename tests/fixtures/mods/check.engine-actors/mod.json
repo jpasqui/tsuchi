@@ -1,0 +1,23 @@
+{
+  "id": "check.engine-actors",
+  "name": "Engine actors and gameplay entities",
+  "version": "1.0.0",
+  "meta": {
+    "check": "engine-actors",
+    "check_explicit": true,
+    "checks": [
+      "world_list",
+      "scenery_owner",
+      "scenery_root",
+      "scenery_set_restore",
+      "light_owner",
+      "light_root",
+      "light_set_restore",
+      "entity_refuses_scenery",
+      "entity_refuses_light",
+      "character_divergence",
+      "character_entity_setter",
+      "character_actor_setter"
+    ]
+  }
+}

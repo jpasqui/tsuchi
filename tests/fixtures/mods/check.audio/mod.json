@@ -1,0 +1,12 @@
+{
+  "id": "check.audio",
+  "name": "The check of audio",
+  "version": "1.0.0",
+  "meta": {
+    "check": "audio",
+    "checks": [
+      "heard",
+      "refused"
+    ]
+  }
+}

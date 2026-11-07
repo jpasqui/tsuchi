@@ -1,0 +1,23 @@
+{
+  "id": "check.crew",
+  "name": "The isolated check of new Pikmin and squad changes",
+  "version": "1.0.0",
+  "meta": {
+    "check": "crew",
+    "check_explicit": true,
+    "checks": [
+      "found",
+      "added",
+      "made",
+      "info",
+      "following",
+      "left",
+      "rejoined",
+      "dismissed",
+      "restored",
+      "removed",
+      "gone",
+      "originals"
+    ]
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "id": "check.script",
+  "name": "Check script",
+  "version": "1.0.0",
+  "framework": 0,
+  "requires": {"check.library": "1.0.0"}
+}

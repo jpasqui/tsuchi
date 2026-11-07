@@ -1,0 +1,31 @@
+# game/fixtures.yaml's entries with the Switch 2 Edition demo's numbers, for tools/stage_test_mods.py --build sw2-demo.
+# Nothing here reaches the module people run.
+
+data:
+  tick_state_actor_table: 0x07837EE0 # GActor's table (its constructor 0x5AB050 and destructor 0x7E5000 store it)
+
+constants:
+  ai_order_placement: 0x123456789abcddb3 # Authored placement-list larva used by the SDK proof.
+  # The demo's cosine/sine import veneers (0x5B81CF0, 0x5B81CE0): the same four-word shape as 1.1.1's.
+  native_hook_branch_offset: 12
+  native_hook_cos_0: 0xF0011C70
+  native_hook_cos_1: 0xF940E211
+  native_hook_cos_2: 0x91070210
+  native_hook_cos_3: 0xD61F0220
+  native_hook_sin_0: 0xF0011C70
+  native_hook_sin_1: 0xF940DE11
+  native_hook_sin_2: 0x9106E210
+  native_hook_sin_3: 0xD61F0220
+
+assets:
+  tick_state_actor: /Game/Carrot4/Placeables/Teki/GKochappy.GKochappy_C
+  cleanup_material: /Engine/EngineMaterials/DefaultMaterial.DefaultMaterial
+  ai_order_map: /Game/Carrot4/Maps/Madori/Cave/Cave000/Cave000_F00/Cave000_F00_P
+  ai_order_class: /Game/Carrot4/Placeables/Teki/GBaby.GBaby_C
+
+structs:
+  ai_start_observation:              # BabyAI start 0x2F08180; patrol moved +0x64 from 1.1.1
+    fields: {game_owner: 0x208, territory: 0x82C, patrol: 0xF50, actions: 0x218, tree_context: 0x98, patrol_reference: 0x30}
+
+functions:
+  actor_request_tick: {address: 0x0355BB10, args: [pointer, bool]} # GActor's table +0x698

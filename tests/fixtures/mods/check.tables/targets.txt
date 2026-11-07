@@ -1,0 +1,8 @@
+/Game/Carrot4/Core/GActor/DT_TekiParameter.DT_TekiParameter
+CHAPPY
+MaxLife
+ActorName
+/Game/Carrot4/Core/Quest/DT_QuestHappySkill.DT_QuestHappySkill
+UnlockHappySkill_SNIFF
+EndDemoPlayParam
+/Game/Carrot4/Placeables/Teki/GNightChappy.GNightChappy_C

@@ -1,0 +1,57 @@
+service: collision
+tutorials:
+  - {title: Inspect a loaded asset, path: /develop/reflection-and-assets/}
+  - {title: Events and cleanup, path: /develop/events-and-cleanup/}
+layer: game
+acts_on: component
+lifetime: world
+brief: "Holds a gameplay component's collision off and restores it."
+description: |
+  Use this service to hold a gameplay component's collision off, including
+  the game's targeting and latch behavior. Get its Component handle from
+  `component.list` or `component.find`.
+
+  When you release the hold, your mod stops, or the actor leaves the world,
+  the component returns to its original state. Use `reflection` for general
+  Unreal collision settings.
+
+functions:
+  - name: hold_off
+    doc: |
+      Turns off one of an actor's collision components and holds it off. Nothing
+      hits it, it doesn't hit anything, nothing can target it, and nothing can latch
+      on to it. The rest of the actor isn't affected. Use this for a part of a
+      creature that shouldn't count for a while, like a shell that has come off.
+      To turn off the whole actor's collision, suspend its `collision` part with
+      `entity.hold_suspended`.
+
+      Only one mod at a time can hold a component's collision off. The component
+      goes back to its original state when your mod releases it or stops, or when
+      the actor leaves the world.
+    owns: true
+    params:
+      - {name: component, type: handle<component>, doc: "The component, from `component.list` or `component.find`."}
+    fails:
+      not_found: "The component no longer exists."
+      unsupported: "The game has no collision data for this component, or its data can't be changed safely. Nothing is changed."
+      busy: "Another mod is holding this component's collision off, or the actor's collision is suspended with `entity.hold_suspended`."
+    users: [groink, online-coop]
+
+  - name: release_off
+    doc: "Ends your mod's hold on a component whose collision it turned off."
+    owns: true
+    params:
+      - {name: component, type: handle<component>, doc: "The component that you passed to `hold_off`."}
+    fails:
+      not_found: "The component no longer exists, or your mod isn't holding its collision off."
+      busy: "The actor's collision is suspended with `entity.hold_suspended`. Release that first."
+    users: [groink, online-coop]
+
+  - name: "off"
+    doc: "Checks if any mod is holding a component's collision off."
+    params:
+      - {name: component, type: handle<component>, doc: "The component to check."}
+    returns: {type: bool, doc: "`true` while a hold is on it."}
+    fails:
+      not_found: "The component no longer exists."
+    users: [groink, online-coop]

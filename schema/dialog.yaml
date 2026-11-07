@@ -1,0 +1,62 @@
+service: dialog
+tutorials:
+  - {title: Ask the player, path: /develop/dialog-and-hud/}
+layer: game
+acts_on: game
+lifetime: process
+brief: "Shows the game's dialog boxes with your text and returns the player's answer."
+description: |
+  The game asks the player questions in a dialog box in the middle of the
+  screen. Use this service to show one of those dialogs with your own text and
+  to find out what the player chose.
+
+  The game can only show one dialog at a time. If you request a dialog while
+  another one is open or waiting, it is queued and shown in the order that it
+  was requested.
+
+  When your mod stops, Tsuchi drops its requests still waiting in Tsuchi's
+  queue. A dialog that the game has already accepted can still appear or stay
+  open. Tsuchi won't report its answer.
+
+functions:
+  - name: confirm
+    doc: |
+      Asks the player a question in a dialog with the game's two buttons, which are
+      accept and cancel. The `answered` event reports which one the player chose.
+      Backing out of the dialog counts as canceling.
+    owns: true
+    params:
+      - {name: text, type: text, doc: The question.}
+    returns: {type: handle<dialog>, doc: "The dialog's handle, which `answered` returns."}
+    waits: answered
+    fails:
+      invalid: "The text isn't valid UTF-8."
+      not_ready: "The game can't show dialogs right now, or the Tsuchi patch isn't installed."
+      no_memory: "The game is out of memory."
+    users: [online-coop, dog-coop]
+
+  - name: message
+    doc: "Shows the player a message in a dialog with one button. The `answered` event fires when the player closes it."
+    owns: true
+    params:
+      - {name: text, type: text, doc: The message.}
+    returns: {type: handle<dialog>, doc: "The dialog's handle, which `answered` returns."}
+    waits: answered
+    fails:
+      invalid: "The text isn't valid UTF-8."
+      not_ready: "The game can't show dialogs right now, or the Tsuchi patch isn't installed."
+      no_memory: "The game is out of memory."
+    users: [online-coop, dog-coop]
+
+events:
+  - name: answered
+    doc: |
+      Emitted when the player has answered a dialog that a mod requested. If the
+      game didn't show the dialog, or closed it without an answer, it is reported as
+      not accepted. Your handler is called at the start of the next world step. Every
+      listener receives the answer to every dialog whose requesting mod is still
+      running, so use the handle to check which dialog it is.
+    fields:
+      - {name: dialog, type: handle<dialog>, doc: "The dialog's handle."}
+      - {name: accepted, type: bool, doc: "`true` if the player accepted a question or closed a message with its button."}
+    users: [online-coop, dog-coop]

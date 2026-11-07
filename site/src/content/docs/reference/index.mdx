@@ -1,0 +1,113 @@
+---
+title: Services
+description: The Tsuchi API reference.
+---
+
+import { Badge } from '@astrojs/starlight/components';
+import ServiceList from '../../../components/ServiceList.astro';
+
+This is the API reference for Tsuchi. The API is organized into services, and the services
+are grouped into three layers. Pick a service below to see its functions, events, and types.
+
+In Lua and JavaScript, services are globals, like `mod.id`. Lua subscribes with
+`time.on_step`, while JavaScript uses `time.on("step", callback)`. In C and C++, use
+the host, like `host->time` or `host->mod`.
+
+Lua represents structs and lists as tables, and bytes as strings. JavaScript uses
+objects, Arrays, and `Uint8Array`. JavaScript `u64` and `i64` values are BigInt, so
+all 64 bits survive. Handles are opaque values whose identity stays stable while
+your script holds them.
+
+<ServiceList />
+
+## Scope
+
+Use the layers below to choose the systems your mod needs. You can combine scripts,
+compiled code, cooked Blueprints, and generated Tsuchi Blueprint nodes, and publish
+services for other mods to use across languages.
+
+:::note[Coming soon]
+Services and parts marked Coming soon aren't in Tsuchi yet. Tsuchi's Blueprint nodes and published services are coming soon too.
+:::
+
+### Core
+
+| Service | Covers |
+| --- | --- |
+| `mod` | Mod identity and versions, and logging. <Badge text="Coming soon" variant="note" /> Publishing or finding shared services. |
+| `settings` | Typed player settings, with change events. Players change them on the **Mods** page. |
+| `file` | Reading and listing your mod's files. |
+| `storage` | Saving, loading, listing, and removing your mod's own data. |
+| `time` | World steps, presented pictures, and frame-rate requests. <Badge text="Coming soon" variant="note" /> Timers. |
+| `hook` | Wrapping named game functions, calling the original, and chaining with other mods. |
+| `net` | UDP sockets and HTTPS requests. |
+| `session` | Hosting or joining multiplayer, peers, per-mod channels, and a shared clock. |
+
+### Engine
+
+| Service | Covers |
+| --- | --- |
+| `asset` | Loading, holding, and releasing assets or classes. <Badge text="Coming soon" variant="note" /> Background loads. |
+| `datatable` | Reading and overriding fields, adding rows, and changing supported array lengths. |
+| `text` | Reading, replacing, and restoring localized text. |
+| `reflection` | Field paths, containers, reflected function calls, and console variables. <Badge text="Coming soon" variant="note" /> Engine events. |
+| `actor` | General Unreal actors, handle validity, and root transforms. Use `entity` for gameplay spawning and removal. |
+| `component` | Actor parts and their owners, hidden state, attachments, and material holds. |
+| `animation` | Clip playback and holds, rate, pause, and seek. <Badge text="Coming soon" variant="note" /> State-machine motions, movement motions, and state listing. |
+| `world` <Badge text="Coming soon" variant="note" /> | Ground height and walkable paths. Traces and overlaps use engine functions through `reflection`. |
+| `effects` <Badge text="Coming soon" variant="note" /> | Playing effects, their parameters, stopping, and events. |
+| `camera` <Badge text="Coming soon" variant="note" /> | Player views, zoom, heading, shakes, look-at holds, world-to-screen conversion, and screen size. |
+| `input` | Buttons, sticks, and keys, including pressing buttons or hiding them from the game. |
+| `ui` | Owned UMG widgets, native Button events, screens defined in code or JSON, and Settings tabs. |
+
+### Game
+
+| Service | Covers |
+| --- | --- |
+| `entity` | Gameplay identity, teams, placement, pose, velocity, movement, suspension, spawning, removal, and events. <Badge text="Coming soon" variant="note" /> Adoption. |
+| `collision` | Gameplay collision, targeting, latch eligibility, and collision-off holds with restoration. |
+| `audio` | Sounds played on actors. <Badge text="Coming soon" variant="note" /> Shared sounds, music, sound states, sound assets, and mod banks. |
+| `game` | Modes, flow stages, worlds, pause, player control, title, and the shared random stream. |
+| `dialog` | Questions and messages. <Badge text="Coming soon" variant="note" /> Button choices and closing dialogs. |
+| `hud` | Banners. <Badge text="Coming soon" variant="note" /> Actor button prompts, screen fades, and the game's HUD parts. |
+| `save` | Slots, reads, save holds, and stand-in slot data. <Badge text="Coming soon" variant="note" /> Save requests and events. |
+| `story` | Days and time, travel, caves, and treasures. <Badge text="Coming soon" variant="note" /> Resources, Onions, unlocked types, bag items, records, rescues, Oatchi skills, and start presets. |
+| `player` | Local players, captains, dogs, controller routing, and character holds. <Badge text="Coming soon" variant="note" /> Full-screen views. |
+| `captain` | Whistles, cursors, throws, riding, and dismounting. <Badge text="Coming soon" variant="note" /> Lock-on and items. |
+| `pikmin` | Types and leaf stages, orders, and added Pikmin. <Badge text="Coming soon" variant="note" /> Spicy buffs, and planting or plucking sprouts. |
+| `squad` | Members, joining, leaving, and dismissal. <Badge text="Coming soon" variant="note" /> Selected types, events, and mod-defined squad types. |
+| `behavior` | Actor actions and states, with change events. |
+| `creature` | Species, defeated creatures, and revival. <Badge text="Coming soon" variant="note" /> AI requests, caught Pikmin, cannot-die or passive holds, and boss phases. |
+| `combat` | Life, damage, knockback, death causes, and events. <Badge text="Coming soon" variant="note" /> Status conditions and drops. |
+| `gimmicks` <Badge text="Coming soon" variant="note" /> | Gates, builds, switches, doors, work requests, and events. |
+| `carry` | Carriers, destinations, weight, and delivery events. |
+| `battle` <Badge text="Coming soon" variant="note" /> | Dandori Battle phases, score, clocks, flow, endings, and controlled or replayed random outcomes. |
+| `content` | Species, treasures, series, icons, squad types, rows, text, maps, and sound banks, plus typed placement values and defaults. |
+
+## Results
+
+Every function returns a result. If the result is anything other than `ok`, the call didn't
+change anything.
+
+In C, functions return a `TSUCHI_Result`, like `TSUCHI_NOT_FOUND`. In Lua, a function that
+fails returns `nil` followed by the name of the result. If you pass an invalid argument in
+Lua, the function raises an error instead. JavaScript failures throw an `Error`
+whose `name` is the result code and whose `message` describes the failure. Invalid
+JavaScript arguments raise a type or range error. Functions that wait return a
+Promise in JavaScript, so use `await` as their reference describes.
+
+| Result | Meaning |
+| --- | --- |
+| `ok` | The call did what it was asked. |
+| `not_found` | The thing named does not exist, or no longer does. |
+| `invalid` | An argument is out of range or of the wrong kind. |
+| `busy` | The game or another mod is using this right now. Try again later. |
+| `not_ready` | The game is not in a state where this can happen, such as before a world is loaded. |
+| `capacity` | A stated limit was reached. |
+| `unsupported` | The thing exists but has no such behavior, such as a creature that never sleeps. |
+| `io` | An input or output operation failed, such as reading saved data or sending a network message. |
+| `denied` | The thing belongs to another mod. |
+| `no_memory` | There is no memory left for it. Any call that makes or keeps something can fail this way. |
+
+Some functions look up something that might not exist, like a squad's leader. When there
+isn't one, they return `ok` with a zero handle in C, `nil` in Lua, or `null` in JavaScript.

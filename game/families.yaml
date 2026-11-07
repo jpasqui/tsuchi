@@ -1,0 +1,204 @@
+# What stops working when an entry of the game table is gone from a build (see DESIGN.md, "Several
+# builds of the game"). Each family lists the source files of the framework that serve it, and the
+# services whose calls then return TSUCHI_UNSUPPORTED; a family without services is a feature with no
+# calls of its own, and module.cpp starts a family only when the build serves it. `calls` can name single calls instead, as service.call, and `entries` an entry no
+# source file spells, as conditional_sites.name. The generator reads which entries each file uses.
+#
+# A file that reads the game table is in a family or in core. An entry a core file uses cannot be
+# absent: a build without it is refused until the code changes. `core.entries` adds those only tools use.
+
+# `optional` lists entries the code using them asks t::bound about and goes on without, so a build lacking one loses
+# only that one path and no family.
+optional:
+  - functions.pikmin_deco_stored
+  - functions.pikmin_deco_field
+  - structs.spawn_request.decoration
+  - functions.revive_request         # creatures_backend.cpp asks t::bound; the demo inlines it into its one caller
+  - data.revive_request_table         # creatures_backend.cpp: without it (or the request) a revival is unsupported
+  - functions.charge_order           # pikmin.cpp's send_to_work asks t::bound; the demo has no such order
+  - structs.charge_order
+  - data.charge_order_table         # without the constructor, send_to_work makes the order itself from these
+  - structs.message.self
+  - structs.message.other
+  - structs.message.ready
+  - functions.charge_carry_test      # send_to_work writes 0 in the order's flag without it
+  - code_sites.placement_build       # without either, maps refuses a mod's placement_changes (maps.cpp asks
+  - code_sites.placement_restore     # placement_changes_ready); the demo dropped build's world and inlined restore
+  - code_sites.dialog_buttons_call   # dialogs_backend.cpp then puts a question's text on after set-up, as a message's
+  - structs.game_actor.physics_place # send_to_work then aims every target at its root
+  - functions.world_follow_request_move  # the self-check build's world-follow check then fails as unavailable at its start
+  - structs.world_follow_ai.fsm
+  - structs.world_follow_mover.root
+  - native_routes.cursor_unchanged           # presenter_markers.cpp: the written route then sees both paths
+  - code_sites.bone_kernel                   # presenter_scene.cpp: the mesh update then lends its pose array the blend
+  - native_routes.particle_lone_place        # presenter_effects.cpp: absent or same_as, the mesh routes serve both paths
+  - native_routes.particle_lone_xy
+  - native_routes.particle_lone_z
+  - code_sites.material_scalar_set           # presenter_effects.cpp: absent or same_as, the pushes see every value
+  - code_sites.material_scalar_set_index
+  - code_sites.material_vector_set
+  - route_frames.cursor_written.saved_widget # presenter_markers.cpp: without them the route is at the placement's return
+  - route_frames.cursor_written.saved_component
+  - route_frames.cursor_written.saved_return
+
+# `mod_start` lists entries the mods' start waits on through a helper in a family's file, which the scan of core files
+# does not see. With one absent no mod ever starts, whatever the families say, so a build cannot mark one absent.
+# game/flow.cpp's world_begun calls actors.cpp's game_framework; tests/test_multi_build.py reads that function.
+mod_start:
+  - data.game_framework
+  - structs.game_framework.actor_list
+  - structs.actor_node.size
+
+core:
+  files:
+    - base/files.cpp
+    - base/files.h
+    - base/game.h
+    - base/mods.cpp
+    - base/names.cpp
+    - base/objects.cpp
+    - base/reflect.cpp
+    - base/shared.cpp
+    - base/shared.h
+    - core/families.h
+    - core/hooks.cpp
+    - core/hooks.h
+    - core/native_hooks.cpp
+    - core/native_routes.cpp
+    - core/select_build.h
+    - game/flow.cpp
+    - game/flow.h
+    - game/suspend.cpp
+    - target/code_memory.cpp
+    - target/module.cpp
+    - target/platform.cpp
+    - target/status.h
+  entries:
+    - data.status_words
+    - constants.code_size
+    - constants.stub_base
+    - constants.stub_end
+    - constants.program_id
+
+families:
+  actor:
+    services: [actor, entity, component]
+    files: [game/actors.cpp, game/actors_backend.cpp, game/actor_events.cpp, game/parts.cpp, game/ordinary_lifecycle.cpp, game/entities_backend.cpp, game/components_backend.cpp]
+  combat:
+    services: [combat]
+    files: [game/life.cpp, game/life_events.cpp]
+  behavior:
+    services: [behavior]
+    files: [game/actions.cpp]
+  animation:
+    services: [animation]
+    files: [game/clips.cpp]
+  asset:
+    services: [asset]
+    files: [game/asset_bundles.cpp, game/assets_backend.cpp]
+  audio:
+    services: [audio]
+    files: [game/audio_backend.cpp, game/audio_parameters.cpp]
+  battle:
+    services: [battle]
+    files: [game/battle_backend.cpp]
+  camera:
+    services: [camera]
+    files: [game/camera_backend.cpp]
+  captain:
+    services: [captain]
+    files: [game/captain.cpp]
+  carry:
+    services: [carry]
+    files: [game/carry_backend.cpp]
+  collision:
+    services: [collision]
+    files: [game/switched.cpp]
+  content:
+    services: [content]
+    files: [game/content.cpp, game/content_identity.cpp, game/content_series.cpp, game/content_sound.cpp, game/declared.cpp]
+  squad:
+    services: [squad]
+    files: [game/content_squad.cpp]
+  creature:
+    services: [creature]
+    files: [game/creatures_backend.cpp]
+  datatable:
+    services: [datatable]
+    files: [game/tables_backend.cpp]
+  dialog:
+    services: [dialog]
+    files: [game/dialogs_backend.cpp]
+  effects:
+    services: [effects]
+    files: [game/effects_native.cpp]
+  game:
+    services: [game]
+    files: [game/game_backend.cpp]
+  gimmicks:
+    services: [gimmicks]
+    files: [game/gimmicks_backend.cpp]
+  hud:
+    services: [hud]
+    files: [game/hud_backend.cpp]
+  input:
+    services: [input]
+    files: [game/input_backend.cpp]
+  net:
+    services: [net]
+    files: [game/network_native.cpp, target/https_platform.cpp]
+  pikmin:
+    services: [pikmin]
+    entries: [conditional_sites.throw_color_admission]
+    files: [game/pikmin.cpp, game/pikmin_birth.cpp, game/pikmin_content.cpp, game/pikmin_counts.cpp, game/pikmin_hud.cpp, game/pikmin_native.cpp, game/pikmin_save.cpp, game/pikmin_snapshot.cpp]
+  player:
+    services: [player]
+    files: [game/people.cpp, game/people.h, game/players_backend.cpp]
+  save:
+    services: [save]
+    files: [game/save_restore.cpp, game/save_session.h, game/saves_backend.cpp]
+  storage:
+    services: [storage]
+    files: [game/storage_backend.cpp]
+  story:
+    services: [story]
+    files: [game/story_backend.cpp]
+  text:
+    services: [text]
+    files: [game/text_backend.cpp]
+  ui:
+    services: [ui]
+    files: [game/ui_feedback.cpp, game/ui_label_layout.h, game/ui_mod_list.cpp, game/ui_mod_list_native.cpp, game/ui_native.cpp, game/ui_native_classes.h, game/ui_widgets.cpp]
+  world:
+    services: [world]
+    files: [game/world_backend.cpp]
+  # Features with no calls of their own.
+  compiled_mods:
+    files: [base/compiled_mods.cpp]
+  containers:
+    files: [base/containers.cpp]
+  console_variables:
+    files: [game/console_variables.cpp]
+  external_mods:
+    files: [game/external_mods_game.cpp]
+  ground_contact:
+    files: [game/ground_contact.cpp]
+  instance_cull:
+    files: [game/instance_cull.cpp]
+  maps:
+    files: [game/map_ai.cpp, game/map_navigation.cpp, game/map_placement_changes.cpp, game/map_placements.cpp, game/maps.cpp, game/placement_mode.h]
+  mod_choices:
+    files: [game/mod_choices_game.cpp]
+  new_maps:
+    files: [game/new_maps.cpp]
+  presenter:
+    # Only the presentation calls: the step and presented events come from core/frame.cpp on every build.
+    calls: [time.presentation, time.hold_presentation, time.release_presentation, time.pose_presentation,
+            time.hold_pose_presentation, time.release_pose_presentation]
+    files: [game/presentation_backend.cpp, game/presenter.cpp, game/presenter_effects.cpp, game/presenter_markers.cpp, game/presenter_scene.cpp]
+  sd_card:
+    files: [game/log_file.cpp, game/sd_card.cpp]
+  shaders:
+    files: [game/shader_archive_manifest.h, game/shader_materials.cpp]
+  self_check:
+    files: [target/selfcheck.cpp, target/world_follow_check.cpp]

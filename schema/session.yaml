@@ -1,0 +1,304 @@
+service: session
+layer: core
+acts_on: game
+lifetime: session
+brief: Hosts and joins multiplayer sessions and sends messages on your mod channel.
+description: One machine hosts or joins one session. Up to four peers share a clock. Open your mod
+  channel before sending messages. A reliable message arrives once and in order while the peer stays
+  connected. An unreliable message can be lost or reordered. A stopped starter ends its session.
+  A stopped mod closes its channel. Open a channel to receive session events. The module has 16 channels.
+  One peer can queue 1024 reliable messages, bounded by 192 KiB of message data. The session keeps
+  working in menus and on loading screens. A peer that starts a scene change or a save tells the
+  others for the next 30 seconds, and they wait up to 90 seconds after it last said so.
+tutorials:
+- title: Send network messages
+  path: /develop/network/
+enums:
+  SessionState:
+    open: false
+    doc: This machine's place in the session.
+    values:
+    - name: none
+      value: 0
+      doc: No session.
+    - name: hosting
+      value: 1
+      doc: Hosting a session.
+    - name: joining
+      value: 2
+      doc: Waiting for a host.
+    - name: joined
+      value: 3
+      doc: Joined to a host.
+  JoinRefusal:
+    open: false
+    doc: The host's last refusal.
+    values:
+    - name: none
+      value: 0
+      doc: No refusal.
+    - name: full
+      value: 1
+      doc: The host has no room.
+    - name: version
+      value: 2
+      doc: The protocol differs.
+  LeaveReason:
+    open: false
+    doc: Why a peer left.
+    values:
+    - name: bye
+      value: 1
+      doc: The peer left.
+    - name: timeout
+      value: 2
+      doc: The peer did not answer for 20 seconds, or for 90 seconds after it said it was loading.
+    - name: ended
+      value: 3
+      doc: The local session ended.
+structs:
+  SessionInfo:
+    doc: A session snapshot.
+    fields:
+    - name: state
+      type: enum<SessionState>
+      doc: This machine's state.
+    - name: self
+      type: u32
+      doc: The local peer from 0 to 3, or 255 before joining.
+    - name: peers
+      type: u32
+      doc: Bit n is set when peer n is present.
+    - name: clock
+      type: f32
+      doc: The shared clock in seconds.
+    - name: port
+      type: u32
+      doc: The local UDP port.
+    - name: refused
+      type: enum<JoinRefusal>
+      doc: The host's last refusal.
+  PeerInfo:
+    doc: A peer snapshot.
+    fields:
+    - name: name
+      type: text
+      doc: The player's display name, borrowed until the next service call.
+    - name: round_trip
+      type: f32
+      doc: The round trip in seconds, or -1 before measurement.
+    - name: heard
+      type: f32
+      doc: Seconds since the peer was heard from.
+    - name: pending
+      type: u32
+      doc: Reliable messages awaiting acknowledgement.
+functions:
+- name: host
+  doc: Starts a session. The session ends when your mod stops.
+  params:
+  - name: port
+    type: u32
+    doc: The UDP port from 1 to 65535.
+  - name: max_peers
+    type: u32
+    doc: The total peer limit from 2 to 4.
+  - name: name
+    type: text
+    doc: The player's name, at most 31 bytes.
+  fails:
+    invalid: An argument is outside its documented range.
+    unsupported: This target has no network transport.
+    io: The system refused the network operation.
+    not_ready: The transport or clock is unavailable.
+    busy: A session is running or the port is taken.
+  users:
+  - online-coop
+  - remote-inspector
+  owns: true
+- name: join
+  doc: Starts joining the host at this numeric IPv4 address. Returns before the host accepts.
+  params:
+  - name: host
+    type: text
+    doc: A dotted IPv4 address.
+  - name: port
+    type: u32
+    doc: The host port from 1 to 65535.
+  - name: name
+    type: text
+    doc: The player's name, at most 31 bytes.
+  fails:
+    invalid: An argument is outside its documented range.
+    unsupported: This target has no network transport.
+    io: The system refused the network operation.
+    not_ready: The transport or clock is unavailable.
+    busy: A session is running.
+  users:
+  - online-coop
+  - remote-inspector
+  owns: true
+- name: leave
+  doc: Ends the session your mod started and tells the peers.
+  params: []
+  fails:
+    not_found: Your mod has no session.
+    busy: An event is being delivered.
+  users:
+  - online-coop
+  - remote-inspector
+  owns: true
+- name: info
+  doc: Returns this machine's session state and the shared clock.
+  params: []
+  fails: {}
+  users:
+  - online-coop
+  - remote-inspector
+  returns:
+    type: struct<SessionInfo>
+    doc: The requested value.
+- name: peer
+  doc: Returns one present peer.
+  params:
+  - name: peer
+    type: u32
+    doc: A peer number from 0 to 3.
+  fails:
+    not_found: The peer is absent.
+  users:
+  - online-coop
+  - remote-inspector
+  returns:
+    type: struct<PeerInfo>
+    doc: The requested value.
+- name: channel_version
+  doc: Returns the version a peer runs of a mod channel.
+  params:
+  - name: peer
+    type: u32
+    doc: A peer number from 0 to 3.
+  - name: mod_id
+    type: text
+    doc: The mod ID.
+  fails:
+    invalid: The mod ID is invalid.
+    not_found: The peer or channel is absent.
+  users:
+  - online-coop
+  - remote-inspector
+  returns:
+    type: u32
+    doc: The requested value.
+- name: open_channel
+  doc: Opens your mod's channel at this protocol version. The channel closes when your mod stops.
+  params:
+  - name: version
+    type: u32
+    doc: Your channel protocol version.
+  fails:
+    busy: Your channel is open or an event is being delivered.
+    capacity: All 16 channels are in use.
+  users:
+  - online-coop
+  - remote-inspector
+  owns: true
+- name: close_channel
+  doc: Closes your mod channel.
+  params: []
+  fails:
+    not_found: Your channel is closed.
+    busy: An event is being delivered.
+  users:
+  - online-coop
+  - remote-inspector
+  owns: true
+- name: send
+  doc: Sends from your mod channel to a peer or all other peers.
+  params:
+  - name: to
+    type: u32
+    doc: A peer from 0 to 3, or 255 for all other peers.
+  - name: data
+    type: bytes
+    doc: From 1 to 1024 bytes.
+  - name: reliable
+    type: bool
+    doc: If true, delivers once and in order while the connection lasts.
+  fails:
+    invalid: An argument is outside its documented range.
+    busy: Your channel is closed.
+    not_ready: There is no connected remote peer.
+    not_found: The peer is absent.
+    capacity: The reliable queue is full.
+  users:
+  - online-coop
+  - remote-inspector
+  owns: true
+- name: read_message
+  doc: Copies the message being delivered by your message event.
+  params: []
+  fails:
+    not_ready: Your mod is outside its message callback.
+  users:
+  - online-coop
+  - remote-inspector
+  owns: true
+  returns:
+    type: bytes
+    doc: The requested value.
+events:
+- name: joined
+  doc: Emitted when this machine starts hosting or joins its host.
+  fields:
+  - name: peer
+    type: u32
+    doc: This machine's peer number.
+  users:
+  - online-coop
+  - remote-inspector
+- name: peer_joined
+  doc: Emitted when another peer joins.
+  fields:
+  - name: peer
+    type: u32
+    doc: The peer number.
+  users:
+  - online-coop
+  - remote-inspector
+- name: peer_left
+  doc: Emitted when a peer leaves.
+  fields:
+  - name: peer
+    type: u32
+    doc: The peer number.
+  - name: reason
+    type: enum<LeaveReason>
+    doc: Why the peer or session ended.
+  users:
+  - online-coop
+  - remote-inspector
+- name: message
+  doc: Emitted when a message arrives on your mod channel. Call read_message in this callback.
+  fields:
+  - name: peer
+    type: u32
+    doc: The sender.
+  - name: reliable
+    type: bool
+    doc: If true, the sender used ordered reliable delivery.
+  - name: size
+    type: u32
+    doc: The body size in bytes.
+  users:
+  - online-coop
+  - remote-inspector
+- name: ended
+  doc: Emitted when this machine leaves the session.
+  fields:
+  - name: reason
+    type: enum<LeaveReason>
+    doc: Why the peer or session ended.
+  users:
+  - online-coop
+  - remote-inspector

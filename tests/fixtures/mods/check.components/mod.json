@@ -1,0 +1,17 @@
+{
+  "id": "check.components",
+  "name": "The check of components",
+  "version": "1.0.0",
+  "meta": {
+    "check": "components",
+    "checks": [
+      "listed",
+      "owned",
+      "found",
+      "hidden",
+      "restored",
+      "added",
+      "removed"
+    ]
+  }
+}

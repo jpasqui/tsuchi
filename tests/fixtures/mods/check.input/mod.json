@@ -1,0 +1,17 @@
+{
+  "id": "check.input",
+  "name": "The check of input",
+  "version": "1.0.0",
+  "meta": {
+    "check": "input",
+    "checks": [
+      "read",
+      "pressed",
+      "hidden",
+      "released",
+      "refused",
+      "key"
+    ],
+    "check_explicit": true
+  }
+}

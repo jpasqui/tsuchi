@@ -1,0 +1,315 @@
+service: net
+layer: core
+acts_on: socket
+lifetime: process
+brief: Sends UDP datagrams and makes verified HTTPS requests.
+description: Use UDP for messages that can be lost or reordered. Sockets and HTTPS requests belong
+  to your mod and close when it stops. All calls run on the game thread. HTTPS performs DNS, TLS,
+  and HTTP on workers. It verifies the certificate chain, hostname, and dates with its own CA store.
+  A mod can hold 16 sockets and 8 requests. The module has 64 worker slots, including cancelled requests
+  whose workers are still draining. HTTPS memory grows as needed within a 48 MiB module-wide budget,
+  with up to 32 MiB for response payloads. Response limits do not reserve memory in advance. Failed
+  and cancelled requests release their payload storage before completion. The first HTTPS request
+  starts workers. Idle workers sleep until work arrives. Status queries and UDP start no workers.
+tutorials:
+- title: Send network messages
+  path: /develop/network/
+enums:
+  RequestState:
+    open: false
+    doc: The progress of an HTTPS request.
+    values:
+    - name: queued
+      value: 0
+      doc: Waiting for a worker.
+    - name: running
+      value: 1
+      doc: Receiving the response.
+    - name: succeeded
+      value: 2
+      doc: The complete response is available.
+    - name: failed
+      value: 3
+      doc: The request failed.
+    - name: cancelled
+      value: 4
+      doc: The request was cancelled.
+structs:
+  NetAddress:
+    doc: An IPv4 address and port.
+    fields:
+    - name: ipv4
+      type: u32
+      doc: Four octets in most significant byte order. Loopback is 0x7f000001.
+    - name: port
+      type: u32
+      doc: A port from 0 to 65535. Send requires a nonzero port.
+  NetworkStatus:
+    doc: Socket transport and current network availability.
+    fields:
+    - name: available
+      type: bool
+      doc: If true, sockets can be opened.
+    - name: connected
+      type: bool
+      doc: If true, the system reports a connection or the socket transport has a non-loopback IPv4 route.
+        This does not guarantee access to a particular server.
+  RequestInfo:
+    doc: A request snapshot.
+    fields:
+    - name: state
+      type: enum<RequestState>
+      doc: The request state.
+    - name: http_status
+      type: u32
+      doc: The HTTP status, or 0 before a response.
+    - name: received
+      type: u64
+      doc: Body bytes received.
+    - name: total
+      type: u64
+      doc: Expected bytes, or 0 if unknown.
+    - name: failure
+      type: text
+      doc: The fixed result name, such as io or no_memory. Empty before failure.
+functions:
+- name: status
+  doc: Returns socket transport and network availability without sending data or starting workers.
+  params: []
+  fails: {}
+  users:
+  - online-coop
+  - remote-inspector
+  returns:
+    type: struct<NetworkStatus>
+    doc: The requested value.
+- name: udp_open
+  doc: Opens a nonblocking IPv4 UDP socket. The socket closes when your mod stops.
+  params:
+  - name: port
+    type: u32
+    doc: The local port from 0 to 65535. Zero chooses a free port.
+  - name: broadcast
+    type: bool
+    doc: If true, permits broadcast datagrams.
+  fails:
+    invalid: An argument is outside its documented range.
+    unsupported: This target has no network transport.
+    io: The system refused the network operation.
+    busy: Another socket or program has the port.
+    capacity: Your mod already has 16 sockets.
+  users:
+  - online-coop
+  - remote-inspector
+  owns: true
+  returns:
+    type: handle<socket>
+    doc: The requested value.
+- name: send
+  doc: Sends one datagram without waiting.
+  params:
+  - name: socket
+    type: handle<socket>
+    doc: Your socket.
+  - name: to
+    type: struct<NetAddress>
+    doc: The destination.
+  - name: data
+    type: bytes
+    doc: From 1 to 65507 bytes.
+  fails: &id001
+    invalid: An argument is outside its documented range.
+    unsupported: This target has no network transport.
+    io: The system refused the network operation.
+    not_found: The handle has ended.
+    denied: The handle belongs to another mod.
+  users:
+  - online-coop
+  - remote-inspector
+  owns: true
+- name: receive
+  doc: Reads one waiting datagram. A longer datagram is truncated to your buffer.
+  params:
+  - name: socket
+    type: handle<socket>
+    doc: Your socket.
+  fails:
+    invalid: An argument is outside its documented range.
+    unsupported: This target has no network transport.
+    io: The system refused the network operation.
+    not_found: The handle has ended.
+    denied: The handle belongs to another mod.
+    not_ready: No datagram waits.
+  users:
+  - online-coop
+  - remote-inspector
+  owns: true
+  returns:
+    type: bytes
+    doc: The requested value.
+- name: sender
+  doc: Returns the sender of the last datagram read from this socket.
+  params:
+  - name: socket
+    type: handle<socket>
+    doc: Your socket.
+  fails:
+    invalid: An argument is outside its documented range.
+    unsupported: This target has no network transport.
+    io: The system refused the network operation.
+    not_found: The handle has ended.
+    denied: The handle belongs to another mod.
+    not_ready: You have not read a datagram yet.
+  users:
+  - online-coop
+  - remote-inspector
+  owns: true
+  returns:
+    type: struct<NetAddress>
+    doc: The requested value.
+- name: local_address
+  doc: Returns the address the socket is bound to.
+  params:
+  - name: socket
+    type: handle<socket>
+    doc: Your socket.
+  fails: *id001
+  users:
+  - online-coop
+  - remote-inspector
+  owns: true
+  returns:
+    type: struct<NetAddress>
+    doc: The requested value.
+- name: close
+  doc: Closes your socket and ends its hold.
+  params:
+  - name: socket
+    type: handle<socket>
+    doc: Your socket.
+  fails: *id001
+  users:
+  - online-coop
+  - remote-inspector
+  owns: true
+- name: resolve
+  doc: Reads a numeric dotted IPv4 address. Hostnames are refused because DNS must not block the
+    game thread.
+  params:
+  - name: host
+    type: text
+    doc: A dotted IPv4 address.
+  - name: port
+    type: u32
+    doc: A port from 0 to 65535.
+  fails:
+    invalid: An argument is outside its documented range.
+    unsupported: The name needs DNS. Use HTTPS for worker-backed hostname lookup.
+  users:
+  - online-coop
+  - remote-inspector
+  returns:
+    type: struct<NetAddress>
+    doc: The requested value.
+- name: get
+  doc: Starts a verified HTTPS GET. The request ends when you release it or your mod stops.
+  params:
+  - name: url
+    type: text
+    doc: An ASCII HTTPS URL without credentials or a fragment, at most 1023 bytes.
+  - name: max_bytes
+    type: u64
+    doc: The response limit from 1 to 4194304 bytes.
+  - name: timeout_ms
+    type: u32
+    doc: The overall timeout from 1 to 300000 milliseconds.
+  fails:
+    invalid: An argument is outside its documented range.
+    unsupported: This target has no network transport.
+    io: The system refused the network operation.
+    capacity: Your mod already has 8 requests.
+    no_memory: The request could not be allocated.
+  users:
+  - online-coop
+  - remote-inspector
+  owns: true
+  returns:
+    type: handle<request>
+    doc: The requested value.
+  waits: completed
+- name: request_info
+  doc: Returns the request progress without waiting.
+  params:
+  - name: request
+    type: handle<request>
+    doc: Your request.
+  fails: *id001
+  users:
+  - online-coop
+  - remote-inspector
+  owns: true
+  returns:
+    type: struct<RequestInfo>
+    doc: The requested value.
+- name: read
+  doc: Copies bytes from a successful response without network access.
+  params:
+  - name: request
+    type: handle<request>
+    doc: Your request.
+  - name: offset
+    type: u64
+    doc: The byte offset from 0.
+  fails:
+    invalid: An argument is outside its documented range.
+    unsupported: This target has no network transport.
+    io: The system refused the network operation.
+    not_found: The handle has ended.
+    denied: The handle belongs to another mod.
+    not_ready: The request has not succeeded.
+  users:
+  - online-coop
+  - remote-inspector
+  owns: true
+  returns:
+    type: bytes
+    doc: The requested value.
+- name: cancel_request
+  doc: Asks the worker to cancel without waiting. Completion can win the race.
+  params:
+  - name: request
+    type: handle<request>
+    doc: Your request.
+  fails: *id001
+  users:
+  - online-coop
+  - remote-inspector
+  owns: true
+- name: release_request
+  doc: Ends your request hold and cancels pending work without waiting.
+  params:
+  - name: request
+    type: handle<request>
+    doc: Your request.
+  fails: *id001
+  users:
+  - online-coop
+  - remote-inspector
+  owns: true
+events:
+- name: completed
+  doc: Emitted when your HTTPS request succeeds, fails, or is cancelled. Read its status and release
+    it.
+  fields:
+  - name: request
+    type: handle<request>
+    doc: The completed request.
+  - name: state
+    type: enum<RequestState>
+    doc: Its final state.
+  - name: http_status
+    type: u32
+    doc: The HTTP status, or 0 without a response.
+  users:
+  - online-coop
+  - remote-inspector

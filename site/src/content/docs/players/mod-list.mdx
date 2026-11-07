@@ -1,0 +1,89 @@
+---
+title: Manage mods
+description: Choose mods, review dependencies, set load order, and change settings.
+---
+
+Open the game's **Settings** menu, then use **L / R** to select **Mods** or
+return to **Game**. Installed mods can add tabs between them. You should see the mods
+that you [installed](/players/install-a-mod/), including mods that couldn't start.
+Press **A** on a mod with declared settings to open its settings. Press **X** to
+read its details and change its order.
+
+## Status
+
+Check a mod's status before you change its activation:
+
+| Status | Meaning |
+| --- | --- |
+| Running | The mod started in this game session. |
+| Ready | The mod can run and hasn't started yet. |
+| Stopped | The mod started in this game session and has since stopped. |
+| Disabled | You chose to leave the mod off when the game started. |
+| Blocked | The mod couldn't start. Its details show the reason. |
+| Restart | Your choice turns the mod on or off the next time the game starts. |
+
+An enabled choice says that you want the mod to run. A blocked mod can still be
+enabled. For example, if a required mod is missing, enabling the dependent mod
+can't make it run. Install the missing mod or the required version, then restart
+the game. See [Troubleshooting](/players/troubleshooting/) for other loading problems.
+
+## Activation
+
+Change a mod's enabled choice, then review the proposed changes. Enabling a mod
+also enables the dependencies it requires. Disabling a dependency also disables
+the enabled mods that require it, including indirect dependents.
+
+Confirm the review to update your draft choices. Cancel the review to keep the
+choices you had before you opened it. If a dependency is missing, incompatible,
+or part of a circular dependency, Tsuchi refuses the proposal. Conflicting enabled
+mods and incompatible optional integrations also prevent the proposal.
+
+Press **B** to leave the page. If you changed anything, Tsuchi asks whether to save it. Choose
+**Yes** to save your choices for the next start, or **No** to discard them. Then close and
+restart the game. Activation and load order take effect when Tsuchi loads mods at startup. A
+running mod keeps running until you restart, even if you save a disabled choice for it. If saving
+fails, the page stays open with your draft so you can try again. Individual mod settings save
+automatically.
+
+Tsuchi keeps saved choices for temporarily absent mods. Removing and reinstalling
+a disabled mod doesn't turn it back on.
+
+Press **Y** to review the default activation and order for Tsuchi mods. Confirming
+changes the draft; press **B** and save to keep it. External package requests keep
+their separate choices. See [External mods](/players/external-mods/) for importing
+existing mods and applying their file changes before launch.
+
+## Order
+
+Open a mod's details, then choose **Move earlier** or
+**Move later**. Save and restart after you choose your order. Dependencies
+load before the mods that require them. Among mods whose dependencies are ready,
+Tsuchi follows your order, then mod ID order for mods you haven't placed.
+
+When mods replace the same game asset, the game uses the replacement from the mod
+that loads later. Table fields and text replacements also follow load order. Read
+the authors' compatibility instructions before changing the order of those mods.
+
+## Settings
+
+Press **A** on a mod with settings. You can change settings for an installed
+mod even while it is disabled. Tsuchi keeps its values for when the mod runs again.
+
+| Kind | Control |
+| --- | --- |
+| Toggle | Choose **Off** or **On**. |
+| Integer | Move the selector by one within the mod's limits. |
+| Number | Use the decrease and increase buttons. Each changes the value by one and stops at the mod's limits. Fractional values keep their fraction until a limit is reached. |
+| Text | Read the value. |
+| Choice | Select one of the mod's named options. A single allowed option is read-only. |
+| Set | Choose **Off** or **On** for each named option. |
+
+You can't edit text settings in the game yet, as Tsuchi doesn't have a software
+keyboard.
+
+The screen previews square brackets as `［` and `］` because the game's labels use
+`[` and `]` for markup. This only changes the preview. Tsuchi keeps the original
+text in the setting. Long previews stop at 640 UTF-8 bytes.
+
+Setting changes are saved separately from activation and load order. If the save
+can't be written yet, Tsuchi keeps the changed values and retries when it can write.

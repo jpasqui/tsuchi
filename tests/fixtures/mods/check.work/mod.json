@@ -1,0 +1,25 @@
+{
+  "id": "check.work",
+  "name": "The isolated check of a Pikmin work order and changed action",
+  "version": "1.0.0",
+  "meta": {
+    "check": "work",
+    "check_explicit": true,
+    "checks": [
+      "found",
+      "added",
+      "identified",
+      "made",
+      "target",
+      "baseline",
+      "listened",
+      "asked",
+      "changed",
+      "readback",
+      "refused",
+      "ended",
+      "removed",
+      "gone"
+    ]
+  }
+}

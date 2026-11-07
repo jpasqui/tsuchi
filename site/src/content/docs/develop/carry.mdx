@@ -1,0 +1,106 @@
+---
+title: Read carried objects
+description: Inspect carrier strength, carriers, and destinations.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+Start with [your first mod](/develop/first-mod/), and wait until a world loads
+before you call [`carry.list`](/reference/carry/#list). You can inspect treasures,
+pellets, and other objects that have a carry component, even before Pikmin join.
+
+## Carriers
+
+Call [`carry.info`](/reference/carry/#info) to read the strength the object needs,
+in `weight`, and the number of live carriers, in `count`. Strength can differ from
+the number of carriers, as Purple Pikmin and Oatchi add more strength. Call
+[`carry.carriers`](/reference/carry/#carriers) to get the carrier handles, and use
+[`carry.carried_by`](/reference/carry/#carried_by) to find what an actor carries.
+
+For example, print a message once every 30 world steps while an object has
+carriers. The C example uses room for 1,024 objects. If that list doesn't fit,
+the call returns `capacity` and leaves the buffer untouched.
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua title="main.lua"
+time.on_step(function(event)
+    if event.number % 30 ~= 0 then return end
+    local objects = carry.list()
+    if not objects then return end
+    for _, actor in ipairs(objects) do
+        local info = carry.info(actor)
+        if info and info.count > 0 then
+            print("Object has carriers")
+        end
+    end
+end)
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript title="main.js"
+time.on("step", (event) => {
+    if (event.number % 30n !== 0n) return;
+    try {
+        for (const actor of carry.list()) {
+            if (carry.info(actor).count > 0) print("Object has carriers");
+        }
+    } catch (error) {
+        if (!["not_ready", "not_found"].includes(error.name)) throw error;
+    }
+});
+```
+
+</TabItem>
+<TabItem label="C">
+
+[Build this code](/develop/compiled-mod/) into `mod.nro`.
+
+```c title="main.c"
+#include "tsuchi/tsuchi.h"
+
+static const TSUCHI_Host *host;
+static TSUCHI_Mod *self;
+static TSUCHI_Subscription steps;
+static TSUCHI_Actor objects[1024];
+
+static void on_step(void *user, const TSUCHI_TimeStep *event) {
+    (void)user;
+    if (event->number % 30 != 0) return;
+    uint64_t count = 0;
+    if (host->carry->list(self, objects, 1024, &count) != TSUCHI_OK) return;
+    for (uint64_t i = 0; i < count; ++i) {
+        TSUCHI_CarryInfo info;
+        if (host->carry->info(self, objects[i], &info) == TSUCHI_OK && info.count > 0) {
+            host->mod->log(self, "Object has carriers");
+        }
+    }
+}
+
+TSUCHI_Result tsuchi_mod_start(const TSUCHI_Host *given, TSUCHI_Mod *mod) {
+    host = given;
+    self = mod;
+    return host->time->on_step(self, on_step, 0, &steps);
+}
+```
+
+</TabItem>
+</Tabs>
+
+## Destination
+
+Read `info.destination` to find the receiver the game has selected. If no live
+receiver is selected, C gets an empty handle and scripts get `nil` or `null`. The
+game can select another receiver when carriers join or leave.
+
+An object can reach its receiver and wait there before the game collects it, and
+an object that leaves play hasn't always been collected.
+
+To find out when the game collects an object, subscribe to
+[`carry.delivered`](/reference/carry/#delivered). You'll hear the event at the
+next world step. Use the event's `kind`, because the object's handle may no longer
+resolve by then. The event doesn't mean that the game has saved the collection.
+If the game asks to collect an object twice, you'll hear the event twice.

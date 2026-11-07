@@ -1,0 +1,131 @@
+service: mod
+tutorials:
+  - {title: Write a manifest, path: /develop/manifest/}
+  - {title: Publish your mod, path: /develop/publish/}
+layer: core
+acts_on: game
+lifetime: process
+brief: "Reads your mod's ID, name, and version, lists other running mods, and writes to the log."
+description: |
+  A mod is a folder with a manifest named `mod.json`. The manifest has the
+  mod's ID, display name, version, and dependencies. Use this service to read
+  the values from your own manifest, check which other mods are running, and
+  write to the log.
+
+enums:
+  ModState:
+    open: false
+    doc: "Where a mod stands in this run of the game."
+    values:
+      - {name: waiting, value: 0, doc: "It can run, and mods haven't started yet."}
+      - {name: running, value: 1, doc: It's running.}
+      - {name: blocked, value: 2, doc: "It can't run, and `problem` says why."}
+      - {name: disabled, value: 3, doc: "The player turned it off in the Mods menu."}
+
+  RestartOutcome:
+    open: false
+    doc: "How a restart ended."
+    values:
+      - {name: restarted, value: 0, doc: "The mod stopped and started again, and it's running."}
+      - {name: kept, value: 1, doc: "Nothing stopped, because a script's entry file didn't compile. The mod runs as it did before, or stays blocked."}
+      - {name: blocked, value: 2, doc: "The mod stopped, and it couldn't start again. It's blocked until it restarts without the problem."}
+
+functions:
+  - name: id
+    doc: "The mod's ID, which is the name of its folder, like `author.mod-name`."
+    owns: true
+    returns: {type: text, doc: The ID.}
+    users: [groink, online-coop]
+
+  - name: name
+    doc: "The mod's display name, from its manifest."
+    owns: true
+    returns: {type: text, doc: The name.}
+    fails:
+      not_found: The mod has no manifest.
+    users: [groink, online-coop]
+
+  - name: version
+    doc: "The mod's version from its manifest, as three numbers, like `1.2.0`."
+    owns: true
+    returns: {type: text, doc: The version.}
+    fails:
+      not_found: The mod has no manifest.
+    users: [groink, online-coop]
+
+  - name: version_of
+    doc: |
+      The version of another mod that is running. Use this to check if a mod that
+      your manifest lists as optional is present.
+    params:
+      - {name: other, type: text, doc: "The other mod's ID."}
+    returns: {type: text, doc: Its version.}
+    fails:
+      not_found: "No mod with that ID is running."
+    users: [groink, online-coop]
+
+  - name: log
+    doc: "Writes a line to the Tsuchi log, tagged with your mod's ID."
+    owns: true
+    params:
+      - {name: text, type: text, doc: The line.}
+    users: [groink, online-coop]
+
+  - name: framework
+    doc: |
+      The version of Tsuchi that is running, as one whole number. It goes up with
+      every release that changes the API. If your manifest allows an earlier version
+      of Tsuchi, compare this with the version that added a feature before you use
+      that feature.
+    returns: {type: u32, doc: The version.}
+    completes: version
+
+  - name: restart
+    doc: |
+      Stops a mod and starts it again with the files it has now, so that an edited
+      script runs without restarting the game. The restart happens after the current
+      world step, once every mod has heard it, so a mod can restart itself. Everything
+      the mod owns is released, what its manifest declares is undone and done again,
+      and its code runs again from its entry file in a new script state. Its settings
+      and saved data stay. Its manifest isn't read again. Every running mod that
+      requires it is restarted after it. If a running script's entry file doesn't
+      compile, nothing stops and the old code keeps running. `restarted` tells how the
+      restart ended. If the folder `sd:/tsuchi/dev/<id>/` exists on the SD card, the
+      mod's files are read from there first.
+    params:
+      - {name: other, type: text, doc: "The ID of the mod to restart. It can be your own."}
+    fails:
+      not_found: "No mod with that ID is installed."
+      unsupported: "The mod never started in this run: it's turned off in the Mods menu, or it's blocked by its manifest, by what it requires, or by a conflict."
+      not_ready: "Mods haven't started yet."
+    users: [dev-server, kadan]
+
+  - name: state
+    doc: "Whether a mod is running, and if it isn't, whether it's waiting to start, blocked, or turned off."
+    params:
+      - {name: other, type: text, doc: "The mod's ID."}
+    returns: {type: enum<ModState>, doc: The state.}
+    fails:
+      not_found: "No mod with that ID is installed."
+    completes: restart
+
+  - name: problem
+    doc: "Why a mod is blocked, in the words that the Mods page shows. A mod that isn't blocked has no problem."
+    params:
+      - {name: other, type: text, doc: "The mod's ID."}
+    returns: {type: text, doc: "The reason, or empty text if the mod isn't blocked."}
+    fails:
+      not_found: "No mod with that ID is installed."
+    completes: restart
+
+events:
+  - name: restarted
+    doc: |
+      Emitted when a restart that `restart` asked for has ended, once for each mod that
+      it restarted. A mod that requires the restarted mod is restarted after it and gets
+      an event of its own.
+    fields:
+      - {name: mod, type: text, doc: "The ID of the mod."}
+      - {name: outcome, type: enum<RestartOutcome>, doc: How the restart ended.}
+      - {name: problem, type: text, doc: "Why the mod was kept or blocked, such as a script's error with its file and line. Empty text when it restarted."}
+    completes: restart

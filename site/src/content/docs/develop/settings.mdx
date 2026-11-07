@@ -1,0 +1,148 @@
+---
+title: Add settings
+description: Declare settings and respond when their saved values change.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+Add settings to [your manifest](/develop/manifest/#settings), then read them through
+[`settings`](/reference/settings/). Tsuchi loads the player's saved values before
+your mod starts when the save is available. If a saved value arrives later, your
+mod receives a change event. A delayed saved value can't overwrite a value your mod
+has already changed. Settings can appear in the game's Settings tabs or on the mod's
+page.
+
+Open **Settings**, select **Mods**, and open the mod's details to edit its
+declared settings. Text values are read-only in this build.
+
+## Declaration
+
+For example, add a toggle for log messages:
+
+```json title="mod.json"
+{
+  "id": "olimar.clock",
+  "name": "Clock",
+  "version": "1.0.0",
+  "settings": {
+    "report": {
+      "type": "toggle",
+      "default": true,
+      "name": "Log messages",
+      "description": "Write a message when the setting changes.",
+      "public": true
+    }
+  }
+}
+```
+
+Use `name` and `description` for the setting's display text. The manifest guide
+lists every [setting key](/develop/manifest/#settings) and its allowed types.
+
+## Changes
+
+Read the initial value when your mod starts, then read it again when it changes:
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua title="main.lua"
+local own_id = mod.id()
+local function report()
+    local enabled, why = settings.toggle("report")
+    if enabled == nil then
+        print("Can't read report: " .. why)
+    elseif enabled then
+        print("Log messages are enabled")
+    end
+end
+
+report()
+settings.on_changed(function(event)
+    if event.mod == own_id and event.key == "report" then report() end
+end)
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript title="main.js"
+const own_id = mod.id();
+function report() {
+    try {
+        if (settings.toggle("report")) print("Log messages are enabled");
+    } catch (error) {
+        print("Can't read report: " + error.name);
+    }
+}
+
+report();
+settings.on("changed", (event) => {
+    if (event.mod === own_id && event.key === "report") report();
+});
+```
+
+</TabItem>
+<TabItem label="C">
+
+```c title="main.c"
+#include "tsuchi/tsuchi.h"
+
+static const TSUCHI_Host *host;
+static TSUCHI_Mod *self;
+static TSUCHI_Subscription changes;
+static char own_id[TSUCHI_ID_SIZE];
+
+static bool same(const char *a, const char *b) {
+    while (*a && *a == *b) { ++a; ++b; }
+    return *a == *b;
+}
+
+static void report(void) {
+    bool enabled = false;
+    TSUCHI_Result result = host->settings->toggle(self, "report", &enabled);
+    if (result != TSUCHI_OK) host->mod->log(self, "Can't read report");
+    else if (enabled) host->mod->log(self, "Log messages are enabled");
+}
+
+static void on_changed(void *user, const TSUCHI_SettingsChanged *event) {
+    (void)user;
+    if (same(event->mod, own_id) && same(event->key, "report")) report();
+}
+
+TSUCHI_Result tsuchi_mod_start(const TSUCHI_Host *given, TSUCHI_Mod *mod) {
+    uint64_t needed = 0;
+    host = given;
+    self = mod;
+    TSUCHI_Result result = host->mod->id(mod, own_id, sizeof own_id, &needed);
+    if (result != TSUCHI_OK) return result;
+    report();
+    return host->settings->on_changed(mod, on_changed, 0, &changes);
+}
+```
+
+</TabItem>
+</Tabs>
+
+Every listener receives every mod's changes, so check both `mod` and `key`.
+Setting a value to its current value doesn't emit an event. When a value changes,
+the event arrives on the game thread at the start of the next world step.
+
+## Saving
+
+Change your own values with calls such as `settings.set_toggle`, or call
+`settings.reset` to restore the default. Tsuchi writes changes in the next frame,
+or when the save next becomes writable. A refused write is retried after ten
+seconds rather than on every frame.
+If an update changes the allowed values and an old saved value no longer fits,
+Tsuchi uses the new default.
+
+Settings belong to the player and your mod, so they are shared across save slots.
+Stopping or removing your mod doesn't erase the saved values.
+
+## Public settings
+
+If a setting has `"public": true`, another mod can read it as
+`"olimar.clock:report"`. Other mods can't change it. Declare a dependency if the
+other mod must be present, or handle `not_found` if reading its setting is optional.
+Trying to read a private setting returns `denied`.

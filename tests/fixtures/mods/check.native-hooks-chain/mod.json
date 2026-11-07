@@ -1,0 +1,11 @@
+{
+  "id": "check.native-hooks-chain",
+  "name": "Native inline chain and startup cleanup check",
+  "version": "1.0.0",
+  "requires": {"check.native-hooks-base": "*"},
+  "meta": {
+    "check": "native-hooks-chain",
+    "check_explicit": true,
+    "checks": ["setup", "chain_order", "ordinary", "base_removed", "remove", "restart", "startup_cleanup_armed"]
+  }
+}

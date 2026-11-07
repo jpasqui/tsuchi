@@ -1,0 +1,12 @@
+unload
+Cave001_F00_P
+BP_CarrotSkySphere_C
+BP_CarrotSkySphere_C_0
+SkyStaticMeshComp
+0x089c1b58
+0x05086bb0
+0x05094d50
+0x05086fa0
+/Engine/EngineMaterials/DefaultMaterial.DefaultMaterial
+-
+0x4650

@@ -1,0 +1,235 @@
+service: gimmicks
+layer: game
+acts_on: actor
+lifetime: world
+brief: Reads and finishes the world's gates, builds, switches, doors, and work objects.
+tutorials:
+- title: Change work objects
+  path: /develop/gimmicks/
+description: 'You can inspect work objects and request the same changes that the game makes.
+
+  These actions are permanent world changes. Stopping your mod does not undo them.
+
+  The game can save the changes with the area. Events compare state once per world step.
+
+  A change that starts and ends between steps is not reported.
+
+  '
+enums:
+  GimmickKind:
+    doc: The work object's kind, using the game's CID.
+    open: true
+structs:
+  Gimmick:
+    doc: A work object's state.
+    fields:
+    - name: kind
+      type: enum<GimmickKind>
+      doc: The kind ID.
+    - name: done
+      type: bool
+      doc: If true, the work is finished.
+    - name: removed
+      type: bool
+      doc: If true, the actor has left play.
+    - name: 'on'
+      type: bool
+      doc: If true, the switch is pressed or the door is open.
+    - name: asleep
+      type: bool
+      doc: If true, the game has paused distant logic.
+    - name: progress
+      type: u32
+      doc: Stages broken, pieces placed, or percent dug.
+    - name: total
+      type: u32
+      doc: The total progress, or 0 when there is none.
+    - name: life
+      type: f32
+      doc: Current life, or -1 when there is none.
+    - name: max_life
+      type: f32
+      doc: Maximum life, or -1 when there is none.
+functions:
+- name: list
+  doc: Lists the work objects in the loaded world.
+  params: []
+  fails:
+    not_ready: The world or battle is not ready.
+    not_found: The actor or named entry no longer exists.
+    invalid: An argument is outside its range.
+    unsupported: This kind does not support the action.
+  users:
+  - online-coop
+  - world-tools
+  returns:
+    type: list<handle<actor>>
+    doc: The requested value.
+- name: describe
+  doc: Reads a work object's saved state and progress.
+  params:
+  - name: actor
+    type: handle<actor>
+    doc: The work object.
+  fails:
+    not_ready: The world or battle is not ready.
+    not_found: The actor or named entry no longer exists.
+    invalid: An argument is outside its range.
+    unsupported: This kind does not support the action.
+  users:
+  - online-coop
+  - world-tools
+  returns:
+    type: struct<Gimmick>
+    doc: The requested value.
+- name: break_gate
+  doc: Breaks every remaining stage of a gate. The change can persist in the save.
+  params:
+  - name: actor
+    type: handle<actor>
+    doc: The work object.
+  - name: quiet
+    type: bool
+    doc: If true, skip effects as when an area loads.
+  fails:
+    not_ready: The world or battle is not ready.
+    not_found: The actor or named entry no longer exists.
+    invalid: An argument is outside its range.
+    unsupported: This kind does not support the action.
+    busy: The object is locked or still moving.
+  users:
+  - online-coop
+  - world-tools
+- name: build
+  doc: Places every piece of a clay build without taking raw material. The change can persist in
+    the save.
+  params:
+  - name: actor
+    type: handle<actor>
+    doc: The work object.
+  - name: quiet
+    type: bool
+    doc: If true, skip effects as when an area loads.
+  fails:
+    not_ready: The world or battle is not ready.
+    not_found: The actor or named entry no longer exists.
+    invalid: An argument is outside its range.
+    unsupported: This kind does not support the action.
+    busy: The object is locked or still moving.
+  users:
+  - online-coop
+  - world-tools
+- name: press
+  doc: Presses a switch and sends its event to the targets. The change can persist in the save.
+  params:
+  - name: actor
+    type: handle<actor>
+    doc: The work object.
+  fails:
+    not_ready: The world or battle is not ready.
+    not_found: The actor or named entry no longer exists.
+    invalid: An argument is outside its range.
+    unsupported: This kind does not support the action.
+    busy: The object is locked or still moving.
+  users:
+  - online-coop
+  - world-tools
+- name: open
+  doc: Opens a trigger door. The change can persist in the save.
+  params:
+  - name: actor
+    type: handle<actor>
+    doc: The work object.
+  - name: quiet
+    type: bool
+    doc: If true, skip effects as when an area loads.
+  fails:
+    not_ready: The world or battle is not ready.
+    not_found: The actor or named entry no longer exists.
+    invalid: An argument is outside its range.
+    unsupported: This kind does not support the action.
+    busy: The object is locked or still moving.
+  users:
+  - online-coop
+  - world-tools
+- name: close
+  doc: Closes a repeatable trigger door. The change can persist in the save.
+  params:
+  - name: actor
+    type: handle<actor>
+    doc: The work object.
+  fails:
+    not_ready: The world or battle is not ready.
+    not_found: The actor or named entry no longer exists.
+    invalid: An argument is outside its range.
+    unsupported: This kind does not support the action.
+    busy: The object is locked or still moving.
+  users:
+  - online-coop
+  - world-tools
+- name: finish
+  doc: Finishes a pot, planter, dirt mound, drain, push-down wall, vent, jelly, or tunnel. The change
+    can persist in the save.
+  params:
+  - name: actor
+    type: handle<actor>
+    doc: The work object.
+  fails:
+    not_ready: The world or battle is not ready.
+    not_found: The actor or named entry no longer exists.
+    invalid: An argument is outside its range.
+    unsupported: This kind does not support the action.
+    busy: The object is locked or still moving.
+  users:
+  - online-coop
+  - world-tools
+- name: set_progress
+  doc: Places more pieces in a clay build. Progress cannot go backward.
+  params:
+  - name: actor
+    type: handle<actor>
+    doc: The work object.
+  - name: pieces
+    type: u32
+    doc: The placed pieces, from the current count to the total.
+  fails:
+    not_ready: The world or battle is not ready.
+    not_found: The actor or named entry no longer exists.
+    invalid: An argument is outside its range.
+    unsupported: This kind does not support the action.
+    busy: The object is locked.
+  users:
+  - online-coop
+  - world-tools
+events:
+- name: changed
+  doc: Emitted when the game or a mod changes a work object. New objects establish a baseline and
+    emit no event.
+  fields:
+  - name: actor
+    type: handle<actor>
+    doc: The work object.
+  - name: kind
+    type: enum<GimmickKind>
+    doc: The kind ID.
+  - name: progress
+    type: u32
+    doc: The new progress.
+  - name: previous_progress
+    type: u32
+    doc: The previous progress.
+  - name: done
+    type: bool
+    doc: If true, the work is finished.
+  - name: previous_done
+    type: bool
+    doc: If true, the work was finished.
+  - name: 'on'
+    type: bool
+    doc: If true, the switch is pressed or the door is open.
+  - name: previous_on
+    type: bool
+    doc: If true, the switch was pressed or the door was open.
+  users:
+  - online-coop
+  - world-tools

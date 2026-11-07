@@ -1,0 +1,59 @@
+{
+  "title": "UI check",
+  "controls": [
+    {
+      "kind": "choice",
+      "id": "mode",
+      "label": "Mode",
+      "options": [
+        {
+          "id": "calm",
+          "label": "Calm"
+        },
+        {
+          "id": "wild",
+          "label": "Wild"
+        }
+      ],
+      "initial": "calm"
+    },
+    {
+      "kind": "integer",
+      "id": "count",
+      "label": "Count",
+      "minimum": 0,
+      "maximum": 10,
+      "step": 1,
+      "initial": 1
+    },
+    {
+      "kind": "text",
+      "id": "note",
+      "label": "Note",
+      "initial": "Code and data use stock widgets"
+    },
+    {
+      "kind": "text",
+      "id": "row-0",
+      "label": "Extra row 1",
+      "initial": "Read-only rows do not take focus"
+    },
+    {
+      "kind": "text",
+      "id": "row-1",
+      "label": "Extra row 2",
+      "initial": "Read-only rows do not take focus"
+    },
+    {
+      "kind": "text",
+      "id": "row-2",
+      "label": "Extra row 3",
+      "initial": "Read-only rows do not take focus"
+    },
+    {
+      "kind": "button",
+      "id": "done",
+      "label": "Finish this screen"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "release.t3.night",
+  "name": "Release cave creature at night",
+  "version": "1.0.0",
+  "maps": [
+    {
+      "map": "/Game/Carrot4/Maps/Main/Area/Area001/Area001_P",
+      "mode": "night",
+      "placements": [
+        "/Game/P4Mods/release_t3_night/AP_Area001_P_ReleaseT3Night"
+      ]
+    }
+  ]
+}

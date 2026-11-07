@@ -1,0 +1,106 @@
+service: story
+tutorials:
+  - {title: Travel to an area, path: /develop/story-and-travel/}
+layer: game
+acts_on: game
+lifetime: save
+brief: "Reads the story's day and clock, and requests travel between areas, caves, and portals."
+description: |
+  The story counts days, and each day has a clock that runs from morning to
+  sunset. The player travels between areas from the map, enters caves through
+  their entrances, and leaves them again. Use this service to read the day and
+  the clock, set the clock, and request travel the same way that the game's
+  menus do.
+
+  A travel request takes a few seconds, as the game has to fade out, load, and
+  fade in. Use `game` to find out when the world changes.
+
+enums:
+  Treasure:
+    open: true
+    doc: "A treasure. The game's own treasures use the name of their row in the game's tables, like `OTADARTS`. A treasure that a mod adds uses the ID from its manifest, like `example.gems:ruby`."
+
+functions:
+  - name: day
+    doc: "The number of the current day, from `1`."
+    returns: {type: u32, doc: The day.}
+    fails:
+      not_ready: No story is loaded.
+    users: [online-coop, dog-coop]
+
+  - name: clock
+    doc: "How far the clock is through the day, from `0` at the start to `1` at the end. At night, it is how far the clock is through the night."
+    returns: {type: f32, doc: "How far the clock is through the day."}
+    fails:
+      not_ready: "No story is loaded, or the level has no clock."
+    users: [online-coop, dog-coop]
+
+  - name: set_clock
+    doc: "Sets the clock to a point in the day. The game moves the sun and its own timers to match on the clock's next update."
+    params:
+      - {name: clock, type: f32, doc: "How far through the day to set the clock, from `0` to `1`."}
+    fails:
+      invalid: "`clock` is below `0` or above `1`."
+      not_ready: "No story is loaded, or the level has no clock."
+    users: [online-coop, dog-coop]
+
+  - name: travel
+    doc: |
+      Asks the game to take the player to an area, the same way that choosing it on
+      the map does. The day continues. If the player is inside of a cave, leave the
+      cave first.
+    params:
+      - {name: area, type: enum<World>, doc: "The area's world, in the same format that `game.world` returns there, like `Area001_P`, or `example.course:course` for a mod's map."}
+      - {name: base, type: i32, default: -1, doc: "The base in the area to land at, from `0`, or `-1` for the last one that was used."}
+    fails:
+      invalid: "`area` isn't a valid ID."
+      not_found: "No area has the ID in `area`. A cave floor is a world but not an area, and a mod's map isn't an area while its mod isn't running."
+      not_ready: "The game isn't in the story with a level being played during the day, the player is in a cave, or the game hasn't received the mod's map yet."
+      busy: "The game is doing something that travel would interrupt, like a cutscene, a save, the end of the day, a menu, or travel that was already requested."
+      no_memory: "The game is out of memory."
+    users: [online-coop, groink]
+
+  - name: leave_cave
+    doc: "Asks the game to take the player out of the cave that they are in, the same way that leaving from the pause menu does."
+    fails:
+      not_ready: "The game isn't in the story with a level being played, or the player isn't in a cave."
+      busy: "The game is doing something that travel would interrupt, or travel was already requested."
+      no_memory: "The game is out of memory."
+    users: [online-coop, groink]
+
+  - name: enter_portal
+    doc: "Asks the game to take the player through a portal, which is a cave entrance or a hole to the next floor inside of a cave. The game asks the player to confirm first, the same way that it does when they walk up to it."
+    params:
+      - {name: portal, type: handle<actor>, doc: The portal.}
+    fails:
+      not_found: "The actor no longer exists."
+      invalid: "The actor isn't a portal, or it is a portal that doesn't lead anywhere."
+      not_ready: "The game isn't in the story with a level being played during the day, or the game isn't ready."
+      busy: "The game is doing something that travel would interrupt, or travel was already requested."
+      no_memory: "The game is out of memory."
+    users: [online-coop, dog-coop]
+
+  - name: treasure_count
+    doc: "The number of times that a treasure has been collected in the current story."
+    params:
+      - {name: treasure, type: enum<Treasure>, doc: The treasure.}
+    returns: {type: u32, doc: "The number of times that it has been collected."}
+    fails:
+      not_found: "No treasure has the ID in `treasure`."
+      invalid: "`treasure` isn't a valid ID."
+      not_ready: "No story is loaded, or the game isn't ready."
+    users: [treasure-demo, groink]
+
+  - name: give_treasure
+    doc: |
+      Records a treasure as collected, the same way that delivering it to the ship
+      does. The story's count for that treasure goes up by one, and its Sparklium is
+      added to the ship's total. Nothing in the world is removed or changed.
+    params:
+      - {name: treasure, type: enum<Treasure>, doc: The treasure.}
+      - {name: announce, type: bool, default: true, doc: "Whether the game shows the Sparklium being added."}
+    fails:
+      not_found: "No treasure has the ID in `treasure`."
+      invalid: "`treasure` isn't a valid ID."
+      not_ready: "No story is being played in a level, or the game isn't ready."
+    users: [treasure-demo, groink]

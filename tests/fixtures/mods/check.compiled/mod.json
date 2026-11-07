@@ -1,0 +1,6 @@
+{
+  "id": "check.compiled",
+  "name": "Check compiled",
+  "version": "1.0.0",
+  "requires": {"check.library": "1.0.0"}
+}

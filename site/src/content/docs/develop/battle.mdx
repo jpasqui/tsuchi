@@ -1,0 +1,92 @@
+---
+title: Control a battle
+description: Read Dandori Battle and hold or replay its random outcomes.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+Start with [your first mod](/develop/first-mod/). Check
+[`battle.phase`](/reference/battle/#phase) before changing a battle. Player
+numbers are `0` and `1`.
+
+## Scores
+
+Use `score` to read points and `add_score` to change them. The game updates its
+score records and clamps the result at zero. Use `clock` to read elapsed seconds
+and the time limit. `set_clock` changes elapsed seconds without holding time.
+
+Use `end_match` to finish with results or `abort` to leave without results.
+At the results screen, use `play_again` or `exit` once the screen waits for a choice.
+
+## Outcomes
+
+Call [`battle.hold_outcome`](/reference/battle/#hold_outcome) for `pop`, `tug`,
+`bonus`, or `roulette`. Another mod's hold returns `busy`. Release your hold with
+`release_outcome`. Tsuchi also releases it when your mod stops or the battle ends.
+Pop and tug timers and the Bonus Find phase return to their saved values.
+
+Pop events include an entity-kind ID for the actor's class. Pass that ID to
+`replay_pop` along with the group, place, pop category, and alternate flag. Tsuchi
+resolves a mod's ID through its content mapping, then finds the loaded class by
+the CID on its default actor.
+
+Several blueprint variants can share one CID. In that case, `replay_pop` returns
+`unsupported`. A pop report preserves the CID and cannot identify which variant
+the game chose. You cannot use that report to reproduce the exact variant.
+
+Bonus Find events include the fixed theme, the BonusAddition flag, and their
+copied payload bytes. Pass those values to `replay_bonus`. Use `none` as the
+target kind for a whole category. Unknown native theme values are reported as
+`#n` in scripts. They cannot be replayed until the API names them.
+The native record list must already have room when you append a record.
+
+Roulette holds own the items you queue with `replay_roulette`. A roulette with
+no queued item draws normally. Stopping the holder discards its pending items.
+A held tug waits at its decision until you call `replay_tug` with a player number
+or `-1` for a tie.
+
+For example, hold automatic pops while you inspect the opening layout.
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua title="main.lua"
+local phase = battle.phase()
+if phase == "running" then
+    local ok, why = battle.hold_outcome("pop")
+    if not ok then mod.log(why) end
+end
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```js title="main.js"
+if (battle.phase() === "running") {
+    try {
+        battle.hold_outcome("pop");
+    } catch (error) {
+        mod.log(error.name);
+    }
+}
+```
+
+</TabItem>
+<TabItem label="C">
+
+```c title="source/main.c"
+#include <tsuchi/tsuchi.h>
+
+TSUCHI_Result tsuchi_mod_start(const TSUCHI_Host *host, TSUCHI_Mod *mod) {
+    TSUCHI_BattlePhase phase;
+    TSUCHI_Result result = host->battle->phase(mod, &phase);
+    if (result != TSUCHI_OK) return result;
+    if (phase == TSUCHI_BATTLE_PHASE_RUNNING) {
+        return host->battle->hold_outcome(mod, TSUCHI_BATTLE_OUTCOME_POP);
+    }
+    return TSUCHI_OK;
+}
+```
+
+</TabItem>
+</Tabs>

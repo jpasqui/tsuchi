@@ -1,0 +1,20 @@
+{
+  "id": "check.ride",
+  "name": "The isolated check of riding and dismounting the real dog",
+  "version": "1.0.0",
+  "meta": {
+    "check": "ride",
+    "check_explicit": true,
+    "checks": [
+      "found",
+      "asked",
+      "pending",
+      "mounted",
+      "off",
+      "restored",
+      "refused",
+      "quiet",
+      "originals"
+    ]
+  }
+}

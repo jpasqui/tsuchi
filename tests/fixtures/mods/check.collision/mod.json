@@ -1,0 +1,15 @@
+{
+  "id": "check.collision",
+  "name": "The check of collision",
+  "version": "1.0.0",
+  "meta": {
+    "check": "collision",
+    "checks": [
+      "found",
+      "held",
+      "reflected",
+      "restored",
+      "ended"
+    ]
+  }
+}

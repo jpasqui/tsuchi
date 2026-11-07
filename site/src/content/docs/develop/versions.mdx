@@ -1,0 +1,86 @@
+---
+title: Check compatibility
+description: Choose an API version and keep your SDK and framework compatible.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+Set your manifest's `framework` to the lowest whole-number API version your mod
+supports. It isn't the mod's three-part `version` or the game's version. Use the
+API number listed with the Tsuchi release you're targeting.
+
+## API number
+
+For example, read the version that is running:
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua title="main.lua"
+print("Tsuchi API " .. mod.framework())
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript title="main.js"
+print("Tsuchi API " + mod.framework());
+```
+
+</TabItem>
+<TabItem label="C">
+
+```c title="main.c"
+#include "tsuchi/tsuchi.h"
+
+TSUCHI_Result tsuchi_mod_start(const TSUCHI_Host *host, TSUCHI_Mod *mod) {
+    uint32_t version = 0;
+    TSUCHI_Result result = host->mod->framework(mod, &version);
+    if (result != TSUCHI_OK) return result;
+    if (version >= TSUCHI_API_VERSION) host->mod->log(mod, "SDK API is available");
+    return TSUCHI_OK;
+}
+```
+
+</TabItem>
+</Tabs>
+
+When a release changes the API, its number goes up by one. A later framework keeps
+the earlier API available, so a compiled mod built for an earlier release can keep
+using its service tables.
+
+## SDK
+
+Download the SDK from the same release as the framework you test with. The SDK
+marks your compiled mod with its headers' API number. If you build with newer
+headers and support an older framework, set `framework` to that older number and
+check before calling anything added later.
+
+In C, use `TSUCHI_HAS(table, member)` to check that a service or function is
+available. In Lua, a function that an older framework doesn't offer is `nil`, and in
+JavaScript, it is absent from the service.
+You can compare `mod.framework()` when several features share a minimum version.
+
+## Dependencies
+
+A mod's three-part version uses different rules from the framework API number. A
+requirement such as `1.2.0` accepts the same major version with a minor/patch version
+at least as high: `1.2.0`, `1.2.1`, and `1.3.0` match, and `2.0.0` doesn't. Use `*`
+when any version works. Required and optional dependencies use the same grammar.
+
+## Additions
+
+If a feature was added after the first release, its reference entry says which
+version added it, such as **Added in version 2**. Set your minimum API to the newest
+version your mod needs, or provide a fallback for older frameworks.
+
+## Deprecation
+
+If a reference entry says **Deprecated**, it names the replacement. The old call
+continues to work. C warns when you use it, and Lua and JavaScript log the first
+call or subscription to each deprecated name. Update your mod to the replacement when
+you next work on it.
+
+If you rely on game offsets or a native signature, set `game` in your manifest to
+the game version you checked. An API compatibility check doesn't verify your own
+game addresses.

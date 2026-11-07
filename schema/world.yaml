@@ -1,0 +1,33 @@
+service: world
+layer: engine
+acts_on: game
+lifetime: world
+brief: "Finds ground and walkable paths on the loaded navigation mesh."
+description: |
+  These queries use the loaded world's navigation mesh and the game's default
+  navigation filter. Ground is the walkable surface near your point. It does not
+  include scenery outside navigation. A path is complete and contains world
+  positions in centimeters, with z up. It can become blocked after the query.
+functions:
+  - name: ground
+    doc: "Finds the nearest walkable surface within the search box. Returns its world position, including ground height in z."
+    params:
+      - {name: point, type: vec3, doc: "The world position, in centimeters."}
+      - {name: extent, type: vec3, doc: "The search box's positive half widths, in centimeters."}
+    returns: {type: vec3, doc: "The position on the walkable surface."}
+    fails:
+      invalid: "A coordinate is not finite, or an extent is not positive."
+      not_ready: "The world or its navigation mesh is not ready."
+      not_found: "There is no walkable surface in the search box."
+    users: [groink, online-coop]
+  - name: path
+    doc: "Finds a complete walkable path between two points. A partial path fails with not_found. The points include both ends projected onto navigation."
+    params:
+      - {name: start, type: vec3, doc: "The start position, in centimeters."}
+      - {name: finish, type: vec3, doc: "The destination, in centimeters."}
+    returns: {type: list<vec3>, doc: "The path's points in travel order."}
+    fails:
+      invalid: "A coordinate is not finite."
+      not_ready: "The world or its navigation mesh is not ready."
+      not_found: "No complete walkable path connects these points."
+    users: [groink, online-coop]

@@ -1,0 +1,59 @@
+service: text
+tutorials:
+  - {title: Change text, path: /develop/change-text/}
+layer: engine
+acts_on: game
+lifetime: process
+brief: "Reads and replaces the game's localized text."
+description: |
+  Every piece of text that the game shows is stored under a namespace and a
+  key. For example, a creature's name is stored under the `GenseiName`
+  namespace with the creature's kind as the key. Use this service to read the
+  text for the current language, replace it, and add text under keys that the
+  game doesn't have, which is useful for the things that your mod adds.
+
+  Text that is already on screen updates the next time the game builds it.
+  When the player changes the language, the game reloads its text, and your
+  replacements are removed.
+
+functions:
+  - name: get
+    doc: The text under a namespace and a key.
+    params:
+      - {name: space, type: text, doc: "The namespace, like `GenseiName`."}
+      - {name: key, type: text, doc: The key.}
+    returns: {type: text, doc: The text.}
+    fails:
+      not_found: The game has no text under that namespace and key.
+      invalid: "The namespace or the key is empty or isn't valid UTF-8."
+      not_ready: "The game's text isn't loaded yet."
+    users: [groink, treasure-demo]
+
+  - name: override
+    doc: |
+      Replaces the text under a namespace and a key, or adds text under a key that
+      the game doesn't have, until your mod restores the text or stops. More than
+      one mod can replace the same text. The replacement from the mod that started
+      last is the one that is shown. When that mod removes its replacement, the next
+      mod's replacement is shown, and when none are left, the game's own text is
+      shown again. A key that the game didn't have keeps the last text that it was
+      given.
+    owns: true
+    params:
+      - {name: space, type: text, doc: The namespace.}
+      - {name: key, type: text, doc: The key.}
+      - {name: text, type: text, doc: The new text.}
+    fails:
+      invalid: "The namespace or the key is empty, or one of the three isn't valid UTF-8."
+      not_ready: "The game's text isn't loaded yet."
+    users: [groink, treasure-demo]
+
+  - name: restore
+    doc: "Ends your mod's replacement of a text. The game's own text is shown again."
+    owns: true
+    params:
+      - {name: space, type: text, doc: The namespace.}
+      - {name: key, type: text, doc: The key.}
+    fails:
+      not_found: "Your mod isn't replacing this text."
+    users: [groink, treasure-demo]

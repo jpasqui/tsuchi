@@ -1,0 +1,281 @@
+service: content
+tutorials:
+  - {title: Declare content in code, path: /develop/content-in-code/}
+layer: game
+acts_on: game
+lifetime: process
+brief: "Adds a mod's content through the same declarations as its manifest."
+description: |
+  You can declare content before your mod starts in its manifest or while it runs
+  with `add`. Both forms use the same checks and the same game paths. A declared
+  ID belongs to your mod. Added rows that the game cannot remove stay for the run.
+  Their field overrides and replacements of existing text end when your mod stops.
+  New text keys keep their last text. A successful declared class keeps its content
+  identity for as long as the class stays loaded.
+
+  The definition uses the manifest's `content`, `new_maps`, `maps`, `tables`, and
+  `text` sections. You can add treasures, treasure series, creatures, Pikmin types,
+  maps, rows, and localized text. The same limits apply in both forms. Added Pikmin
+  colors and map slots keep their assigned IDs in the player's save.
+
+enums:
+  DeclarationState:
+    open: false
+    doc: "The state of an admitted declaration batch."
+    values:
+      - {name: queued, value: 0, doc: "Accepted and waiting for its next world step."}
+      - {name: ready, value: 1, doc: "Applied through the manifest paths."}
+      - {name: failed, value: 2, doc: "The game refused the batch. Reversible work was removed."}
+  PlacementKind:
+    open: false
+    doc: "The type of a declared placement value."
+    values:
+      - {name: toggle, value: 0, doc: "A Boolean."}
+      - {name: integer, value: 1, doc: "A whole number."}
+      - {name: number, value: 2, doc: "A number."}
+      - {name: text, value: 3, doc: "UTF-8 text."}
+  BankKind:
+    open: true
+    doc: "A bank declared by its mod's ID and short name."
+  SoundEvent:
+    open: true
+    doc: "An event in a loaded bank. The framework gives an unnamed native event as an ID placeholder."
+
+functions:
+  - name: add
+    doc: |
+      Admits a JSON object with the sections you want to declare. The sections
+      use their manifest formats. Every section is checked before the batch is
+      accepted. The batch is applied on the next world step through the same
+      paths as manifest declarations. Watch ready and failed for the outcome.
+      Declare related series and treasures together in one content section.
+      A batch cannot change or reclaim a resource that your mod already owns
+      from its manifest or an earlier batch. Native admission reports busy for
+      that overlap and preserves the earlier declaration.
+    owns: true
+    params:
+      - {name: definition, type: text, doc: "A JSON object with content, new_maps, maps, tables, or text sections."}
+    returns: {type: handle<content_declaration>, doc: "The admitted batch. You can read its state or retract it."}
+    fails:
+      invalid: "The definition is invalid JSON, is empty, names another section, or fails a manifest check."
+      not_ready: "A declaration path is not registered."
+      busy: "Your mod already has a batch in native admission. Wait for its ready or failed event."
+      no_memory: "The game is out of memory."
+    users: [groink, treasure-demo]
+
+  - name: state
+    doc: "Reads an admitted batch's state."
+    owns: true
+    params:
+      - {name: declaration, type: handle<content_declaration>, doc: "The batch."}
+    returns: {type: enum<DeclarationState>, doc: "Its state."}
+    fails:
+      not_found: "The batch ended."
+      denied: "Another mod owns the batch."
+    users: [groink, treasure-demo]
+
+  - name: retract
+    doc: |
+      Ends an admitted batch. A queued batch is canceled before it changes the
+      game. A ready batch gives back its reversible changes. Added native rows
+      can remain inert until the game restarts. Successful class-default identities
+      remain for the loaded class lifetime. New native text keys keep their last
+      text. A failed batch restores its provisional identity writes and existing
+      text replacements. Saved number assignments remain
+      reserved for the same IDs. The batch also ends when your mod stops.
+    owns: true
+    params:
+      - {name: declaration, type: handle<content_declaration>, doc: "The batch to end."}
+    fails:
+      not_found: "The batch ended."
+      denied: "Another mod owns the batch."
+      busy: "The batch is inside a native apply or restore call."
+    users: [groink, treasure-demo]
+
+  - name: load_bank
+    doc: |
+      Loads an independent version 135 PCM sound bank. The bank may hold up to 64
+      one-shot sounds, each at most 30 seconds, in mono or stereo PCM16. The bank
+      must fit in 16 MiB. Up to 16 mod banks can be loaded at once. The framework
+      checks chunks, references, and ID overlap among the mod banks it tracks
+      before it calls the engine. Your bank, media, object, and event IDs must also
+      avoid stock IDs. The framework cannot prove that they avoid stock banks.
+    owns: true
+    params:
+      - {name: bank, type: enum<BankKind>, doc: "Your mod's bank ID, like example.groink:sounds."}
+      - {name: data, type: bytes, doc: "The bank's bytes. You can release them after the call returns."}
+    returns: {type: handle<sound_bank>, doc: "The loaded bank. It unloads when your mod stops."}
+    fails:
+      invalid: "The ID is not your mod's ID, or the bank is malformed."
+      not_found: "The ID is not a declaration your mod can own."
+      busy: "A loaded bank already uses this ID or one of its native IDs."
+      not_ready: "The sound engine is not ready."
+      unsupported: "The bank uses a version, media format, or feature this route cannot play, or the native engine refused it."
+      capacity: "The bank is too large or all 16 bank slots are in use."
+      no_memory: "The game is out of memory."
+    users: [groink, custom-creatures]
+
+  - name: bank
+    doc: |
+      Finds a bank loaded by your mod, including a bank declared in its manifest.
+      Manifest banks wait for the sound engine to start, then read and validate their file.
+      A restarted manifest also waits for its previous bank's native cleanup.
+      Retry while they are not ready. A file or validation error is reported here.
+    owns: true
+    params:
+      - {name: bank, type: enum<BankKind>, doc: "The bank's ID."}
+    returns: {type: handle<sound_bank>, doc: "The loaded bank."}
+    fails:
+      invalid: "The bank ID or declared bank file is invalid."
+      not_found: "No running bank has that ID, or the declared file is absent."
+      not_ready: "The declared bank is waiting for the sound engine."
+      unsupported: "The sound engine refused the declared bank."
+      io: "Reading the declared bank file failed."
+      capacity: "The declared bank is too large."
+      busy: "A declared bank's native IDs overlap an active bank."
+      no_memory: "The game is out of memory. The pending bank will retry."
+      denied: "Another mod owns the bank."
+    users: [groink, custom-creatures]
+
+  - name: bank_events
+    doc: "Lists the IDs of the events in a loaded bank."
+    owns: true
+    params:
+      - {name: bank, type: handle<sound_bank>, doc: "The bank."}
+    returns: {type: list<text>, doc: "The bank's events."}
+    fails:
+      not_found: "The bank has ended."
+      denied: "Another mod owns the bank."
+    users: [groink, custom-creatures]
+
+  - name: play_event
+    doc: |
+      Plays a bank event at a fixed world position through the game's listeners.
+      Up to 128 voices can play at once. A returned voice means the engine accepted
+      the event. The sound's mix and audible level come from the bank.
+    owns: true
+    params:
+      - {name: bank, type: handle<sound_bank>, doc: "The loaded bank."}
+      - {name: event, type: enum<SoundEvent>, doc: "An event ID from bank_events."}
+      - {name: location, type: vec3, doc: "The position in world centimeters."}
+    returns: {type: handle<sound_voice>, doc: "The voice. It ends with the sound, the bank, or your mod."}
+    fails:
+      invalid: "The event ID or position is invalid."
+      not_found: "The bank has ended, or it has no such event."
+      denied: "Another mod owns the bank."
+      not_ready: "The sound engine is not ready."
+      unsupported: "The native engine refused the event."
+      capacity: "All 128 voice slots are in use."
+      no_memory: "The game is out of memory."
+    users: [groink, custom-creatures]
+
+  - name: stop_event
+    doc: "Stops one voice. A voice that ended already stays ended."
+    owns: true
+    params:
+      - {name: voice, type: handle<sound_voice>, doc: "The voice to stop."}
+    fails:
+      not_found: "The voice has ended."
+      denied: "Another mod owns the voice."
+      not_ready: "The sound engine is not ready."
+      unsupported: "The native engine refused the stop."
+    users: [groink, custom-creatures]
+
+  - name: unload_bank
+    doc: |
+      Accepts unloading and ends your bank handle. The framework stops the bank's
+      tracked voices and keeps pending native cleanup until the sound engine
+      accepts it. The bank's native IDs stay reserved while cleanup is pending.
+      When your mod stops, the same cleanup continues in the framework.
+    owns: true
+    params:
+      - {name: bank, type: handle<sound_bank>, doc: "The bank to unload."}
+    fails:
+      not_found: "The bank has ended."
+      denied: "Another mod owns the bank."
+      not_ready: "The sound engine is not ready."
+      no_memory: "There is no room to keep pending cleanup."
+      busy: "A native voice call is still using the bank."
+    users: [groink, custom-creatures]
+
+  - name: placement_values
+    doc: "Lists the names of the values you can set on placements of added content."
+    params:
+      - {name: kind, type: enum<EntityKind>, doc: "The ID of declared content."}
+    returns: {type: list<text>, doc: "The declared names."}
+    fails:
+      invalid: "The ID or value name is invalid, or the value has a different type."
+      not_found: "No running mod declares that content or value."
+    users: [groink, kadan]
+
+  - name: placement_kind
+    doc: "Reads the type of a placement value."
+    params:
+      - {name: kind, type: enum<EntityKind>, doc: "The ID of declared content."}
+      - {name: value, type: text, doc: "The placement value's short name."}
+    returns: {type: enum<PlacementKind>, doc: "The declared type."}
+    fails:
+      invalid: "The ID or value name is invalid, or the value has a different type."
+      not_found: "No running mod declares that content or value."
+    users: [groink, kadan]
+
+  - name: placement_toggle
+    doc: "Reads the Boolean default of a placement value."
+    params:
+      - {name: kind, type: enum<EntityKind>, doc: "The ID of declared content."}
+      - {name: value, type: text, doc: "The placement value's short name."}
+    returns: {type: bool, doc: "The declared default."}
+    fails:
+      invalid: "The ID or value name is invalid, or the value has a different type."
+      not_found: "No running mod declares that content or value."
+    users: [groink, kadan]
+
+  - name: placement_integer
+    doc: "Reads the whole-number default of a placement value."
+    params:
+      - {name: kind, type: enum<EntityKind>, doc: "The ID of declared content."}
+      - {name: value, type: text, doc: "The placement value's short name."}
+    returns: {type: i64, doc: "The declared default."}
+    fails:
+      invalid: "The ID or value name is invalid, or the value has a different type."
+      not_found: "No running mod declares that content or value."
+    users: [groink, kadan]
+
+  - name: placement_number
+    doc: "Reads the number default of a placement value."
+    params:
+      - {name: kind, type: enum<EntityKind>, doc: "The ID of declared content."}
+      - {name: value, type: text, doc: "The placement value's short name."}
+    returns: {type: f32, doc: "The declared default."}
+    fails:
+      invalid: "The ID or value name is invalid, or the value has a different type."
+      not_found: "No running mod declares that content or value."
+    users: [groink, kadan]
+
+  - name: placement_text
+    doc: "Reads the text default of a placement value."
+    params:
+      - {name: kind, type: enum<EntityKind>, doc: "The ID of declared content."}
+      - {name: value, type: text, doc: "The placement value's short name."}
+    returns: {type: text, doc: "The declared default."}
+    fails:
+      invalid: "The ID or value name is invalid, or the value has a different type."
+      not_found: "No running mod declares that content or value."
+    users: [groink, kadan]
+
+
+events:
+  - name: ready
+    doc: "Delivered to the owning mod after its admitted batch has been applied."
+    fields:
+      - {name: declaration, type: handle<content_declaration>, doc: "The ready batch."}
+    users: [groink, treasure-demo]
+  - name: failed
+    doc: |
+      Delivered to the owning mod when native admission refuses a batch. Reversible changes from
+      the batch have been removed. An added native row can remain inert for
+      the run. The batch stays available to read until you retract it.
+    fields:
+      - {name: declaration, type: handle<content_declaration>, doc: "The failed batch."}
+      - {name: reason, type: text, doc: "A name from the fixed result set, such as not_ready or capacity."}
+    users: [groink, treasure-demo]

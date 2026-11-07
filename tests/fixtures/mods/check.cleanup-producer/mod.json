@@ -1,0 +1,8 @@
+{
+  "id": "check.cleanup-producer",
+  "name": "The failed startup cleanup producer",
+  "version": "1.0.0",
+  "optional": {
+    "check.cleanup": "*"
+  }
+}

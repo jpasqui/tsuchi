@@ -1,0 +1,111 @@
+---
+title: Save your mod data
+description: Store your own bytes and keep save-slot data separate.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+Use [`storage`](/reference/storage/) for data your mod needs between game sessions.
+Each named entry holds bytes in a format you choose. The data belongs to the player
+and your mod, so every save slot sees the same entries.
+
+Use [`save`](/reference/save/) when you need the game's own save files instead. The
+game has six save slots, numbered 0 through 5, and `save.slot` returns the one in use,
+or `not_found` if the player hasn't picked one yet. If a mod changes the story's
+structure, it gets its own set of save slots. You can also use `save` to ask the game
+to save and to listen for save events.
+
+## Entries
+
+For example, write a version marker for your mod's data:
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua title="main.lua"
+local saved, why = storage.write("format.txt", "1\n")
+if saved == nil then
+    print("Couldn't save format.txt: " .. why)
+else
+    local data, read_why = storage.read("format.txt", 0, 2)
+    if data == nil then print(read_why) else print("Format: " .. data) end
+end
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript title="main.js"
+try {
+    storage.write("format.txt", new Uint8Array([49, 10]));
+    try {
+        const data = storage.read("format.txt", 0n, 2n);
+        print("Format: " + String.fromCharCode(...data));
+    } catch (error) {
+        print("Couldn't read format.txt: " + error.name);
+    }
+} catch (error) {
+    print("Couldn't save format.txt: " + error.name);
+}
+```
+
+</TabItem>
+<TabItem label="C">
+
+```c title="main.c"
+#include "tsuchi/tsuchi.h"
+
+TSUCHI_Result tsuchi_mod_start(const TSUCHI_Host *host, TSUCHI_Mod *mod) {
+    static const char format[] = "1\n";
+    TSUCHI_Result result = host->storage->write(mod, "format.txt", format, 2);
+    if (result != TSUCHI_OK) {
+        host->mod->log(mod, "Couldn't save format.txt");
+        return TSUCHI_OK;
+    }
+    char data[2];
+    uint64_t read = 0;
+    result = host->storage->read(mod, "format.txt", 0, data, sizeof data, &read);
+    if (result == TSUCHI_OK && read == 2 && data[0] == '1' && data[1] == '\n')
+        host->mod->log(mod, "Format: 1");
+    else host->mod->log(mod, "Couldn't read format.txt");
+    return TSUCHI_OK;
+}
+```
+
+</TabItem>
+</Tabs>
+
+Use names like `progress.json` or `best/area1.bin`. Paths can't point outside your
+mod's data. A write replaces the whole entry. On a console, an interrupted write
+leaves the old or new entry. An emulator's ordinary save folder doesn't give the
+same guarantee.
+
+If the game is saving, a call can return `busy`. If the save isn't open yet, it can
+return `not_ready`. Keep the data you wanted to write and try on a later step.
+Don't erase existing progress when a read fails for one of these reasons.
+
+## Slots
+
+To keep separate progress for each slot, get the active slot with `save.slot` and
+include it in your storage entry's name. If no slot is active, wait before choosing
+the entry. Use `save.list`, `save.size`, and `save.read` to inspect the game's files
+by their paths inside the slot, such as `single.sav`.
+
+If your mod loads someone else's story, read the rules for
+[`save.hold`](/reference/save/#hold) and [stand-ins](/reference/save/#use_stand_in).
+A hold ends right away when you release it. If your mod stops while it holds the
+save, the save slots stay locked until the player goes back to the title screen. After
+you use a stand-in, the save slots stay locked until you go back to the title screen,
+even if you release the stand-in yourself. This stops the stand-in's data from
+overwriting the player's real save. The lock doesn't affect settings or storage.
+
+## Removal
+
+Stopping or removing your mod leaves its storage entries in the save. A later
+installation with the same mod ID can read them. Change your data format with a
+version marker and migrate old entries when you update the mod. Call
+`storage.remove` only when you mean to erase an entry.
+
+The game can also save progress involving new content. Follow the removal rules in
+the [treasure](/develop/add-a-treasure/), [creature](/develop/add-a-creature/), and
+[map](/develop/add-a-map/) guides before changing IDs.

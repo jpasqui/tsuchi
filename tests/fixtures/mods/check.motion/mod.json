@@ -1,0 +1,22 @@
+{
+  "id": "check.motion",
+  "name": "The check of an owned actor in flight",
+  "version": "1.0.0",
+  "meta": {
+    "check": "motion",
+    "checks": [
+      "found",
+      "made",
+      "body",
+      "launched",
+      "rise",
+      "speed",
+      "landed",
+      "warped",
+      "facing",
+      "cancelled",
+      "removed",
+      "gone"
+    ]
+  }
+}

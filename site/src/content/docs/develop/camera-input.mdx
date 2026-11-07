@@ -1,0 +1,126 @@
+---
+title: Control a camera
+description: Hold a player's camera and read controller buttons.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+Start with [your first mod](/develop/first-mod/). We'll face the first player's
+camera north while **ZL** is down, and return the camera when the player lets go.
+
+## Code
+
+Read [`input.pad`](/reference/input/#pad) on each world step. Its button edges
+compare world steps, so a tap between two pictures still reaches your mod at 60
+frames per second. Hidden buttons remain visible to your mod.
+
+Call [`camera.hold_heading`](/reference/camera/#hold_heading) once the player has
+a camera. A *hold* keeps the value until you release it or your mod stops. If
+another mod holds this player's camera, the call returns `busy`.
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua title="main.lua"
+time.on_step(function()
+    local pad = input.pad(0)
+    if not pad then return end
+    if pad.held.zl then
+        camera.hold_heading(0, 0)
+    else
+        camera.release_heading(0)
+    end
+end)
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript title="main.js"
+time.on("step", () => {
+    try {
+        const pad = input.pad(0);
+        if (pad.held.includes("zl")) {
+            camera.hold_heading(0, 0);
+        } else {
+            camera.release_heading(0);
+        }
+    } catch (error) {
+        if (!["busy", "not_ready", "not_found"].includes(error.name)) {
+            print(error.name);
+        }
+    }
+});
+```
+
+</TabItem>
+<TabItem label="C">
+
+[Build this code](/develop/compiled-mod/) into `mod.nro`.
+
+```c title="main.c"
+#include "tsuchi/tsuchi.h"
+
+static const TSUCHI_Host *host;
+static TSUCHI_Mod *self;
+static TSUCHI_Subscription steps;
+
+static void on_step(void *user, const TSUCHI_TimeStep *event) {
+    (void)user;
+    (void)event;
+    TSUCHI_PadState pad = {0};
+    if (host->input->pad(self, 0, &pad) != TSUCHI_OK) return;
+    if (pad.held & TSUCHI_BUTTONS_ZL) {
+        host->camera->hold_heading(self, 0, 0);
+    } else {
+        host->camera->release_heading(self, 0);
+    }
+}
+
+TSUCHI_Result tsuchi_mod_start(const TSUCHI_Host *given, TSUCHI_Mod *mod) {
+    host = given;
+    self = mod;
+    return host->time->on_step(mod, on_step, 0, &steps);
+}
+```
+
+</TabItem>
+</Tabs>
+
+[Install your mod](/players/install-a-mod/) and enter a level. Hold **ZL** and you
+should see the camera face north. Let go and the camera should return to its
+previous heading.
+
+## Targets
+
+Use [`camera.hold_look`](/reference/camera/#hold_look) to follow an actor with an
+offset in centimeters. With no actor, the point is a world position. The hold
+pauses during demos and camera modes other than follow. It ends when its actor
+leaves play. Zoom, heading, and look-at share ownership for each player, so another
+mod can't take a different kind of camera hold while you have one.
+
+Use [`camera.view`](/reference/camera/#view) and
+[`camera.world_to_screen`](/reference/camera/#world_to_screen) to place a marker.
+Read them from [`time.presented`](/reference/time/#presented) for each picture.
+The camera service applies its view after the presenter's interpolation.
+Projection uses the game's viewport rectangle, aspect ratio, and projection
+settings with the last shown view. Call it after a picture has been drawn. A
+camera implementation that bypasses the player view slot returns `unsupported`.
+
+## Buttons
+
+Use [`input.hold_pressed`](/reference/input/#hold_pressed) to add buttons for 1 to
+600 world steps. Use [`input.hold_hidden`](/reference/input/#hold_hidden) to claim
+buttons so the game won't act on them. Press and hide holds share ownership of a
+controller. Each hold keeps the controller routed to the player when you take it.
+Releasing the hold still releases that controller if routing changes later. If two
+players share a controller, they share one hold. Taking it again through either
+player changes the hold. Releasing it through either player releases the hold.
+A press taken during a step counts that step toward its duration.
+Keyboard keys are unsupported on Switch.
+
+## Cleanup
+
+Release your holds when your mod no longer needs them. When your mod stops, Tsuchi
+restores zoom, heading, and the camera's follow goals, and releases every pressed
+or hidden button. See [Events and cleanup](/develop/events-and-cleanup/).

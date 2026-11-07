@@ -1,0 +1,19 @@
+{
+  "id": "check.ordinary-lifetime",
+  "name": "Ordinary actor lifetime observations",
+  "version": "1.0.0",
+  "meta": {
+    "check": "ordinary-lifetime",
+    "check_explicit": true,
+    "checks": [
+      "installed",
+      "donor",
+      "held",
+      "before_native",
+      "bookkeeping",
+      "native_resources",
+      "added",
+      "gameplay_events"
+    ]
+  }
+}

@@ -1,0 +1,58 @@
+service: creature
+tutorials:
+  - {title: Revive a creature, path: /develop/creatures/}
+layer: game
+acts_on: actor
+lifetime: world
+brief: "Lists the creatures in the world, checks which are defeated, and revives them."
+description: |
+  The game keeps creatures from the Dwarf Bulborb to each boss in its creature list.
+  Use this service to list the creatures in the world, check which ones are
+  defeated or are carcasses, and revive a defeated one. Creatures that are far
+  from the player aren't loaded until the player gets close.
+
+  To get a creature's kind, use `entity.kind`. Its health is in `combat`, and
+  what it is doing is in `behavior`. A creature kind that a mod adds is
+  declared in the mod's manifest under `content`, and its kind is the ID from
+  the manifest, like `example.zoo:stonehog`.
+
+functions:
+  - name: list
+    doc: "Every creature in the world, including defeated ones, in the game's own actor order."
+    returns: {type: list<handle<actor>>, doc: The creatures.}
+    fails:
+      not_ready: No world is loaded.
+    users: [groink, online-coop]
+
+  - name: defeated
+    doc: "Whether a creature has been defeated. A defeated creature stays in the world for a while, either as a carcass or until the game removes it."
+    params:
+      - {name: creature, type: handle<actor>, doc: The creature.}
+    returns: {type: bool, doc: "`true` after it has been defeated."}
+    fails:
+      not_found: "The actor no longer exists or isn't a creature."
+    users: [groink, online-coop]
+
+  - name: carcass
+    doc: "Whether a defeated creature has become a carcass, which stays where it fell and can be carried. The game marks it as a carcass a couple of seconds after the defeat. At night, a defeated creature turns into glow pellets and never becomes a carcass."
+    params:
+      - {name: creature, type: handle<actor>, doc: The creature.}
+    returns: {type: bool, doc: "`true` after it becomes a carcass."}
+    fails:
+      not_found: "The actor no longer exists or isn't a creature."
+    users: [groink, online-coop]
+
+  - name: revive
+    doc: |
+      Brings back a defeated creature the same way that the game does for creatures
+      that come back on their own. The game removes the carcass and spawns a new
+      creature of the same kind at the original creature's home. The new creature is
+      a different actor, which `entity.spawned` reports.
+    params:
+      - {name: creature, type: handle<actor>, doc: The defeated creature.}
+    fails:
+      not_found: "The actor no longer exists or isn't a creature."
+      not_ready: "The creature isn't defeated, or its state can't be read right now."
+      busy: "The carcass is being carried or held, or the creature is being removed."
+      no_memory: "The game is out of memory."
+    users: [groink, groink-lua]

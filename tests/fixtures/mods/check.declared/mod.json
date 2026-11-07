@@ -1,0 +1,11 @@
+{
+  "id": "check.declared",
+  "name": "Check declared",
+  "version": "1.0.0",
+  "tables": {
+    "/Game/Carrot4/Core/GActor/DT_TekiParameter.DT_TekiParameter": {"KOCHAPPY": {"MaxLife": 77}}
+  },
+  "text": {
+    "GenseiName": {"TsuchiDeclared": "Declared by a manifest"}
+  }
+}

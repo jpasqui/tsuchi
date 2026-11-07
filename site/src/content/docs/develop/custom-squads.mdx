@@ -1,0 +1,89 @@
+---
+title: Add a squad type
+description: Declare a type and hold a creature in a captain's squad.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+Declare the type under `content.squad` in your manifest. Give the type a short
+name and a display name. For example, a mod named `example.groinks` can declare
+`groink`, which you then name as `example.groinks:groink` in code.
+
+```json
+{
+  "content": {
+    "squad": {
+      "groink": {
+        "display_name": "Groinks",
+        "icon": "/Game/Groink/UI/T_Groink.T_Groink"
+      }
+    }
+  }
+}
+```
+
+Use a cooked texture under `/Game/` for the icon. If you leave out `icon`, the
+throw list shows its question mark. Read `squad.type_name(kind)` to get the
+declared display name. Eight type allocations are shared by all
+mods during a run. The framework keeps each allocation tied to its ID, even
+after its mod stops. Up to four leaders can have declared members at once.
+
+## Add a member
+
+After you spawn a creature, pass its handle and the captain's handle to
+[`squad.hold_member`](/reference/squad/#hold_member). The creature follows the
+captain and joins the throw list. A membership belongs to your mod. Another
+mod's request for that creature fails with `busy`.
+
+For example, use this code after you have a `creature` handle and a `leader`
+handle from [`player.captain`](/reference/player/#captain).
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua
+local ok, why = squad.hold_member("example.groinks:groink", leader, creature)
+if not ok then
+    print("Couldn't add the creature: " .. why)
+end
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript
+try {
+    squad.hold_member("example.groinks:groink", leader, creature);
+} catch (error) {
+    print("Couldn't add the creature: " + error.name);
+}
+```
+
+</TabItem>
+<TabItem label="C">
+
+```c
+TSUCHI_Result result = host->squad->hold_member(
+    self, "example.groinks:groink", leader, creature);
+```
+
+</TabItem>
+</Tabs>
+
+Call [`squad.release_member`](/reference/squad/#release_member) when you want
+the creature to resume its own AI. The framework restores its AI update and
+velocity. The framework also releases the membership when your mod stops, the
+creature leaves play, or the leader disappears. A creature thrown from the
+captain's hand leaves the declared squad.
+
+## Read or hold the selection
+
+Read [`squad.selected`](/reference/squad/#selected) to get the declared type's
+ID. An empty string means the leader selected a stock type. Call
+[`squad.hold_selection`](/reference/squad/#hold_selection) to keep your type
+selected, then call `squad.release_selection` to restore the earlier type.
+The hold also ends when your mod stops or the type has no members left.
+
+Use [`squad.type_members`](/reference/squad/#type_members) to read a type's
+members, and `squad.member_type` to read one actor's membership. Subscribe to
+`squad.membership_changed` to hear when a hold begins, changes, or ends.

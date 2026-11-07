@@ -1,0 +1,10 @@
+{
+  "id": "check.ai-order",
+  "name": "AI values before native start",
+  "version": "1.0.0",
+  "meta": {
+    "check": "ai-order",
+    "check_explicit": true,
+    "checks": ["installed", "identity", "values_before_start", "native_started", "kept_values", "observed"]
+  }
+}

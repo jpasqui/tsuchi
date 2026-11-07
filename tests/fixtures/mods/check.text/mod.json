@@ -1,0 +1,17 @@
+{
+  "id": "check.text",
+  "name": "Check text",
+  "version": "1.0.0",
+  "meta": {
+    "check": "text",
+    "checks": [
+      "read",
+      "refused",
+      "replaced",
+      "again",
+      "restored",
+      "new",
+      "left"
+    ]
+  }
+}

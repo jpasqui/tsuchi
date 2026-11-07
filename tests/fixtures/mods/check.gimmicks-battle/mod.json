@@ -1,0 +1,10 @@
+{
+  "id": "check.gimmicks-battle",
+  "name": "Gimmicks and battle checks",
+  "version": "1.0.0",
+  "meta": {
+    "check": "gimmicks-battle",
+    "check_explicit": true,
+    "checks": ["gimmicks-listed", "battle-read"]
+  }
+}

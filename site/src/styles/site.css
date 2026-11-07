@@ -1,0 +1,125 @@
+/* The site's colors come from the logo: soil browns, the cream it was drawn on, and the green of
+   its leaf. The site builder derives everything else from these. */
+:root {
+  --sl-color-accent-low: #2e2413;
+  --sl-color-accent: #b9822b;
+  --sl-color-accent-high: #f0d7a8;
+  --sl-color-white: #ffffff;
+  --sl-color-gray-1: #eeeceb;
+  --sl-color-gray-2: #c4c0bd;
+  --sl-color-gray-3: #8f8a85;
+  --sl-color-gray-4: #5b5651;
+  --sl-color-gray-5: #3b3733;
+  --sl-color-gray-6: #292623;
+  --sl-color-black: #1a1816;
+  /* Notes are the leaf's green, and tips the accent. Cautions and dangers keep orange and red. */
+  --sl-color-blue-low: #1f2a15;
+  --sl-color-blue: #7fa35a;
+  --sl-color-blue-high: #cfe3b8;
+  --sl-color-purple-low: var(--sl-color-accent-low);
+  --sl-color-purple: var(--sl-color-accent);
+  --sl-color-purple-high: var(--sl-color-accent-high);
+  /* Inter for reading, Nunito for names and headings as in the logo, JetBrains Mono for code. */
+  --sl-font: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --sl-font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
+  --site-font-heading: 'Nunito Variable', var(--sl-font);
+}
+
+:root[data-theme='light'] {
+  --sl-color-accent-low: #f0dfc0;
+  --sl-color-accent: #8a5a10;
+  --sl-color-accent-high: #4a3526;
+  --sl-color-white: #1f1812;
+  --sl-color-gray-1: #2a221b;
+  --sl-color-gray-2: #3d3329;
+  --sl-color-gray-3: #5e5448;
+  --sl-color-gray-4: #8a7f70;
+  --sl-color-gray-5: #cfc6b6;
+  --sl-color-gray-6: #e9e2d5;
+  --sl-color-gray-7: #f3eee4;
+  --sl-color-black: #fbf8f2;
+  --sl-color-blue-low: #e6f0d9;
+  --sl-color-blue: #4f7030;
+  --sl-color-blue-high: #2c4019;
+}
+
+h1,
+h2,
+h3,
+h4,
+.site-title,
+.panel .title {
+  font-family: var(--site-font-heading);
+}
+
+/* Reference tables hold long descriptions: let the first column keep its names on one line. */
+.sl-markdown-content table td:first-child code {
+  white-space: nowrap;
+}
+
+/* Keep desktop search and social controls on the right. */
+@media (min-width: 50rem) {
+  .page > header.header > .header > :nth-child(2) {
+    justify-content: flex-end;
+    align-items: center;
+  }
+  .page > header.header .right-group .social-icons::after {
+    height: 1.5rem;
+    border-inline-end-color: var(--sl-color-gray-4);
+  }
+}
+
+/* The sections are linked at the top of every page on a wide screen, so the same list at the
+   top of the sidebar is kept for the narrow screen's menu only. */
+@media (min-width: 50rem) {
+  .starlight-sidebar-topics {
+    display: none;
+  }
+}
+
+/* A page without a sidebar has the menu button on a narrow screen too (PageFrame.astro), so
+   the header leaves room for it there, as Starlight does on its other pages. */
+@media (max-width: 49.99rem) {
+  html:not([data-has-sidebar]) .page > header.header {
+    padding-inline-end: calc(var(--sl-nav-gap) + var(--sl-nav-pad-x) + var(--sl-menu-button-size));
+  }
+}
+
+/* The panels on the first page, side by side where there is room. */
+.panels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 1rem;
+}
+.panels > * {
+  margin-top: 0 !important;
+}
+
+/* The logo on the first page. It is vector shapes, so any size is sharp. */
+.hero > img {
+  width: min(100%, 13rem);
+  height: auto;
+}
+
+/* The first page fits one screen on a desktop: less space around the logo and the name, and
+   no empty footer under the panels. */
+[data-has-hero] .hero {
+  padding-block: 1.25rem;
+}
+[data-has-hero] footer,
+[data-has-hero] .site-footer {
+  display: none;
+}
+
+/* The first page grows with the window, so that it fills a large screen as it fills a small
+   one, and it sits in the middle of whatever height is left over. */
+html[data-has-hero] {
+  font-size: clamp(100%, 0.55vw + 0.5rem, 150%);
+}
+[data-has-hero] main {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: calc(100vh - var(--sl-nav-height));
+}
+

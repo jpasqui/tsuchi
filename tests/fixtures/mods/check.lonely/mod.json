@@ -1,0 +1,6 @@
+{
+  "id": "check.lonely",
+  "name": "Check lonely",
+  "version": "1.0.0",
+  "requires": {"check.absent": "*"}
+}

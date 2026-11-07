@@ -1,0 +1,23 @@
+{
+  "id": "check.spawn",
+  "name": "The check of an owned actor",
+  "version": "1.0.0",
+  "meta": {
+    "check": "spawn",
+    "checks": [
+      "found",
+      "listened",
+      "made",
+      "class",
+      "team",
+      "placed",
+      "suspended",
+      "restored",
+      "removed",
+      "gone",
+      "events",
+      "cancelled",
+      "refused"
+    ]
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "id": "check.carry",
+  "name": "The isolated check of carried objects, their carriers and destination",
+  "version": "1.0.0",
+  "meta": {
+    "check": "carry",
+    "check_explicit": true,
+    "checks": [
+      "found",
+      "info",
+      "added",
+      "ordered",
+      "carriers",
+      "carried_by",
+      "refused",
+      "removed"
+    ]
+  }
+}

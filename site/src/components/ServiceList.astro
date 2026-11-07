@@ -1,0 +1,37 @@
+---
+// Every service by its layer, each with the one-line description from its own page.
+import { getCollection } from 'astro:content';
+import { categories } from '../data/sections.mjs';
+
+const pages = await getCollection('docs');
+const about = new Map(pages.map((page) => [page.id, page.data.description]));
+---
+
+{
+  categories.map((category) => (
+    <section>
+      <h2 id={category.label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}>{category.label}</h2>
+      <p>{category.about}</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Service</th>
+            <th>What it is</th>
+          </tr>
+        </thead>
+        <tbody>
+          {category.services.map((name) => (
+            <tr>
+              <td>
+                <a href={`/reference/${name}/`}>
+                  <code>{name}</code>
+                </a>
+              </td>
+              <td>{about.get(`reference/${name}`)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  ))
+}

@@ -1,0 +1,152 @@
+---
+title: Ask the player
+description: Show a question and announce the player's answer on the HUD.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+Start with [your first mod](/develop/first-mod/). We'll ask whether the player wants
+to begin a practice round, then show a banner if they accept.
+
+## Question
+
+Subscribe to [`dialog.on_answered`](/reference/dialog/#answered) before calling
+`dialog.confirm`. Keep the returned dialog handle so you can match the answer to your
+question. Every listener receives answers for dialogs from all running mods.
+
+If another dialog is open, your question waits in the queue. If the player backs out
+or the game closes the question without an answer, `accepted` is `false`.
+
+## Code
+
+For example, wait until the player has control before asking the question. We'll ask
+once each time the mod starts so canceling doesn't bring the question straight back.
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua title="main.lua"
+local asked = false
+local pending
+
+dialog.on_answered(function(event)
+    if event.dialog ~= pending then return end
+    pending = nil
+    if event.accepted then
+        local shown, why = hud.banner("Practice round ready", 4)
+        if not shown then print("Couldn't show the banner: " .. why) end
+    else
+        print("Practice round canceled")
+    end
+end)
+
+time.on_step(function()
+    if asked or game.has_control() ~= true then return end
+    asked = true
+    local why
+    pending, why = dialog.confirm("Start a practice round?")
+    if not pending then print("Couldn't ask the question: " .. why) end
+end)
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript title="main.js"
+let asked = false;
+
+time.on("step", async () => {
+    if (asked || !game.has_control()) return;
+    asked = true;
+    let answer;
+    try {
+        answer = await dialog.confirm("Start a practice round?");
+    } catch (error) {
+        print("Couldn't ask the question: " + error.name);
+        return;
+    }
+    if (answer.accepted) {
+        try {
+            hud.banner("Practice round ready", 4);
+        } catch (error) {
+            print("Couldn't show the banner: " + error.name);
+        }
+    } else {
+        print("Practice round canceled");
+    }
+});
+```
+
+</TabItem>
+<TabItem label="C">
+
+[Build this code](/develop/compiled-mod/) into `mod.nro`.
+
+```c title="main.c"
+#include "tsuchi/tsuchi.h"
+
+static const TSUCHI_Host *host;
+static TSUCHI_Mod *self;
+static TSUCHI_Subscription answers, steps;
+static TSUCHI_Dialog pending;
+static bool asked;
+
+static void on_answered(void *user, const TSUCHI_DialogAnswered *event) {
+    (void)user;
+    if (!pending.id || event->dialog.id != pending.id) return;
+    pending.id = 0;
+    if (event->accepted) {
+        if (host->hud->banner(self, "Practice round ready", 4) != TSUCHI_OK) {
+            host->mod->log(self, "Couldn't show the banner");
+        }
+    } else {
+        host->mod->log(self, "Practice round canceled");
+    }
+}
+
+static void on_step(void *user, const TSUCHI_TimeStep *event) {
+    (void)user;
+    (void)event;
+    bool control = false;
+    if (asked || host->game->has_control(self, &control) != TSUCHI_OK || !control) return;
+    asked = true;
+    if (host->dialog->confirm(self, "Start a practice round?", &pending) != TSUCHI_OK) {
+        host->mod->log(self, "Couldn't ask the question");
+    }
+}
+
+TSUCHI_Result tsuchi_mod_start(const TSUCHI_Host *given, TSUCHI_Mod *mod) {
+    host = given;
+    self = mod;
+    asked = false;
+    pending.id = 0;
+    TSUCHI_Result result = host->dialog->on_answered(mod, on_answered, 0, &answers);
+    if (result != TSUCHI_OK) return result;
+    return host->time->on_step(mod, on_step, 0, &steps);
+}
+```
+
+</TabItem>
+</Tabs>
+
+[Install your mod](/players/install-a-mod/) and enter a level. You should see the
+question after you get control. Accept it to see **Practice round ready** on the
+first player's screen, or cancel it to see `Practice round canceled` in the
+[log](/develop/logs/).
+
+## Banner
+
+Call [`hud.banner`](/reference/hud/#banner) when you need an announcement while the
+game keeps running. Pass the text and a positive number of seconds. A later banner
+replaces yours, and the game's own announcements can replace it too.
+
+If no level is being played or the banner isn't ready, the call returns `not_ready`.
+If you need the player to close a message, use `dialog.message` instead. Its answer
+arrives through the same `on_answered` event.
+
+## Cleanup
+
+When your mod stops, Tsuchi removes its subscriptions and drops questions still
+waiting in Tsuchi's queue. If the game already accepted a question, it can still
+appear or stay open, but your mod won't receive its answer. See
+[Events and cleanup](/develop/events-and-cleanup/) before treating a dialog as a hold.

@@ -1,0 +1,150 @@
+service: input
+tutorials:
+  - {title: Read and press buttons, path: /develop/input/}
+layer: engine
+acts_on: game
+lifetime: world
+brief: "Reads controller buttons, sticks, and keyboard keys, presses buttons, and hides buttons from the game."
+description: |
+  Use this service to read a player's controller once per world step, to press
+  buttons for the player, and to keep the game from acting on buttons the player
+  holds. A tap between two pictures still reaches the next world step. Hidden
+  buttons stay visible to your mod.
+
+  Keyboard keys come from a USB keyboard plugged into the Switch. In Eden, keys
+  come from the PC's keyboard only while Eden's keyboard emulation is on.
+
+flags:
+  Buttons:
+    doc: "Switch controller buttons."
+    values:
+      - {name: a, value: 1, doc: "A."}
+      - {name: b, value: 2, doc: "B."}
+      - {name: x, value: 4, doc: "X."}
+      - {name: y, value: 8, doc: "Y."}
+      - {name: left_stick, value: 16, doc: "The left stick, pressed in."}
+      - {name: right_stick, value: 32, doc: "The right stick, pressed in."}
+      - {name: l, value: 64, doc: "L."}
+      - {name: r, value: 128, doc: "R."}
+      - {name: zl, value: 256, doc: "ZL."}
+      - {name: zr, value: 512, doc: "ZR."}
+      - {name: plus, value: 1024, doc: "+."}
+      - {name: minus, value: 2048, doc: "-."}
+      - {name: left, value: 4096, doc: "Left on the directional buttons."}
+      - {name: up, value: 8192, doc: "Up on the directional buttons."}
+      - {name: right, value: 16384, doc: "Right on the directional buttons."}
+      - {name: down, value: 32768, doc: "Down on the directional buttons."}
+
+structs:
+  PadState:
+    doc: "One world step of a controller's input."
+    fields:
+      - {name: connected, type: bool, doc: "If `true`, the controller is connected."}
+      - {name: held, type: flags<Buttons>, doc: "The buttons down, including pressed buttons and taps between pictures."}
+      - {name: pressed, type: flags<Buttons>, doc: "The buttons that went down since the previous world step."}
+      - {name: released, type: flags<Buttons>, doc: "The buttons that went up since the previous world step."}
+      - {name: left_x, type: i32, doc: "The left stick's horizontal axis, from -32767 to 32767."}
+      - {name: left_y, type: i32, doc: "The left stick's vertical axis, from -32767 to 32767."}
+      - {name: right_x, type: i32, doc: "The right stick's horizontal axis, from -32767 to 32767."}
+      - {name: right_y, type: i32, doc: "The right stick's vertical axis, from -32767 to 32767."}
+
+functions:
+  - name: pad
+    doc: "Returns the player's controller state for this world step."
+    params:
+      - {name: player, type: u32, doc: "The player, from 0 to 3."}
+    returns: {type: struct<PadState>, doc: "The controller state, with buttons from `hold_pressed` added."}
+    fails:
+      invalid: "The player is outside 0 to 3."
+      not_ready: "The player has no controller yet, or no world step has read it."
+    users: [online-coop, camera-tools]
+
+  - name: key
+    doc: |
+      Returns `true` while a keyboard key is down. The key is its USB HID usage, so
+      `4` is A and `44` is the space bar. The keyboard is read once per world step.
+    params:
+      - {name: usage, type: u32, doc: "The key's USB HID usage, from 0 to 255."}
+    returns: {type: bool, doc: "Returns `true` while the key is down."}
+    fails:
+      invalid: "The usage is outside 0 to 255."
+      not_ready: "The system's keyboard functions can't be found, or no world step has run yet."
+    users: [online-coop, camera-tools]
+
+  - name: hold_pressed
+    doc: |
+      Adds buttons to the player's controller for a number of world steps, as if
+      the player held them. Players that share a controller share one hold.
+      Taking it again changes its buttons and duration. The hold ends when the
+      duration is over, when you release it, or when your mod stops.
+    params:
+      - {name: player, type: u32, doc: "The player, from 0 to 3."}
+      - {name: buttons, type: flags<Buttons>, doc: "The buttons to press."}
+      - {name: steps, type: u32, doc: "The duration, from 1 to 600 world steps. A call during a step counts that step."}
+    owns: true
+    fails:
+      invalid: "The player, buttons, or duration is invalid."
+      not_ready: "The player has no controller yet."
+      busy: "Another mod holds this controller's input."
+    users: [online-coop, camera-tools]
+
+  - name: release_pressed
+    doc: |
+      Releases your `hold_pressed` hold on the controller you took it on, even if
+      the player now uses another controller. A release through any player that
+      shares the hold releases it.
+    params:
+      - {name: player, type: u32, doc: "The player, from 0 to 3."}
+    owns: true
+    fails:
+      invalid: "The player is outside 0 to 3."
+      not_found: "Your mod has no such hold."
+    users: [online-coop, camera-tools]
+
+  - name: pressed
+    doc: "Returns the buttons that any mod adds to the player's controller."
+    params:
+      - {name: player, type: u32, doc: "The player, from 0 to 3."}
+    returns: {type: flags<Buttons>, doc: "The buttons from `hold_pressed`, or none."}
+    fails:
+      invalid: "The player is outside 0 to 3."
+      not_ready: "The player has no controller yet."
+    users: [online-coop, camera-tools]
+
+  - name: hold_hidden
+    doc: |
+      Hides buttons from the game until you release them. `pad` still shows them
+      to your mod. Players that share a controller share one hold. Taking it
+      again changes its buttons. The hold ends when your mod stops.
+    params:
+      - {name: player, type: u32, doc: "The player, from 0 to 3."}
+      - {name: buttons, type: flags<Buttons>, doc: "The buttons to hide."}
+    owns: true
+    fails:
+      invalid: "The player or the buttons are invalid."
+      not_ready: "The player has no controller yet."
+      busy: "Another mod holds this controller's input."
+    users: [online-coop, camera-tools]
+
+  - name: release_hidden
+    doc: |
+      Releases your `hold_hidden` hold on the controller you took it on, even if
+      the player now uses another controller. A release through any player that
+      shares the hold releases it.
+    params:
+      - {name: player, type: u32, doc: "The player, from 0 to 3."}
+    owns: true
+    fails:
+      invalid: "The player is outside 0 to 3."
+      not_found: "Your mod has no such hold."
+    users: [online-coop, camera-tools]
+
+  - name: hidden
+    doc: "Returns the buttons that any mod hides from the game on the player's controller."
+    params:
+      - {name: player, type: u32, doc: "The player, from 0 to 3."}
+    returns: {type: flags<Buttons>, doc: "The buttons from `hold_hidden`, or none."}
+    fails:
+      invalid: "The player is outside 0 to 3."
+      not_ready: "The player has no controller yet."
+    users: [online-coop, camera-tools]

@@ -1,0 +1,87 @@
+service: carry
+tutorials:
+  - {title: Read carried objects, path: /develop/carry/}
+layer: game
+acts_on: actor
+lifetime: world
+brief: "Reads a carried object's weight, carriers, and selected destination."
+description: |
+  Use this service to inspect objects with the game's carry component. The
+  carrier list includes Pikmin and other actors, such as Oatchi. Weight is the
+  strength the game requires, so it can differ from the number of carriers.
+  The list includes attached carriers and actors registered with the carry
+  component. Each actor appears once. Actors attached for another action, such
+  as an attack, are excluded from the attached carriers.
+
+  The destination is the receiver the game currently selects. It can change
+  as carriers join or leave. An empty destination means no live receiver is
+  selected. Reaching a receiver and collecting the object are separate steps.
+  The `delivered` event reports the game's collection-credit dispatcher
+  processing an object. It doesn't promise that a save has finished.
+
+structs:
+  CarryInfo:
+    doc: "The object's carry limits and current receiver."
+    fields:
+      - {name: weight, type: i32, doc: "The required carrier strength, from 0."}
+      - {name: maximum, type: i32, doc: "The maximum carrier strength, from 0."}
+      - {name: count, type: u32, doc: "The number of distinct live carrier actors."}
+      - {name: destination, type: handle<actor>, doc: "The selected receiver, or an empty handle if none is live."}
+
+functions:
+  - name: list
+    doc: "Lists objects with a carry component, including objects with no carriers."
+    returns: {type: list<handle<actor>>, doc: "The objects in the game's actor order."}
+    fails:
+      not_ready: "No world is loaded."
+    users: [online-coop, carry-inspection]
+
+  - name: info
+    doc: "Returns an object's carry limits, carrier count, and selected receiver."
+    params:
+      - {name: actor, type: handle<actor>, doc: "The object to inspect."}
+    returns: {type: struct<CarryInfo>, doc: "The current carry information."}
+    fails:
+      invalid: "The handle names an engine actor outside the game's actor classes."
+      not_found: "The actor no longer exists."
+      unsupported: "The actor has no carry component."
+      not_ready: "The component's carry records cannot be read yet."
+    users: [online-coop, carry-inspection]
+
+  - name: carriers
+    doc: "Lists the live actors registered or attached as carriers of an object. Each actor appears once."
+    params:
+      - {name: actor, type: handle<actor>, doc: "The carried object."}
+    returns: {type: list<handle<actor>>, doc: "The distinct carriers. The order can change between calls."}
+    fails:
+      invalid: "The handle names an engine actor outside the game's actor classes."
+      not_found: "The actor no longer exists."
+      unsupported: "The actor has no carry component."
+      not_ready: "The component's carrier records cannot be read yet."
+    users: [online-coop, carry-inspection]
+
+  - name: carried_by
+    doc: "Returns the object an actor is registered with or attached to as a carrier."
+    params:
+      - {name: actor, type: handle<actor>, doc: "The carrier to inspect."}
+    returns: {type: handle<actor>, doc: "The carried object, or an empty handle if the actor carries nothing."}
+    fails:
+      invalid: "The handle names an engine actor outside the game's actor classes."
+      not_found: "The actor no longer exists."
+      not_ready: "No world is loaded, or a carry component's carrier records cannot be read yet."
+    users: [online-coop, carry-inspection]
+
+events:
+  - name: delivered
+    doc: |
+      Emitted after the game's collection-credit dispatcher processes an object.
+      The event arrives at the next world step. The actor and destination are
+      captured before collection, so their handles may no longer resolve when
+      your handler runs. This event doesn't promise saved progress or suppress
+      repeated native collection requests.
+    fields:
+      - {name: actor, type: handle<actor>, doc: "The object the game processed."}
+      - {name: destination, type: handle<actor>, doc: "The selected arrival receiver before collection, or an empty handle."}
+      - {name: kind, type: enum<EntityKind>, doc: "The object's kind before collection, in the format that `entity.kind` returns."}
+      - {name: count, type: i32, doc: "The class-dependent count returned by the native collection dispatcher."}
+    users: [online-coop, carry-inspection]

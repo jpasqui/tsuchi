@@ -1,0 +1,20 @@
+{
+  "id": "check.restart",
+  "name": "The check of restarts",
+  "version": "1.0.0",
+  "optional": {
+    "check.restart-target": "1.0.0"
+  },
+  "meta": {
+    "check": "restart",
+    "check_explicit": true,
+    "checks": [
+      "original",
+      "refused",
+      "edited",
+      "syntax",
+      "failed-start",
+      "recovered"
+    ]
+  }
+}

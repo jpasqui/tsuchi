@@ -1,0 +1,173 @@
+service: datatable
+tutorials:
+  - {title: Change a table, path: /develop/change-tables/}
+layer: engine
+acts_on: object
+lifetime: process
+brief: "Reads and overrides fields in the game's data tables, and copies rows."
+description: |
+  The game stores a lot of its data in data tables, with one row for each
+  creature, treasure, or item, and the same fields in every row. A table is an
+  asset, so you load it with `asset.load`. You refer to a row by its name,
+  and to a field by a path in the same format that `reflection` uses, like
+  `MaxLife` or `DayParams[0].ActorName`.
+
+  An override belongs to your mod and is undone when your mod stops. The game
+  unloads tables that it no longer needs, and your overrides are lost with
+  them, so keep the table loaded with `asset.load` for as long as you need
+  the override.
+
+functions:
+  - name: get
+    doc: |
+      Reads a field of a row.
+
+      In Lua, a struct is a table of its fields and an array is a list. In JavaScript,
+      a struct is an object and an array is an Array. Both languages return text as
+      a string and an asset reference as the asset's path.
+    params:
+      - {name: data_table, type: handle<object>, doc: The data table.}
+      - {name: row, type: text, doc: "The row's name."}
+      - {name: path, type: text, doc: The path to the field.}
+    returns: {type: value, doc: The field's value.}
+    fails:
+      not_found: "The table no longer exists or isn't a data table, it has no row with that name, or the path doesn't lead to a field."
+      invalid: "The row's name or the path isn't valid."
+      unsupported: "The field is a kind that this service can't read."
+      not_ready: "The game isn't ready."
+    users: [groink, treasure-demo]
+
+  - name: get_text
+    only: native
+    doc: "The text of a name or string field in a row, or the path in an asset reference."
+    params:
+      - {name: data_table, type: handle<object>, doc: The data table.}
+      - {name: row, type: text, doc: "The row's name."}
+      - {name: path, type: text, doc: The path to the field.}
+    returns: {type: text, doc: The text.}
+    fails:
+      not_found: "The table no longer exists or isn't a data table, it has no row with that name, or the path doesn't lead to a field."
+      invalid: "The row's name or the path isn't valid, or the field doesn't hold text."
+      not_ready: "The game isn't ready."
+    users: [groink, treasure-demo]
+
+  - name: field_at
+    only: native
+    doc: |
+      The name of one field of a row or of a struct inside of it, by its index. To
+      list every field, count up from `0` until the call fails.
+    params:
+      - {name: data_table, type: handle<object>, doc: The data table.}
+      - {name: row, type: text, doc: "The row's name."}
+      - {name: path, type: text, doc: "The path to a struct, or an empty string for the row itself."}
+      - {name: index, type: u32, doc: "The index."}
+    returns: {type: text, doc: "The field's name."}
+    fails:
+      not_found: "The table no longer exists or isn't a data table, it has no row with that name, the path doesn't lead to a field, or the index is past the last field."
+      invalid: "The row's name or the path isn't valid, or the path doesn't lead to a struct."
+      not_ready: "The game isn't ready."
+    users: [groink, treasure-demo]
+
+  - name: override
+    doc: |
+      Overrides a field of a row until your mod restores the field or stops. More
+      than one mod can override the same field. The override from the mod that
+      started last is the one that applies. When that mod removes its override, the
+      next mod's override applies, and when none are left, the field goes back to
+      its original value. Parts of the game that have already read the row don't
+      notice the change.
+
+      For an asset reference, pass an object, whose path is stored, or pass the path
+      as text. In Lua, pass a table for a struct or a list of the same length for an
+      array. In JavaScript, pass an object for a struct or an Array of the same length.
+      Only the named struct fields change. To change an array's length, use `resize`.
+    owns: true
+    params:
+      - {name: data_table, type: handle<object>, doc: The data table.}
+      - {name: row, type: text, doc: "The row's name."}
+      - {name: path, type: text, doc: The path to the field.}
+      - {name: value, type: value, doc: "The new value. You can pass an integer where a number is expected."}
+    fails:
+      not_found: "The table no longer exists or isn't a data table, it has no row with that name, or the path doesn't lead to a field. This also happens if the value is an object that no longer exists."
+      invalid: "The row's name or the path isn't valid, or the value doesn't fit the field."
+      unsupported: "The field is a kind that this service can't write. In compiled code, a struct or array is written one member at a time."
+      capacity: "Text is too long for a name, or a list has more than 1,000,000 elements."
+      not_ready: "The game isn't ready."
+      no_memory: "The game is out of memory."
+    users: [groink, treasure-demo]
+
+  - name: override_text
+    only: native
+    doc: "Changes a name or string field in a row, or the path in an asset reference, the same way that `override` changes other fields."
+    owns: true
+    params:
+      - {name: data_table, type: handle<object>, doc: The data table.}
+      - {name: row, type: text, doc: "The row's name."}
+      - {name: path, type: text, doc: The path to the field.}
+      - {name: text, type: text, doc: The new text.}
+    fails:
+      not_found: "The table no longer exists or isn't a data table, it has no row with that name, or the path doesn't lead to a field."
+      invalid: "The row's name or the path isn't valid, the field doesn't hold text, or the text isn't valid UTF-8."
+      capacity: The text is too long for a name.
+      not_ready: "The game isn't ready."
+      no_memory: "The game is out of memory."
+    users: [groink, treasure-demo]
+
+  - name: restore
+    doc: |
+      Undoes your mod's override of a field, or your mod's `resize` of an array. The
+      field or array uses the override or length from the other mod that loaded
+      last. If no override or length remains, it gets its original value or elements
+      back. Overrides on single elements stay until you restore them too.
+    owns: true
+    params:
+      - {name: data_table, type: handle<object>, doc: The data table.}
+      - {name: row, type: text, doc: "The row's name."}
+      - {name: path, type: text, doc: "The path to the field or the array, exactly as you passed it when you overrode or resized it."}
+    fails:
+      not_found: "Your mod hasn't overridden this field or resized this array."
+    users: [groink, treasure-demo]
+
+  - name: add_row
+    doc: |
+      Adds a row to a table as a copy of another row with a new name, which you can
+      then override. The row stays for as long as the table is loaded. The game
+      might hold on to a row that it has read, so a row is never removed.
+    params:
+      - {name: data_table, type: handle<object>, doc: The data table.}
+      - {name: row, type: text, doc: "The new row's name."}
+      - {name: from, type: text, doc: "The name of the row to copy."}
+    fails:
+      not_found: "The table no longer exists or isn't a data table, or it has no row with the name to copy."
+      invalid: "One of the names isn't valid, or the table already has a row with the new name."
+      unsupported: "The table is a kind that stores its rows in its own way."
+      not_ready: "The game isn't ready."
+    users: [groink, treasure-demo]
+
+  - name: resize
+    doc: |
+      Changes the length of an array in a row until your mod restores it or stops.
+
+      Elements past the old length start out empty: `0`, `false`, an empty string, or
+      an asset reference to nothing. You can then override them like any other field.
+      The array's original elements are kept aside, so `restore` brings them back as
+      they were.
+
+      More than one mod can resize the same array. The length from the mod that
+      started last is the one that applies, the same as with `override`. An override
+      of an element past the length that applies changes nothing until the array is
+      long enough again.
+    owns: true
+    params:
+      - {name: data_table, type: handle<object>, doc: The data table.}
+      - {name: row, type: text, doc: "The row's name."}
+      - {name: path, type: text, doc: "The path to the array, like `Numbers` or `Drop.Counts`."}
+      - {name: count, type: u32, doc: "The new length."}
+    fails:
+      not_found: "The table no longer exists or isn't a data table, it has no row with that name, or the path doesn't lead to a field."
+      invalid: "The row's name or the path isn't valid, or the field isn't an array."
+      unsupported: "The array holds structs, or elements of a kind that this service can't make."
+      capacity: "The length is more than 1,000,000."
+      no_memory: "There is no memory for the new array."
+      not_ready: "The game isn't ready."
+    completes: override

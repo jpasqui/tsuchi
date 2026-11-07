@@ -1,0 +1,112 @@
+service: time
+tutorials:
+  - {title: Measure game time, path: /develop/time/}
+layer: core
+acts_on: game
+lifetime: process
+brief: "Reports each game tick and each rendered frame."
+description: |
+  The game world updates in fixed steps. A step is always 1/30 of a game
+  second, no matter what the frame rate is. Run your game logic on steps and
+  measure time by counting them, so that your mod behaves the same on every
+  machine. A step doesn't come with an elapsed time, as every step is the same
+  length.
+
+  The game can render more frames than the world has steps, and each frame is
+  somewhere between the last two steps. `presented` fires once for every
+  rendered frame. Use it for things that only affect the picture, like a
+  camera, a cursor, or the HUD. Anything that changes the world belongs on a
+  step. When the game renders each step as it is, there is one frame per step.
+
+enums:
+  PresentationSync:
+    open: false
+    doc: "The game's VSync preference, or an explicit refresh wait. Emulator VSync is separate."
+    values:
+      - {name: game, value: 0, doc: "Keep the game's VSync preference."}
+      - {name: "on", value: 1, doc: "Wait for the output's refresh."}
+      - {name: "off", value: 2, doc: "Do not wait for the output's refresh."}
+  PosePresentation:
+    open: false
+    doc: "Which qualified skeletal poses the presenter draws between native updates. Native animation evaluation is separate."
+    values:
+      - {name: selective, value: 0, doc: "Keep the existing size and native update-cadence omissions."}
+      - {name: smooth, value: 1, doc: "Also interpolate small poses and native updates up to four world steps apart, within the existing lifetime and rendering limits."}
+
+structs:
+  PresentationPolicy:
+    doc: "The requested presentation policy. The presenter applies changes on its next available frame."
+    fields:
+      - {name: frame_limit, type: u32, doc: "30, 60, 120, or 0 for uncapped. Rates above 30 remain experimental."}
+      - {name: vsync, type: enum<PresentationSync>, doc: "The refresh-wait preference."}
+
+functions:
+  - name: presentation
+    doc: "Reads the requested policy, including a mod's hold or the framework-file preference when no mod holds it."
+    returns: {type: struct<PresentationPolicy>, doc: "The requested policy."}
+    completes: presented
+  - name: hold_presentation
+    doc: |
+      Requests a frame limit and VSync preference through the presenter. Only one
+      mod holds presentation at a time. A change applies on the next available
+      frame and uses the existing fixed world steps and interpolated pictures.
+      Stopping the mod releases its request. Higher rates remain experimental.
+    owns: true
+    params:
+      - {name: frame_limit, type: u32, doc: "30, 60, 120, or 0 for uncapped."}
+      - {name: vsync, type: enum<PresentationSync>, doc: "The refresh-wait preference."}
+    fails:
+      invalid: "The frame limit or refresh preference is outside the listed choices."
+      busy: "Another mod holds presentation."
+      not_ready: "The matching presentation patch is unavailable."
+      no_memory: "The ownership record could not be allocated."
+    completes: presented
+  - name: release_presentation
+    doc: "Releases your mod's request and returns to the latest framework-file preference. The saved video choices remain."
+    owns: true
+    fails:
+      not_found: "Your mod has no presentation request."
+    completes: presented
+
+  - name: pose_presentation
+    doc: "Reads the requested pose policy, including a mod's hold or the latest framework-file preference. The default is selective."
+    returns: {type: enum<PosePresentation>, doc: "The requested pose policy."}
+    completes: presented
+  - name: hold_pose_presentation
+    doc: |
+      Requests a pose policy with a separate owner from frame limit and VSync.
+      Only one mod holds this policy at a time. A change applies on the next
+      available frame and ends when the mod releases it or stops. At thirty
+      frames per second no extra poses are drawn. Smooth mode requires qualified
+      native poses, retains the four-step gap and rendering limits, and adds
+      interpolation delay and pose submissions. It does not increase native
+      animation evaluation frequency or guarantee a measured frame rate.
+    owns: true
+    params:
+      - {name: mode, type: enum<PosePresentation>, doc: "The requested pose policy."}
+    fails:
+      invalid: "The pose policy is outside the listed choices."
+      busy: "Another mod holds pose presentation."
+      not_ready: "The matching presenter and scene hooks are unavailable. The prior request stays in force."
+      no_memory: "The ownership record could not be allocated."
+    completes: presented
+  - name: release_pose_presentation
+    doc: "Releases your mod's pose request and returns to the latest framework-file preference, or selective when the file has no pose preference."
+    owns: true
+    fails:
+      not_found: "Your mod has no pose presentation request."
+    completes: presented
+
+events:
+  - name: step
+    doc: "Emitted once per step, before the game updates the world. A step is 1/30 of a game second."
+    fields:
+      - {name: number, type: i64, doc: "The number of steps since the game started, counting from `1`."}
+    users: [groink, online-coop]
+
+  - name: presented
+    doc: "Emitted once per rendered frame, after the step that it follows."
+    fields:
+      - {name: fraction, type: f32, doc: "Where the frame is between the last two steps, from `0` to `1`. It is `1` when the game renders each step as it is."}
+      - {name: seconds, type: f32, doc: "The time since the previous frame, in seconds."}
+    users: [dog-coop, online-coop]
