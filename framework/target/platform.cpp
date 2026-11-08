@@ -111,6 +111,21 @@ void debug_output(const char* text, uint64_t length) {
     asm volatile("svc #0x27" : "+r"(at) : "r"(size) : "x2", "x3", "memory");
 }
 
+bool process_regions(uint64_t heap_alias_aslr[3]) {
+    // GetInfo of this process: 4 is where the heap region starts, 2 the alias region, 12 the ASLR region.
+    const uint32_t kinds[3] = {4, 2, 12};
+    for (unsigned i = 0; i < 3; ++i) {
+        register uint64_t result asm("x0") = 0;
+        register uint64_t value asm("x1") = kinds[i];
+        register uint64_t handle asm("x2") = 0xffff8001u; // this process
+        register uint64_t sub asm("x3") = 0;
+        asm volatile("svc #0x29" : "+r"(result), "+r"(value) : "r"(handle), "r"(sub) : "memory");
+        if (result) return false;
+        heap_alias_aslr[i] = value;
+    }
+    return true;
+}
+
 } // namespace tsuchi::target
 
 namespace tsuchi::game {

@@ -358,6 +358,8 @@ extern "C" void tsuchi_initialize() {
     if (serves(t::family::sd_card)) log_file_start();
     dev_folders_start();
     settings_start();
+    // Cheats keep the player's choices in the save, so they need the storage the save goes through.
+    if (serves(t::family::storage)) cheats_game_start(target::process_regions);
     presentation_start();
     if (serves(t::family::console_variables)) console_variables_start();
     // One entry for each register the request can be in, two instructions each.

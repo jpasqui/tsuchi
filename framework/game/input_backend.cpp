@@ -48,6 +48,7 @@ Holds<Hidden, Hidden, apply_hidden, keep_hidden, restore_hidden> hides{"input.hi
 struct Sample {
     TSUCHI_PadState physical{};
     uint64_t step = 0;
+    uint64_t raw = 0; // every button bit the system gave, for cheats' button checks
     uint32_t previous = 0, last = 0;
     bool known = false;
 } samples[kSlots];
@@ -144,6 +145,7 @@ Sample* sampled(uint32_t pad) {
     memcpy(&connected, raw + t::input_state::connected, sizeof connected);
     memcpy(axes, raw + t::input_state::sticks, sizeof axes);
     sample.physical.connected = (connected & 1) != 0;
+    sample.raw = buttons;
     sample.physical.held = uint32_t(buttons) & kButtons;
     sample.physical.left_x = axes[0];
     sample.physical.left_y = axes[1];
@@ -288,6 +290,13 @@ TSUCHI_Result hidden(uint32_t player, TSUCHI_Buttons* out) {
 const input::Backend service{pad, key, hold_pressed, release_pressed, pressed, hold_hidden, release_hidden, hidden};
 
 } // namespace
+
+uint64_t input_keys_held() {
+    uint64_t keys = 0;
+    for (const Sample& sample : samples)
+        if (sample.known && sample.step == step_number) keys |= sample.raw;
+    return keys;
+}
 
 void input_start(TSUCHI_Mod* owner) {
     self = owner;
