@@ -44,6 +44,12 @@ TSUCHI_Result EngineCall::invoke() {
     return guard_.allowed ? call_guarded(from_handle(object_), function_, memory_, guard_) : call(from_handle(object_), function_, memory_); // an object that is gone is not found
 }
 
+TSUCHI_Result EngineCall::invoke_before_play() {
+    if (state_ != TSUCHI_OK) return state_;
+    if (guard_.allowed) return TSUCHI_UNSUPPORTED;
+    return call_object_dispatch(from_handle(object_), function_, memory_);
+}
+
 TSUCHI_Result EngineCall::get(const char* name, Value& out) {
     if (state_ != TSUCHI_OK) return state_;
     if (!guard_.permits()) return TSUCHI_NOT_READY;

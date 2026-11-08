@@ -140,6 +140,14 @@ struct EarlyMove {
     const Json* entry;
 };
 List<EarlyMove> early_moves;
+// A removal made before play that did not take, tried again once its actor plays.
+struct LateRemoval {
+    uint64_t part;  // the part's id
+    uint64_t actor; // its handle
+    const Json* entry;
+    uint32_t index; // of the removal in the entry
+};
+List<LateRemoval> late_removals;
 // Moves are made in mod order, so the last move of an actor is the one that wins. Only it is looked at again.
 void remember_early_move(const EarlyMove& move) {
     for (uint32_t m = early_moves.count; m-- > 0;)
@@ -205,6 +213,13 @@ struct MapCall {
         }
     }
     bool run() { if (result == TSUCHI_OK) result = engine.invoke(); return result == TSUCHI_OK; }
+    // Through the dispatch every object has, or the object's own where that one cannot be told.
+    bool run_before_play() {
+        if (result != TSUCHI_OK) return false;
+        result = engine.invoke_before_play();
+        if (result == TSUCHI_UNSUPPORTED) result = engine.invoke();
+        return result == TSUCHI_OK;
+    }
     bool get(const char* path, TSUCHI_Value& out) {
         game::Value value;
         if (result != TSUCHI_OK || engine.get(path, value) != TSUCHI_OK) return false;
@@ -318,6 +333,8 @@ void end_part(void*, uint64_t id) {
         values_end(id);
         for (uint32_t m = early_moves.count; m-- > 0;)
             if (early_moves[m].part == id) early_moves.remove(&early_moves[m]);
+        for (uint32_t r = late_removals.count; r-- > 0;)
+            if (late_removals[r].part == id) late_removals.remove(&late_removals[r]);
         forget(parts[i]);
         memmove(static_cast<void*>(&parts[i]), &parts[i + 1], sizeof(Part) * (parts.count - i - 1));
         --parts.count;
@@ -582,9 +599,13 @@ void open(Part& part, uint32_t index) {
     }
 }
 
-void remove_actor(Part& part, uint64_t actor) {
+// Whether the actor is gone: a destroyed actor is marked for the collector at once. Before play an actor's own
+// call dispatch drops the call without a word, so a removal then goes through the dispatch every object has.
+bool remove_actor(Part& part, uint64_t actor, bool before_play) {
     MapCall call(part.mod, game::to_handle(actor), "K2_DestroyActor");
-    call.run();
+    if (before_play) call.run_before_play();
+    else call.run();
+    return !game::live(actor);
 }
 
 // A component's mobility as it was before a move.
@@ -642,12 +663,13 @@ bool move_actor(Part& part, uint64_t actor, const Json& to, bool early) {
         call.three("NewLocation", *to.find("location"), kPlace);
         call.three("NewRotation", *to.find("rotation"), kTurn);
         call.boolean("bTeleport", true);
-        moved = call.run();
+        // Before play an actor's own call dispatch drops the call without a word (remove_actor).
+        moved = early ? call.run_before_play() : call.run();
     }
     if (const Json* scale = to.find("scale")) {
         MapCall call(part.mod, handle, "SetActorScale3D");
         call.three("NewScale3D", *scale, kPlace);
-        moved = call.run() && moved;
+        moved = (early ? call.run_before_play() : call.run()) && moved;
     }
     for (uint32_t i = 0; toggled && i < components; ++i)
         if (before[i].was != kMovable) set_mobility(before[i].component, before[i].was);
@@ -1264,9 +1286,13 @@ void apply_changes(Looking& looking) {
                 }
                 if (gone) continue;
                 if (kind == removing) {
-                    remove_actor(part, actor);
-                    ++counts.removed;
-                    tell(part.mod, "Removed ", named_at(entry, i), " from ", entry.name, " for this map.");
+                    if (remove_actor(part, actor, looking.early)) {
+                        ++counts.removed;
+                        tell(part.mod, "Removed ", named_at(entry, i), " from ", entry.name, " for this map.");
+                    } else if (looking.early && late_removals.add(LateRemoval{part.id, game::to_handle(actor), &entry, i})) {
+                        tell(part.mod, "maps: ", named_at(entry, i), " in ", entry.name, " could not be removed before play, so it is removed once it plays");
+                    } else
+                        tell(part.mod, "maps: ", named_at(entry, i), " in ", entry.name, " could not be removed");
                 } else if (kind == setting) {
                     values_say(part.id, part.mod, game::to_handle(actor), entry, *entry.find("set")->at(i - from));
                 } else if (move_actor(part, actor, *entry.find("move")->at(i - from), looking.early)) {
@@ -1283,6 +1309,26 @@ void apply_changes(Looking& looking) {
     // Each value that was named gets the say of the mod started last.
     values_settle();
     looking.arrived.clear(), looking.found.clear();
+}
+
+// Each removal that did not take before play is made again once its actor plays, and the mod's log says how it went.
+void check_late_removals() {
+    for (uint32_t r = late_removals.count; r-- > 0;) {
+        const LateRemoval removal = late_removals[r];
+        Part* part = nullptr;
+        for (uint32_t p = 0; p < parts.count && !part; ++p)
+            if (parts[p].id == removal.part) part = &parts[p];
+        const uint64_t actor = game::from_handle(removal.actor);
+        if (!part || !actor || !game::live(actor)) { late_removals.remove(&late_removals[r]); continue; }
+        uint8_t state = 0;
+        if (!game::read(actor + t::actor_play::state, state) || !(state & t::constant::actor_play_state_mask)) continue; // not playing yet
+        late_removals.remove(&late_removals[r]);
+        if (remove_actor(*part, actor, false)) {
+            ++counts.removed;
+            tell(part->mod, "Removed ", named_at(*removal.entry, removal.index), " from ", removal.entry->name, " for this map.");
+        } else
+            tell(part->mod, "maps: ", named_at(*removal.entry, removal.index), " in ", removal.entry->name, " could not be removed");
+    }
 }
 
 // Each early move is looked at once its actor plays. An actor found away from where it was moved is moved
@@ -1323,6 +1369,48 @@ void check_early_moves() {
     }
 }
 
+// The levels in the world that is playing, each given to visit: those of its own list, which holds every level in
+// it. Going through every object the engine has took the emulator about a second, which the game showed as a
+// freeze every time the world was looked at. False when the list cannot be read: the caller then looks at every
+// object.
+bool each_world_level(bool (*visit)(void*, uint64_t), void* context) {
+    const uint64_t world = game::from_handle(world_now);
+    const uint64_t levels = world ? game::read_or<uint64_t>(world + t::world::levels + t::array::data) : 0;
+    const int32_t count = world ? game::read_or<int32_t>(world + t::world::levels + t::array::count, -1) : -1;
+    if (count <= 0 || uint32_t(count) > t::constant::max_objects || !game::readable(levels, uint64_t(count) * sizeof(uint64_t))) return false;
+    for (int32_t i = 0; i < count; ++i) {
+        const uint64_t level = game::read_or<uint64_t>(levels + uint64_t(i) * sizeof(uint64_t));
+        if (level && game::live(level) && !visit(context, level)) break;
+    }
+    return true;
+}
+
+// The actors of the levels that arrived, from each level's own list, as every object of the engine would give them.
+bool each_arrived_actor(Looking& looking) {
+    for (uint32_t a = 0; a < looking.arrived.count; ++a) {
+        const uint64_t level = looking.arrived[a].level;
+        bool seen = false;
+        for (uint32_t b = 0; b < a && !seen; ++b) seen = looking.arrived[b].level == level;
+        if (seen) continue;
+        const uint64_t actors = game::read_or<uint64_t>(level + t::engine_level::actors + t::array::data);
+        const int32_t count = game::read_or<int32_t>(level + t::engine_level::actors + t::array::count, -1);
+        if (count < 0 || uint32_t(count) > t::constant::max_objects || (count && !game::readable(actors, uint64_t(count) * sizeof(uint64_t)))) return false;
+    }
+    for (uint32_t a = 0; a < looking.arrived.count && looking.memory; ++a) {
+        const uint64_t level = looking.arrived[a].level;
+        bool seen = false;
+        for (uint32_t b = 0; b < a && !seen; ++b) seen = looking.arrived[b].level == level;
+        if (seen) continue;
+        const uint64_t actors = game::read_or<uint64_t>(level + t::engine_level::actors + t::array::data);
+        const int32_t count = game::read_or<int32_t>(level + t::engine_level::actors + t::array::count, 0);
+        for (int32_t i = 0; i < count && looking.memory; ++i) {
+            const uint64_t actor = game::read_or<uint64_t>(actors + uint64_t(i) * sizeof(uint64_t));
+            if (actor && game::live(actor)) look_at_actor(&looking, actor);
+        }
+    }
+    return true;
+}
+
 void look_at_world() {
     // Each mod's levels first. Nothing of the game's is touched until all of them are in the world.
     bool all_in = true;
@@ -1336,7 +1424,7 @@ void look_at_world() {
     discovery.discovery = true;
     // Content-only entries bring ground, navigation or placements without editing the game's actors.
     // Their own streams are tracked below: neither of the whole object-table searches serves them.
-    if (original_levels) game::each_object(look_at_level, &discovery);
+    if (original_levels && !each_world_level(look_at_level, &discovery)) game::each_object(look_at_level, &discovery);
     PartOrder order;
     while (Part* next = order.next()) {
         Part& part = *next;
@@ -1386,8 +1474,8 @@ void look_at_world() {
     if (!original_levels) return;
     // Only levels already playing when a part started can use this path.
     Looking looking;
-    game::each_object(look_at_level, &looking);
-    if (looking.memory && looking.arrived.count) game::each_object(look_at_actor, &looking);
+    if (!each_world_level(look_at_level, &looking)) game::each_object(look_at_level, &looking);
+    if (looking.memory && looking.arrived.count && !each_arrived_actor(looking)) game::each_object(look_at_actor, &looking);
     apply_changes(looking);
 }
 
@@ -1427,6 +1515,7 @@ void use_world(uint64_t world) {
         ++world_generation;
         world_now = handle, world_steps = 0, navigation_tries = 0, navigated = false;
         early_moves.clear();
+        late_removals.clear();
         for (uint32_t p = 0; p < parts.count; ++p) {
             parts[p].asked = parts[p].failed = false, parts[p].streams.count = 0;
             parts[p].ready = false, parts[p].initial_seen = false, parts[p].late_told = false;
@@ -1521,6 +1610,7 @@ void step() {
     if (!navigated) navigate();
     ++world_steps;
     if (early_moves.count) check_early_moves();
+    if (late_removals.count) check_late_removals();
     // A look goes over every object the engine has, so it is taken twice a second while the map settles and
     // every four seconds after that, for sublevels that come later.
     if (world_steps < 30 || world_steps % (world_steps < 900 ? 15 : 120)) return;
