@@ -54,9 +54,8 @@ def release_identity(root, tag=None):
                 part.isdigit() and len(part) > 1 and part.startswith('0')
                 for part in match.group(1).split('.'))):
             raise ValueError('The tag must match release_version, with an optional SemVer prerelease suffix')
-        prerelease = match.group(1) is not None
-        if not released and not prerelease:
-            raise ValueError('An unreleased ABI lock requires a prerelease tag')
+        # A release of an unreleased ABI is a prerelease whatever its tag, so v0.3.1 is accepted as v0.3.1-rc.1 is.
+        prerelease = match.group(1) is not None or not released
     return {'release_version': version, 'prerelease': prerelease, 'tag': tag}
 
 

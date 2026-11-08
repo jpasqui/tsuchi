@@ -70,8 +70,9 @@ test results so a maintainer can associate a result with the files tested.
 
 A `v*` version tag or a manual run of `release.yml` with an existing tag can prepare a draft
 GitHub prerelease. The release workflow reuses `ci.yml` to check, build, and package that tag
-before it attaches archives and checksums to the draft. For a local tagged candidate, add
-`--tag v0.2.0-rc.1` to the packaging command, using the tag you checked out. A maintainer reviews
+before it attaches archives and checksums to the draft. While `schema/abi.lock` is unreleased, every
+release is a prerelease, whether the tag is `v0.3.1` or `v0.3.1-rc.1`. For a local tagged candidate,
+add `--tag` with the tag you checked out to the packaging command. A maintainer reviews
 the draft and publishes it after the required game checks.
 
 The workflow doesn't deploy the docs site or turn a successful build into a game qualification.
