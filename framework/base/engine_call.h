@@ -24,6 +24,8 @@ public:
     // A name or a string argument, from UTF-8.
     TSUCHI_Result set_text(const char* name, const char* text);
     TSUCHI_Result invoke();
+    // Through the dispatch every object has (call_object_dispatch), for a call that has to run before play.
+    TSUCHI_Result invoke_before_play();
     TSUCHI_Result get(const char* name, Value& out);
     // An array of objects the function gave back: how many, and each one's address.
     // TSUCHI_INVALID when the name is not an array that can be read.

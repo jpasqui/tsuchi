@@ -26,6 +26,13 @@ void early_native_initialize(uint64_t level, int32_t budget, bool reconstruct, v
     }
 }
 
+// As the game's actors do (AActor::ProcessEvent): every call is dropped until play has begun, without a word.
+void early_actor_process(void* object, void* function, void* arguments) {
+    if (!(fake::get<uint8_t>(reinterpret_cast<uint64_t>(object) + t::actor_play::state) & t::constant::actor_play_state_mask)) return;
+    fake::engine_process(object, function, arguments);
+}
+uint64_t early_actor_vtable = 0;
+
 void early_begin_level(uint64_t level) {
     const uint64_t actors = fake::get<uint64_t>(level + t::engine_level::actors);
     const int32_t count = fake::get<int32_t>(level + t::engine_level::actors + t::array::count);
@@ -48,6 +55,12 @@ void early_maps() {
     fake::set_super(w.actor_class, actor_type);
     early_actor_type = fake::object(u"EarlyActor", w.root);
     fake::set_super(early_actor_type, actor_type);
+    // A class keeps the function table every object has; an actor has its own, which drops calls before play.
+    fake::put<uint64_t>(early_actor_type, fake::engine().vtable);
+    early_actor_vtable = fake::memory(0x40);
+    for (uint64_t at = 0; at < 0x40; at += 8) fake::put<uint64_t>(early_actor_vtable + at, fake::get<uint64_t>(fake::engine().vtable + at));
+    fake::code().push_back(reinterpret_cast<uint64_t>(&early_actor_process));
+    fake::put(early_actor_vtable + t::object_vtable::process_event, &early_actor_process);
     const uint64_t world_type = fake::object(u"World", w.root), level_type = fake::object(u"Level", w.root);
     fake::field(level_type, u"OwningWorld", u"ObjectProperty", t::engine_level::owning_world, 8, world_type);
     const uint64_t shape_type = fake::object(u"EarlyShape", w.root);
@@ -140,6 +153,7 @@ void early_maps() {
     };
     const auto actor = [&](uint64_t level, const std::u16string& name) {
         const uint64_t object = fake::engine_object(name, early_actor_type);
+        fake::put<uint64_t>(object, early_actor_vtable);
         fake::put(object + t::object::outer, level), fake::put<float>(object + early_health, 10);
         fake::put<float>(object + early_shape, 1), fake::put<float>(object + early_shape + 4, 2), fake::put(object + early_mesh, stock_mesh);
         const uint64_t part = fake::engine_object(name + u"Part", w.component_class);

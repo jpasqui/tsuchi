@@ -1208,7 +1208,8 @@ void destroy_arguments(uint64_t function, uint64_t memory) {
 
 TSUCHI_Result call(uint64_t object, uint64_t function, uint64_t arguments) { return call_guarded(object, function, arguments, {}); }
 
-TSUCHI_Result call_guarded(uint64_t object, uint64_t function, uint64_t arguments, CallGuard guard) {
+namespace {
+TSUCHI_Result call_with(uint64_t object, uint64_t function, uint64_t arguments, CallGuard guard, bool object_dispatch) {
     if (!guard.permits()) return TSUCHI_NOT_READY;
     if (!is_a(function, function_class) || !arguments) return TSUCHI_INVALID;
     if (!live(object)) return TSUCHI_NOT_FOUND;
@@ -1219,11 +1220,26 @@ TSUCHI_Result call_guarded(uint64_t object, uint64_t function, uint64_t argument
         if (!target) return TSUCHI_NOT_READY;
     }
     if (!derives_from(class_of(target), owner)) return TSUCHI_INVALID;
-    const auto process = method(target, t::object_vtable::process_event);
+    auto process = method(target, t::object_vtable::process_event);
+    if (object_dispatch) {
+        // A function and a class are objects that keep the dispatch every object has. Two of them have to agree.
+        const auto plain = method(function, t::object_vtable::process_event);
+        if (!plain || plain != method(class_of(target), t::object_vtable::process_event)) return TSUCHI_UNSUPPORTED;
+        process = plain;
+    }
     if (!process) return TSUCHI_NOT_READY;
     if (!guard.permits()) return TSUCHI_NOT_READY;
     process(reinterpret_cast<void*>(target), reinterpret_cast<void*>(function), reinterpret_cast<void*>(arguments));
     return guard.permits() ? TSUCHI_OK : TSUCHI_NOT_READY;
+}
+} // namespace
+
+TSUCHI_Result call_guarded(uint64_t object, uint64_t function, uint64_t arguments, CallGuard guard) {
+    return call_with(object, function, arguments, guard, false);
+}
+
+TSUCHI_Result call_object_dispatch(uint64_t object, uint64_t function, uint64_t arguments) {
+    return call_with(object, function, arguments, {}, true);
 }
 
 TSUCHI_Result write_argument_guarded(const Place& place, const Value& value, CallGuard guard) {

@@ -183,6 +183,10 @@ void destroy_arguments(uint64_t function, uint64_t memory);
 // not to an object is called on the class's default object.
 TSUCHI_Result call(uint64_t object, uint64_t function, uint64_t arguments);
 TSUCHI_Result call_guarded(uint64_t object, uint64_t function, uint64_t arguments, CallGuard guard);
+// The same through the call dispatch every object has, not the object's own. An actor's own drops every call
+// until its world's actors are initialized, without saying so; this one runs the call then too.
+// TSUCHI_UNSUPPORTED when that dispatch cannot be told for certain.
+TSUCHI_Result call_object_dispatch(uint64_t object, uint64_t function, uint64_t arguments);
 // Guarded restoration arguments are scalar or direct object references only.
 TSUCHI_Result write_argument_guarded(const Place& place, const Value& value, CallGuard guard);
 
