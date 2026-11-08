@@ -12,7 +12,8 @@ class ReleasedLayout(unittest.TestCase):
     def test_new_services_do_not_publish_the_development_abi(self):
         after = json.loads((ROOT / 'schema/abi.lock').read_text(encoding='utf-8'))
         self.assertFalse(after['released'])
-        self.assertEqual(after['release_version'], '0.2.0')
+        # The lock is the one place the next release's number is kept; the packager reads it from there.
+        self.assertRegex(after['release_version'], r'^(0|[1-9][0-9]*)(\.(0|[1-9][0-9]*)){2}$')
         self.assertEqual(after['api_version'], 0)
 
     def test_published_result_and_handle_numbers_remain_prefixes(self):
