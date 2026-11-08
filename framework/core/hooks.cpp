@@ -120,6 +120,7 @@ TSUCHI_Result put_hook(TSUCHI_Mod* mod, uint32_t site, void* function, uint32_t 
     return TSUCHI_OK;
 }
 TSUCHI_Result add_hook(TSUCHI_Mod* mod, uint32_t site, void* function, uint64_t* id, void** original) {
+    if (next_id >= (uint64_t(1) << 62)) return TSUCHI_CAPACITY;
     {
         Lock lock;
         if (!thunks_left()) return TSUCHI_CAPACITY;
@@ -209,6 +210,7 @@ TSUCHI_Result hook_wrap(TSUCHI_Mod* mod, uint64_t entry, uint64_t stock, void* f
             if (!thunks_left()) return TSUCHI_CAPACITY;
         }
     }
+    if (next_id >= (uint64_t(1) << 62)) return TSUCHI_CAPACITY;
     // Do the only potentially failing step before permanently publishing an
     // entry thunk. The game's thread is the only writer; dispatch only frees.
     const TSUCHI_Result owned = own(mod, kHook, next_id, end_hook, nullptr);
@@ -254,6 +256,14 @@ TSUCHI_Result hook_remove(TSUCHI_Mod* mod, uint64_t id) {
     if (disown(mod, kHook, id) != TSUCHI_OK) return TSUCHI_NOT_FOUND; // none, or another mod's
     end_hook(nullptr, id);
     return TSUCHI_OK;
+}
+
+bool hook_retired(uint64_t id) {
+    if (!id) return true;
+    Lock lock;
+    for (const Hook& hook : records)
+        if (hook.id == id) return false;
+    return true;
 }
 
 uint32_t hook_count(uint64_t entry) {
@@ -338,7 +348,13 @@ TSUCHI_Result service_wrap(TSUCHI_Mod* mod, const char* slot, void* function, TS
     return TSUCHI_NOT_FOUND;
 }
 
+TSUCHI_Result (*dynamic_remove_function)(TSUCHI_Mod*, uint64_t) = nullptr;
+
 TSUCHI_Result service_remove(TSUCHI_Mod* mod, TSUCHI_HookId id) {
+    if (dynamic_remove_function) {
+        const TSUCHI_Result result = dynamic_remove_function(mod, id.id);
+        if (result != TSUCHI_NOT_FOUND) return result;
+    }
     if (native_hooks) {
         const TSUCHI_Result result = native_hooks->remove(mod, id.id);
         if (result != TSUCHI_NOT_FOUND) return result;
@@ -372,6 +388,8 @@ const hook::Backend service{service_wrap, service_wrap_address, service_remove, 
 
 void hooks_start() { hook::set_backend(&service); }
 void set_native_hooks(const NativeHooks* backend) { native_hooks = backend; }
+const NativeHooks* native_hooks_backend() { return native_hooks; }
+void set_dynamic_remove(TSUCHI_Result (*remove)(TSUCHI_Mod*, uint64_t)) { dynamic_remove_function = remove; }
 
 HookStats hook_stats() {
     Lock lock;

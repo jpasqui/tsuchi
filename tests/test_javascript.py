@@ -33,7 +33,7 @@ class JavaScript(unittest.TestCase):
             sources = [ROOT / 'framework/core' / (n + '.cpp') for n in ('registry','ids','frame')]
             sources += sorted((cls.out / 'framework').glob('*.cpp')) + sorted((cls.out / 'javascript').glob('*.cpp'))
             sources += [p for p in sorted((ROOT / 'runtime/javascript').glob('*.cpp')) if p.name != 'script_mods.cpp']
-            sources += [ROOT / 'tests/javascript/fake_host.cpp', ROOT / 'framework/target/uint128.cpp']
+            sources += [ROOT / 'tests/host/no_dynamic_hooks.cpp', ROOT / 'tests/javascript/fake_host.cpp', ROOT / 'framework/target/uint128.cpp']
             run([shutil.which('clang++'), *CXX, '-I', cls.out / 'include', '-I', cls.out / 'framework',
                  '-I', ROOT / 'framework/core', '-I', ROOT / 'runtime/javascript', '-isystem', quickjs_build.QUICKJS,
                  *sources, *quickjs_build.objects(own), '-o', program])
@@ -70,7 +70,7 @@ class JavaScript(unittest.TestCase):
         sources += sorted(BASE.glob('*.cpp')) + sorted((GEN / 'framework').glob('*.cpp'))
         sources += sorted((GEN / 'javascript').glob('*.cpp'))
         sources += [p for p in (ROOT / 'runtime/javascript').glob('*.cpp') if p.name != 'script_mods.cpp']
-        sources += [ROOT / 'tests/javascript/reflect_host.cpp', ROOT / 'framework/target/uint128.cpp']
+        sources += [ROOT / 'tests/host/no_dynamic_hooks.cpp', ROOT / 'tests/javascript/reflect_host.cpp', ROOT / 'framework/target/uint128.cpp']
         run([shutil.which('clang++'), *CXX, '-I', GEN / 'include', '-I', fixture / 'framework',
              '-I', GEN / 'framework', '-I', BASE, '-I', CORE, '-I', ROOT / 'tests/base',
              '-I', ROOT / 'runtime/javascript', '-isystem', quickjs_build.QUICKJS,

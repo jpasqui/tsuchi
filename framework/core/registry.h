@@ -83,6 +83,19 @@ void set_thread_pause(void (*pause)());
 // A lock's waiter, once for each time it finds the lock held. It spins at first and then pauses the thread.
 void lock_wait(uint32_t& tries);
 
+// ---- Inside a script hook -------------------------------------------------
+
+// A script hook's function runs in the middle of a game function. While it runs, every mod call fails the way a
+// call from another thread does, so the engine is never entered from there (DESIGN.md, "Script hooks"). The calls
+// nest, and the game's thread is the only one that makes them. A hook's `original` lifts the barrier for as long
+// as the game's function runs, so other mods' hooks that it reaches work as usual.
+void hook_client_enter();
+void hook_client_leave();
+// Lifts the barrier and gives back how deep it was, for hook_client_restore.
+uint32_t hook_client_suspend();
+void hook_client_restore(uint32_t depth);
+bool in_hook_client();
+
 // ---- Ownership ------------------------------------------------------------
 
 // What kind of thing is owned. One static Kind per kind; its address identifies it.

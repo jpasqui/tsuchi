@@ -846,6 +846,16 @@ class Generated(unittest.TestCase):
              *sorted((GEN / 'framework').glob('*.cpp')), ROOT / 'tests' / 'core' / 'hooks_test.cpp', '-o', program])
         run([program])
 
+    def test_dynamic_hooks_carry_script_hooks(self):
+        """Gateways, signatures, the barrier on mod calls, watches and removal, the base of script hooks."""
+        fixture = self.fixture()
+        program = BUILD / f'dynamic_hooks_test{EXE}'
+        run([shutil.which('clang++'), *CXX, '-I', GEN / 'include', '-I', fixture / 'framework', '-I', GEN / 'framework',
+             '-I', BASE, '-I', CORE, '-I', ROOT / 'tests' / 'base', CORE / 'registry.cpp', CORE / 'ids.cpp', CORE / 'hooks.cpp',
+             CORE / 'dynamic_hooks.cpp', *sorted((GEN / 'framework').glob('*.cpp')),
+             ROOT / 'tests' / 'core' / 'dynamic_hooks_test.cpp', '-o', program])
+        self.assertIn('dynamic hooks passed', run([program]).stdout)
+
     def test_fields_and_functions_are_reached_by_name(self):
         """The reflect service end to end, against a made-up game that describes itself."""
         fixture = self.fixture()
@@ -877,7 +887,7 @@ class Generated(unittest.TestCase):
              '-I', BASE, '-I', CORE, '-I', ROOT / 'tests' / 'base', '-I', ROOT / 'runtime' / 'lua', '-I', LUA,
              CORE / 'registry.cpp', CORE / 'ids.cpp', CORE / 'reflection.cpp', CORE / 'json.cpp', CORE / 'sha256.cpp', CORE / 'text.cpp', CORE / 'texts.cpp', *sorted(BASE.glob('*.cpp')),
              *sorted((GEN / 'framework').glob('*.cpp')), *sorted((GEN / 'lua').glob('*.cpp')),
-             *sorted((ROOT / 'runtime' / 'lua').glob('*.cpp')), ROOT / 'tests' / 'base' / 'reflect_lua_test.cpp',
+             *sorted((ROOT / 'runtime' / 'lua').glob('*.cpp')), ROOT / 'tests/host/no_dynamic_hooks.cpp', ROOT / 'tests' / 'base' / 'reflect_lua_test.cpp',
              *lua_objects(), '-o', program])
         run([program, ROOT / 'tests' / 'base' / 'reflect.lua'])
 
@@ -1138,7 +1148,7 @@ class Generated(unittest.TestCase):
 
     def test_a_script_runs_as_a_mod(self):
         """A Lua script through the generated bindings, the generated service code and the core."""
-        sources = [CORE / 'registry.cpp', CORE / 'ids.cpp', CORE / 'frame.cpp', *sorted((ROOT / 'runtime' / 'lua').glob('*.cpp')),
+        sources = [CORE / 'registry.cpp', CORE / 'ids.cpp', CORE / 'frame.cpp', ROOT / 'tests/host/no_dynamic_hooks.cpp', *sorted((ROOT / 'runtime' / 'lua').glob('*.cpp')),
                    ROOT / 'tests' / 'host' / 'fake_host.cpp']
         sources += sorted((GEN / 'framework').glob('*.cpp')) + sorted((GEN / 'lua').glob('*.cpp'))
         program = BUILD / f'combat_host{EXE}'

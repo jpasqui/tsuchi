@@ -201,8 +201,25 @@ uint32_t off_thread_calls() { return __atomic_load_n(&refused_off_thread, __ATOM
 
 bool mod_running(const TSUCHI_Mod* mod) { return mod && mod->magic == kMagic && mod_state(mod) == State::usable; }
 
+namespace {
+uint32_t hook_clients = 0; // game thread only
+} // namespace
+
+void hook_client_enter() { ++hook_clients; }
+void hook_client_leave() {
+    if (hook_clients) --hook_clients;
+}
+uint32_t hook_client_suspend() {
+    const uint32_t depth = hook_clients;
+    hook_clients = 0;
+    return depth;
+}
+void hook_client_restore(uint32_t depth) { hook_clients = depth; }
+bool in_hook_client() { return hook_clients && on_game_thread(); }
+
 bool mod_usable(const TSUCHI_Mod* mod) {
     if (!mod_running(mod)) return false;
+    if (in_hook_client()) return false;
     if (on_game_thread()) return true;
     __atomic_fetch_add(&refused_off_thread, 1, __ATOMIC_RELAXED); // counted from whichever thread it was
     return false;

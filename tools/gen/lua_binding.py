@@ -124,12 +124,13 @@ def service_binding(service):
     tsuchi_lua::push_unnamed(L, value); // a value this version has no name for: still a string, "#" and the number
 }}
 ''')
-    for struct in service.structs:
+    scripted_structs = [struct for struct in service.structs if struct.only != 'native']
+    for struct in scripted_structs:
         out.append(f'[[maybe_unused]] void push_{struct.name}(lua_State* L, const TSUCHI_{struct.name}& value) {{\n'
                    f'{fields_table(struct.fields, "value.")}\n}}\n')
     # A struct a function takes is read from a table with the same fields.
-    taken = {p.type.name for fn in service.functions for p in fn.params if p.type.kind == 'struct'}
-    for struct in service.structs:
+    taken = {p.type.name for fn in service.functions if service.scripted(fn) for p in fn.params if p.type.kind == 'struct'}
+    for struct in scripted_structs:
         if struct.name not in taken:
             continue
         lines = [f'[[maybe_unused]] TSUCHI_{struct.name} read_{struct.name}(lua_State* L, int index) {{',

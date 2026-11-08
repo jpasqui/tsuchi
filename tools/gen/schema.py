@@ -5,7 +5,7 @@ from pathlib import Path
 
 import yaml
 
-SCALARS = {'bool', 'i32', 'u32', 'i64', 'u64', 'f32', 'vec3', 'rotation', 'text', 'bytes', 'pointer', 'value'}
+SCALARS = {'bool', 'i32', 'u32', 'i64', 'u64', 'f32', 'vec3', 'rotation', 'text', 'bytes', 'pointer', 'value', 'callback'}
 SIDES = {'', 'native', 'script'}
 LAYERS = {'core', 'engine', 'game'}
 LIFETIMES = {'process', 'save', 'world', 'match', 'session'}
@@ -133,6 +133,7 @@ class Named:
     mark: Mark = NO_MARK
     marks: dict = field(default_factory=dict)    # enums, flags: a value's name to its Mark, for the values that have one
     classified: bool = False  # documentation: framework categories use other rather than native-number placeholders
+    only: str = ''  # structs: 'native' for one only compiled mods see, such as one with a pointer in it
 
     def value_mark(self, name):
         return self.marks.get(name, NO_MARK)
@@ -368,6 +369,9 @@ def _named(where, table, sort, version):
             item.classified = body['classified']
         if sort == 'struct':
             item.fields = [_value(at, row, version) for row in _need(at, body, 'fields')]
+            item.only = body.get('only') or ''
+            if item.only not in ('', 'native'):
+                raise SchemaError(f'{at}: "only" is "native" for a struct')
             out.append(item)
             continue
         if sort == 'enum':
@@ -570,6 +574,8 @@ def _check_references(service, handles, shared):
             raise SchemaError(f'{where}.{value.name}: "pointer" is for compiled mods: mark the function "only: native"')
         if t.kind == 'value' and not (native or in_function):
             raise SchemaError(f'{where}.{value.name}: a plain value is passed to a function or returned by one')
+        if t.kind == 'callback' and (not in_function or value is returned):
+            raise SchemaError(f'{where}.{value.name}: a callback is passed to a function')
         if t.kind == 'struct' and not allow_struct:
             raise SchemaError(f'{where}.{value.name}: a struct is passed to a function or returned by one')
         if t.kind == 'bytes' and not in_function:
@@ -590,7 +596,7 @@ def _check_references(service, handles, shared):
         raise SchemaError(f'{service.name}: acts_on names a handle kind, or "game" for the game as a whole')
     for struct in service.structs:
         for f in struct.fields:
-            check(f'{service.name}.{struct.name}', f, False, service.native_only)
+            check(f'{service.name}.{struct.name}', f, False, service.native_only or struct.only == 'native')
     for fn in service.functions:
         at = f'{service.name}.{fn.name}'
         for code in fn.fails:
@@ -600,6 +606,10 @@ def _check_references(service, handles, shared):
         native = service.native_only or fn.only == 'native'
         for p in fn.params:
             check(at, p, True, native, True)
+            if p.type.kind == 'callback' and fn.only != 'script':
+                raise SchemaError(f'{at}.{p.name}: a callback is for a function whose script binding is written by hand: mark it "only: script"')
+            if p.type.kind == 'struct' and structs[p.type.name].only == 'native' and not native:
+                raise SchemaError(f'{at}.{p.name}: {p.type.name} is for compiled mods: mark the function "only: native"')
             if p.type.kind == 'struct' and any(f.type.kind == 'enum' and f.type.open for f in structs[p.type.name].fields):
                 raise SchemaError(f'{at}.{p.name}: a struct with an ID in it is only returned; pass the ID as an argument of its own')
             # One rule for an ID the framework does not know, in every service. See DESIGN.md, "What is not known".

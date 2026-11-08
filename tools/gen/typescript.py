@@ -15,7 +15,8 @@ def typename(t):
     if t.kind in ('enum', 'struct'): return t.name
     return {'bool': 'boolean', 'i32': 'number', 'u32': 'number', 'f32': 'number',
             'i64': 'bigint', 'u64': 'bigint', 'text': 'string', 'bytes': 'Uint8Array',
-            'vec3': 'Vec3', 'rotation': 'Rotation', 'value': 'unknown', 'pointer': 'never'}[t.kind]
+            'vec3': 'Vec3', 'rotation': 'Rotation', 'value': 'unknown', 'pointer': 'never',
+            'callback': '(...args: any[]) => unknown'}[t.kind]
 
 
 def declaration(schema):
@@ -37,6 +38,7 @@ def declaration(schema):
             value_docs = ''.join('\n' + n + ': ' + description for n, _, description in item.values)
             out += [doc(item.doc + value_docs, mark=item.mark), f'type {item.name} = {values};\n']
         for struct in service.structs:
+            if struct.only == 'native': continue
             out += [doc(struct.doc, mark=struct.mark), f'interface {struct.name} {{\n']
             for f in struct.fields: out += [doc(f.doc, '    ', f.mark), f'    {f.name}{"?" if f.optional else ""}: {typename(f.type)}' + (' | null' if f.type.kind == 'handle' else '') + ';\n']
             out.append('}\n')

@@ -2,6 +2,7 @@
 // themselves come from the schema (tools/gen/lua_binding.py).
 #pragma once
 #include <string.h>
+#include "../script_hooks.h"
 
 extern "C" {
 #include "lauxlib.h"
@@ -59,21 +60,42 @@ void push_flags(lua_State* L, uint32_t bits, const char* const names[], const ui
 // arguments are, for want of memory, is no different from one in the handler.
 // What a script may use, and what it has used. A state the framework makes for a mod has one of these; a state
 // made any other way has none, and is not bounded.
-struct Budget {
-    size_t held = 0;  // bytes of memory the state holds
-    uint64_t run = 0; // instructions since the framework last called into it
-};
 // Instructions a script may run in one call from the framework: as it starts, or in a handler. A script that
 // does not come back holds the game still, so past this it is stopped where it stands with an error.
 constexpr uint64_t kTurn = 20'000'000;
+struct Budget {
+    size_t held = 0;        // bytes of memory the state holds
+    uint64_t run = 0;       // instructions since the turn began
+    uint64_t limit = kTurn; // instructions the turn may run; a hook's turn has less
+    tsuchi_script::Allowance hooks;
+    uint32_t hook_pins = 0;
+    void (*close_pending)(lua_State*) = nullptr;
+    uint32_t depth = 0;     // framework calls into the state that haven't returned yet
+};
 // Bytes of memory one mod's scripts may hold at once. Past this the script gets Lua's own memory error. It is
 // more than a script that calls itself without end holds when Lua stops it for the depth, which is about 64 MB,
 // so that script still gets the error the language gives.
 constexpr size_t kScriptMemory = size_t(128) << 20;
 Budget* budget(lua_State* L);
 void set_budget(lua_State* L, Budget* budget);
-// Called as the framework calls into a script: its turn begins.
-void begin_turn(lua_State* L);
+// One call from the framework into a script, for as long as it lasts. The outermost call begins a turn. A call
+// that comes while the script is already running, such as a hook that the script's own call reached, continues
+// the turn it's in, so it gets no new allowance.
+// An outermost call may give its turn a smaller limit, as a hook's call does.
+class Turn {
+public:
+    explicit Turn(lua_State* L, uint64_t limit = kTurn);
+    ~Turn();
+    Turn(const Turn&) = delete;
+    Turn& operator=(const Turn&) = delete;
+    // True when this call began the turn rather than continuing one.
+    bool outermost() const { return outermost_; }
+
+private:
+    lua_State* L_;
+    Budget* used_;
+    bool outermost_ = false;
+};
 // True when the script has used up its turn.
 bool turn_over(lua_State* L);
 // An integer argument, which has to be within what the call takes.
@@ -89,6 +111,10 @@ Listener* listen(lua_State* L, int function_index);
 int subscribed(lua_State* L, Listener* listener, TSUCHI_Result result, TSUCHI_Subscription subscription);
 void deliver(Listener* listener, lua_CFunction call, const void* event);
 
+void pin_hook(lua_State* L);
+void unpin_hook(lua_State* L);
+void close_when_unused(lua_State* L, void (*close)(lua_State*));
+void report_hook_error(lua_State* L, const char* message);
 void open_services(lua_State* L); // generated
 
 } // namespace tsuchi_lua

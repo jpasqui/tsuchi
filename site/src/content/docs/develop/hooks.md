@@ -1,15 +1,73 @@
 ---
 title: Hook game functions
-description: Wrap a game entry from compiled code and call the next function.
+description: Wrap a game entry from scripts or compiled code and call the next function.
 ---
 
-[Build a compiled mod](/develop/compiled-mod/) before adding a hook. Lua and JavaScript don't
-expose [`hook`](/reference/hook/). You'll need the game's function signature as well
-as its entry, because your wrapper must take the same arguments and return the same
-value.
+Lua, JavaScript, and [compiled mods](/develop/compiled-mod/) can use
+[`hook`](/reference/hook/). Find the game's function signature and entry before
+adding a wrapper, because its arguments and result must match the game's function.
 
 For runtime function targets, inline register callbacks, instruction checks, and
 code-write build requirements, read [Port native hooks](/develop/native-hooks/).
+
+## Scripts
+
+Use `hook.wrap(target, fn)` to run a synchronous callback in place of a function.
+Your mod supplies `target`: either `entry_at` and `stock` for a function-table
+entry, or `function_at` and `expected` for a function's first instruction. All
+offsets are relative to the game's main module. Leave out `stock`, or set it to
+zero, when you don't know it.
+Both targets need a `signature`, such as `"bool(pointer, i32)"`, verified for the
+game builds listed in your mod's manifest.
+
+For example, a callback can pass the arguments and result through unchanged:
+
+```lua
+local id, why = hook.wrap(target, function(original, ...)
+    return original(...)
+end)
+```
+
+```javascript
+const id = hook.wrap(target, (original, ...args) => original(...args));
+```
+
+`original` works only during that callback. If the callback raises before calling
+it, Tsuchi calls it with the game's arguments. If the callback raises after calling
+it, Tsuchi returns the last completed original call's result. Service calls inside
+the callback fail with `invalid`; keep the values it needs in script variables
+updated by event handlers. Lua callbacks cannot yield, and JavaScript callbacks
+cannot return promises or thenables. Queued JavaScript jobs run after the hook.
+
+If you pass a `text16` argument to `original` unchanged, the game gets its own text
+back. If you change it, the game gets a copy that lasts only for that call, so use a
+`pointer` signature for a function that keeps the address.
+
+Use `hook.watch(target, fn)` to hear calls at the next frame without changing the
+game's call. Each callback receives `args`, `result`, `thread`, and `dropped`.
+Lua's `args` starts at 1; JavaScript's starts at 0. Pointer arguments are numbers,
+not references that keep game objects alive. Text arguments are copied before
+the original runs. A watch holds 256 calls between frames. `dropped` counts the
+calls your callback didn't hear since the one before, because the watch was full
+or your callback couldn't run.
+
+Use `hook.instruction(offset, expected, fn)` for one instruction. Its callback
+receives a copy of registers `x[0]` through `x[30]` and boolean flags `n`, `z`,
+`c`, and `v`. The copy is committed only if the callback succeeds. Tsuchi then
+continues the chain and replays the displaced instruction once. For example,
+`function(r) r.z = true end` in Lua or `r => { r.z = true; }` in JavaScript sets
+the zero flag. A displaced compare instruction can overwrite that flag again.
+
+Lua carries 64-bit values as integer bit patterns; JavaScript uses `BigInt`.
+Wrap text is limited to 256 UTF-16 units. Longer incoming text falls through to
+the original. A callback runs only on the known game thread, with a bounded turn
+and a shared per-frame allowance; other calls continue to the original.
+
+Remove any script hook with `hook.remove(id)`. Stopping the mod also removes it,
+and the runtime stays alive until calls already using its hooks have returned.
+Function and instruction targets need the code-access build described in
+[Port native hooks](/develop/native-hooks/); scripting does not grant code-write
+permissions. Table-entry hooks use the ordinary runtime.
 
 ## Entries
 

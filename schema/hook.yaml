@@ -4,7 +4,6 @@ tutorials:
 layer: core
 acts_on: game
 lifetime: process
-native_only: true
 brief: "Replaces one of the game's functions with your own."
 description: |
   The game calls many of its functions through function tables. A hook
@@ -24,14 +23,18 @@ description: |
   still call them. If too many hooked calls are running at once, the next call
   goes straight to the game's original function.
 
-  The game calls some of its functions on threads other than the game thread,
-  and a hook on one of those functions runs on that thread. Every Tsuchi call
-  fails with `invalid` on those threads, so a hook like that can only use its
-  arguments and its `original`, and it has to leave everything else for the
-  next step.
+  Scripts use `wrap`, `watch`, and `instruction`. `remove` works for both
+  scripts and compiled mods; the other functions below are for compiled mods.
+
+  A compiled hook runs on whichever thread calls the game's function. Every
+  Tsuchi call fails with `invalid` on other threads. A script wrapper or
+  instruction callback runs only on the known game thread; other calls skip
+  the script and continue to the original. A watch records calls from every
+  thread and delivers them on the game thread at the next frame.
 
 structs:
   InlineContext:
+    only: native
     doc: "The register frame at an inline hook. The pointers are valid only during the handler."
     fields:
       - {name: registers, type: pointer, doc: "31 writable uint64_t values, x0 through x30."}
@@ -41,6 +44,7 @@ structs:
       - {name: fpcr, type: u64, doc: "The floating-point control register."}
       - {name: fpsr, type: u64, doc: "The floating-point status register."}
   Hook:
+    only: native
     doc: "An installed hook."
     fields:
       - {name: id, type: handle<hook_id>, doc: "The value to pass to `remove`."}
@@ -48,6 +52,7 @@ structs:
 
 functions:
   - name: wrap_slot
+    only: native
     doc: |
       Hooks an entry that the game table has a name for. Your function has to take
       the same arguments and return the same value as the game's function.
@@ -64,6 +69,7 @@ functions:
     users: [gyro-aim, dog-coop]
 
   - name: wrap_address
+    only: native
     doc: |
       Hooks an entry that the game table has no name for, by its offset. Pass the
       function that the game stores there, so that the hook can check if something
@@ -89,6 +95,7 @@ functions:
     users: [gyro-aim, dog-coop]
 
   - name: wrap_site
+    only: native
     doc: |
       Hooks a function that the game calls directly, at a site that the game table
       has a name for. This needs the Tsuchi patch to be installed, as the game's
@@ -109,6 +116,7 @@ functions:
     users: [gyro-aim, dog-coop]
 
   - name: wrap_function
+    only: native
     doc: |
       Hooks a function entry by its offset from the start of the game's code.
       The expected instruction must match the stock instruction at that entry.
@@ -132,6 +140,7 @@ functions:
     completes: wrap_site
 
   - name: wrap_inline
+    only: native
     doc: |
       Hooks one instruction by its main-code offset. The handler has the C
       signature `void handler(TSUCHI_InlineContext *context)`. Call its
@@ -154,6 +163,7 @@ functions:
     completes: wrap_site
 
   - name: patch_instruction
+    only: native
     doc: |
       Replaces one aligned instruction after checking its original word. The
       patch is exclusive with hooks and patches at that location. Remove it
@@ -175,6 +185,7 @@ functions:
     completes: wrap_site
 
   - name: check_code
+    only: native
     doc: |
       Compares the running game's code with expected bytes before installing
       hooks. This call changes nothing and needs no code-write permissions.
@@ -188,4 +199,105 @@ functions:
       invalid: "The offset, length, or alignment is outside the allowed range."
       busy: "At least one byte differs from the expected code."
       not_ready: "The code cannot be read."
+    completes: wrap_site
+
+  - name: wrap
+    only: script
+    owns: true
+    doc: |
+      Runs your function in place of a game function, during the game's call and on
+      the game thread. Your function gets `original` first and then the game's
+      arguments, and it returns the result. Call `original` with the same arguments,
+      or changed ones, to continue to the game's function. `original` works only
+      until your function returns.
+
+      `target` describes the function, and every part of it comes from your mod:
+      either `function_at` and `expected`, the function's offset in the game's main
+      code and its first instruction, or `entry_at` and `stock`, the offset of a
+      function-table entry and of the function the game stores there. Leave out
+      `stock`, or pass `0`, if it isn't known. Both need `signature`, such as
+      `"bool(pointer, i32)"`. The types
+      are `bool`, `i32`, `u32`, `u64`, `pointer`, `const_pointer`, `f32` and
+      `text16`, and a result can also be `void`. The offsets belong to one build of
+      the game, so list the builds your mod supports with `game` in its manifest.
+
+      A `text16` argument and text passed to `original` are limited to 256 UTF-16
+      units. Longer incoming text skips your function and calls the original with
+      the unchanged game arguments. If you pass a `text16` argument to `original`
+      unchanged, the game gets its own text back. Changed text can't contain NUL,
+      and the game gets a copy that lasts only for that call. Use a `pointer`
+      signature if the game keeps the address. A null text pointer is Lua `nil` or
+      JavaScript `null`.
+
+      Inside your function, every other Tsuchi call fails with `invalid`. Keep the
+      values it needs in your own variables, and update them from your event
+      handlers. A call on another thread, a call while your mod stops, and a call
+      past 8 levels of recursion go straight to `original` without your function.
+      If your function raises an error before it calls `original`, the game gets
+      what `original` returns for its own arguments. If it raises after, the game
+      gets the last result `original` gave.
+    params:
+      - {name: target, type: value, doc: "A table with `function_at` and `expected`, or `entry_at` and `stock`, and `signature`."}
+      - {name: fn, type: callback, doc: "Your function. It gets `original` and then the game's arguments."}
+    returns: {type: handle<hook_id>, doc: "The hook, to pass to `remove`."}
+    fails:
+      invalid: "The target or the signature can't be read, or this is called inside a hook."
+      unsupported: "The signature has an argument that would go on the stack: more than eight whole-number or eight `f32` arguments."
+      busy: "The instruction at `function_at` isn't `expected`, or the table entry no longer holds `stock`."
+      not_ready: "A function target needs code access, and this install doesn't have it."
+      capacity: "Every one of the 256 script hook gateways is in use."
+    completes: wrap_site
+
+  - name: watch
+    only: script
+    owns: true
+    doc: |
+      Hears every call of a game function, without changing it. Your function runs
+      at the start of the next frame, once for each call, with a table that holds
+      the call's `args`, its `result`, `thread` (`"game"` or `"other"`), and
+      `dropped`, the number of calls since the one before that your function didn't
+      hear, because they didn't fit or came while your function couldn't run. A
+      watch keeps up to 256 calls between two frames. It works for calls on any
+      thread.
+
+      `target` is the same as for `wrap`. A `text16` argument is copied, up to 256
+      characters, before the game's function runs. A `pointer` is only a number: by
+      the next frame, the thing it pointed to may be gone.
+    params:
+      - {name: target, type: value, doc: "A table with `function_at` and `expected`, or `entry_at` and `stock`, and `signature`."}
+      - {name: fn, type: callback, doc: "Your function. It gets one table per call."}
+    returns: {type: handle<hook_id>, doc: "The hook, to pass to `remove`."}
+    fails:
+      invalid: "The target or the signature can't be read, or this is called inside a hook."
+      unsupported: "The signature has an argument that would go on the stack."
+      busy: "The instruction at `function_at` isn't `expected`, or the table entry no longer holds `stock`."
+      not_ready: "A function target needs code access, and this install doesn't have it."
+      capacity: "Every one of the 256 script hook gateways is in use."
+      no_memory: "There's no memory for the watch's records."
+    completes: wrap_site
+
+  - name: instruction
+    only: script
+    owns: true
+    doc: |
+      Runs your function at one instruction inside a game function, by the
+      instruction's offset in the game's main code. Your function gets a table of
+      the registers, `x` with `x[0]` to `x[30]`, and the condition flags `n`, `z`,
+      `c` and `v`, and can change them. The changes apply only if your function
+      returns without an error. Afterward the game continues, and the instruction
+      that was at the offset runs as it would have.
+
+      Inside your function, every other Tsuchi call fails with `invalid`. This needs
+      code access. The offset belongs to one build of the game, so list the builds
+      your mod supports with `game` in its manifest.
+    params:
+      - {name: offset, type: u64, doc: "An aligned instruction offset in the game's main code."}
+      - {name: expected, type: u32, doc: "The instruction the game has there."}
+      - {name: fn, type: callback, doc: "Your function. It gets the registers."}
+    returns: {type: handle<hook_id>, doc: "The hook, to pass to `remove`."}
+    fails:
+      invalid: "The offset is outside the game's main code, its instruction can't be replayed, or this is called inside a hook."
+      busy: "The instruction there isn't `expected`, or another kind of code change owns it."
+      not_ready: "This install doesn't have code access."
+      capacity: "Every one of the 256 script hook gateways is in use."
     completes: wrap_site

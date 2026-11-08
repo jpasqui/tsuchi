@@ -301,13 +301,39 @@ void set_budget(lua_State* L, Budget* budget) {
     lua_rawsetp(L, LUA_REGISTRYINDEX, &kBudgetKey);
 }
 
-void begin_turn(lua_State* L) {
-    if (Budget* const used = budget(L)) used->run = 0;
+Turn::Turn(lua_State* L, uint64_t limit) : L_(L), used_(budget(L)) {
+    if (!used_ || used_->depth++) return;
+    outermost_ = true;
+    used_->run = 0;
+    used_->limit = limit;
+}
+
+Turn::~Turn() {
+    if (used_ && !--used_->depth) {
+        used_->limit = kTurn;
+        if (!used_->hook_pins && used_->close_pending) used_->close_pending(L_);
+    }
+}
+
+void pin_hook(lua_State* L) { if (Budget* used = budget(L)) ++used->hook_pins; }
+void unpin_hook(lua_State* L) {
+    Budget* used = budget(L);
+    if (used && used->hook_pins && !--used->hook_pins && used->close_pending && !used->depth)
+        used->close_pending(L);
+}
+void close_when_unused(lua_State* L, void (*close)(lua_State*)) {
+    Budget* used = budget(L);
+    if (used && (used->hook_pins || used->depth)) used->close_pending = close;
+    else close(L);
+}
+void report_hook_error(lua_State* L, const char* message) {
+    if (report_error) report_error(message);
+    else if (host(L)->mod && host(L)->mod->log) host(L)->mod->log(mod(L), message);
 }
 
 bool turn_over(lua_State* L) {
     const Budget* const used = budget(L);
-    return used && used->run > kTurn;
+    return used && used->run > used->limit;
 }
 
 lua_Integer check_integer(lua_State* L, int index, lua_Integer low, lua_Integer high) {
@@ -346,24 +372,29 @@ void deliver(Listener* listener, lua_CFunction call, const void* event) {
     if (!listener->live) return;
     lua_State* L = listener->L;
     if (!lua_checkstack(L, 3)) return; // no room to call anything: the event is lost
-    begin_turn(L);
+    Turn turn(L);
     lua_pushcfunction(L, call);
     lua_pushlightuserdata(L, const_cast<void*>(event));
     lua_rawgeti(L, LUA_REGISTRYINDEX, listener->function);
     if (lua_pcall(L, 2, 0, 0) == LUA_OK) return;
     // A handler that did not come back within its turn is not called again: it would hold the game still each time.
     if (turn_over(L)) listener->live = false;
-    begin_turn(L); // what follows is the framework's own, and short
+    // What follows is the framework's own, and short, so it runs on a fresh count. Afterward the count goes back to
+    // what the handler used, so a turn that this call continues isn't refilled by the handler's error.
+    Budget* const used = budget(L);
+    const uint64_t spent = used ? used->run : 0;
+    if (used) used->run = 0;
     if (report_error) {
         report_error(lua_type(L, -1) == LUA_TSTRING ? lua_tostring(L, -1) : "an error that is no text");
         lua_pop(L, 1);
-        return;
+    } else {
+        // Into the log, under the mod's name. Making the line can itself fail for want of memory, so it is done
+        // where that is caught; then the line is lost and the handler's error with it.
+        lua_pushcfunction(L, log_error);
+        lua_insert(L, -2);
+        if (lua_pcall(L, 1, 0, 0) != LUA_OK) lua_pop(L, 1);
     }
-    // Into the log, under the mod's name. Making the line can itself fail for want of memory, so it is done where
-    // that is caught; then the line is lost and the handler's error with it.
-    lua_pushcfunction(L, log_error);
-    lua_insert(L, -2);
-    if (lua_pcall(L, 1, 0, 0) != LUA_OK) lua_pop(L, 1);
+    if (used) used->run = spent;
 }
 
 } // namespace tsuchi_lua

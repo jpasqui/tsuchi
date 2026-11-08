@@ -5,6 +5,7 @@ extern "C" {
 }
 #include "tsuchi/tsuchi.h"
 #include <string.h>
+#include "../script_hooks.h"
 namespace tsuchi_js {
 constexpr uint64_t kTurn = 20'000'000;
 constexpr size_t kMemory = size_t(128) << 20;
@@ -22,6 +23,22 @@ size_t memory_held(State*);
 uint32_t handles_held(JSContext*);
 TSUCHI_Mod* mod(JSContext*);
 const TSUCHI_Host* host(JSContext*);
+class Turn {
+    State* s;
+public:
+    explicit Turn(JSContext*, uint64_t limit = kTurn);
+    ~Turn();
+    Turn(const Turn&) = delete;
+    Turn& operator=(const Turn&) = delete;
+};
+void pin_hook(JSContext*);
+void unpin_hook(JSContext*);
+tsuchi_script::Allowance& hook_allowance(JSContext*);
+bool turn_active(JSContext*);
+uint64_t turn_used(JSContext*);
+uint64_t turn_limit(JSContext*);
+void set_turn_limit(JSContext*, uint64_t);
+void report_hook_error(JSContext*, const char*);
 void begin_turn(JSContext*);
 bool turn_over(JSContext*);
 bool drain(JSContext*);
