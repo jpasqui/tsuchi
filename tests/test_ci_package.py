@@ -36,10 +36,12 @@ class CandidatePackage(unittest.TestCase):
             {'released': released, 'release_version': '0.2.0', 'api_version': 0}), encoding='utf-8')
 
     def test_tag_version_and_unreleased_abi_guards(self):
-        for tag in ('v0.2.0', 'v0.3.0-rc.1', 'v0.2.0-rc.01', 'v0.2.0-', 'v0.2.0-rc..1'):
+        for tag in ('v0.3.0-rc.1', 'v0.2.0-rc.01', 'v0.2.0-', 'v0.2.0-rc..1'):
             with self.subTest(tag=tag), self.assertRaises(ValueError):
                 ci_package.release_identity(self.root, tag)
         self.assertTrue(ci_package.release_identity(self.root, 'v0.2.0-rc.1')['prerelease'])
+        # A plain tag of an unreleased ABI is a prerelease.
+        self.assertTrue(ci_package.release_identity(self.root, 'v0.2.0')['prerelease'])
         self.lock(released=True)
         self.assertFalse(ci_package.release_identity(self.root, 'v0.2.0')['prerelease'])
         self.assertTrue(ci_package.release_identity(self.root)['prerelease'])
