@@ -22,7 +22,8 @@ namespace {
 
 constexpr uint8_t kTocMagic[16] = {'-', '=', '=', '-', '-', '=', '=', '-', '-', '=', '=', '-', '-', '=', '=', '-'};
 constexpr uint32_t kTocHeaderBytes = 144;
-constexpr uint8_t kTocVersion = 2;        // the version UE 4.26 writes, with an index of files
+constexpr uint8_t kTocVersion = 2;        // indexed TOCs
+constexpr uint8_t kTocVersionPartitioned = 3;
 constexpr uint8_t kEncrypted = 2;         // of the container's flags
 constexpr uint8_t kSigned = 4;
 constexpr uint8_t kExportBundleData = 2;  // the kinds of chunk the framework looks at
@@ -98,7 +99,13 @@ bool read_container_toc(const uint8_t* bytes, size_t size, ContainerToc& toc, co
                    block_bytes = u32_at(bytes + 32), methods = u32_at(bytes + 36), method_bytes = u32_at(bytes + 40),
                    block_size = u32_at(bytes + 44), index_bytes = u32_at(bytes + 48);
     const uint8_t flags = bytes[80]; // after the ID, at 56, and the key's GUID
-    if (version != kTocVersion) return wrong = "its table of contents is of another version of the engine than the game's", false;
+    if (version != kTocVersion && version != kTocVersionPartitioned)
+        return wrong = "its table of contents is of another version of the engine than the game's", false;
+    // Version 3 keeps this table layout and adds partition metadata in the
+    // header's reserved space. The game's reader accepts the layout, but our
+    // file path addresses one UCAS only, so split containers stay unsupported.
+    if (version == kTocVersionPartitioned && (u32_at(bytes + 52) != 1 || !u64_at(bytes + 88)))
+        return wrong = "its container needs more than one data file", false;
     if (flags & kEncrypted) return wrong = "its container is encrypted", false;
     if (header_bytes != kTocHeaderBytes || block_bytes != 12 || !block_size || (methods && method_bytes != 32)) return false;
     // The table: the chunks' IDs, where each one is, the blocks of the container's data, the names of
@@ -125,6 +132,8 @@ bool read_container_toc(const uint8_t* bytes, size_t size, ContainerToc& toc, co
         const uint64_t end = little_at(entry, 5) + compressed;
         if (end > toc.data_bytes) toc.data_bytes = end;
     }
+    if (version == kTocVersionPartitioned && toc.data_bytes > u64_at(bytes + 88))
+        return wrong = "its container's blocks extend beyond its data file", false;
     for (uint32_t i = 0; i < entries; ++i) {
         const uint8_t* id = bytes + ids_at + 12ull * i;
         const uint8_t kind = id[11];

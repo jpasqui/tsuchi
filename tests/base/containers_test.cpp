@@ -527,6 +527,31 @@ void unreadable_folders_fail() {
     tsuchi::forget_mods();
 }
 
+void single_partition_version_three() {
+    auto made = make_container(0xBAC, {{0xAA, "Carrot4/Content/Mods/leaf/T_A.uasset"}});
+    made.toc[16] = 3;
+    uint32_t partitions = 1;
+    uint64_t partition_size = UINT64_MAX;
+    std::memcpy(&made.toc[52], &partitions, 4);
+    std::memcpy(&made.toc[88], &partition_size, 8);
+    tsuchi::ContainerToc toc{}; const char* wrong = nullptr;
+    CHECK(tsuchi::read_container_toc(reinterpret_cast<const uint8_t*>(made.toc.data()), made.toc.size(), toc, wrong));
+    const uint64_t data_end = toc.data_bytes;
+    tsuchi::forget_container_toc(toc);
+    for (uint32_t count : {0u, 2u}) {
+        std::memcpy(&made.toc[52], &count, 4);
+        CHECK(!tsuchi::read_container_toc(reinterpret_cast<const uint8_t*>(made.toc.data()), made.toc.size(), toc, wrong));
+    }
+    std::memcpy(&made.toc[52], &partitions, 4);
+    for (uint64_t size : {uint64_t(0), uint64_t(1), data_end - 1}) {
+        std::memcpy(&made.toc[88], &size, 8);
+        CHECK(!tsuchi::read_container_toc(reinterpret_cast<const uint8_t*>(made.toc.data()), made.toc.size(), toc, wrong));
+    }
+    std::memcpy(&made.toc[88], &data_end, 8);
+    CHECK(tsuchi::read_container_toc(reinterpret_cast<const uint8_t*>(made.toc.data()), made.toc.size(), toc, wrong));
+    tsuchi::forget_container_toc(toc);
+}
+
 void blocked_mods_mount_nothing() {
     files.clear();
     install("app.lost", manifest("app.lost", ", \"requires\": {\"app.gone\": \"*\"}"), "Lost", make_container(0xB3, {{0xA4, "Carrot4/Content/Mods/lost/T_A.uasset"}}));
@@ -540,7 +565,7 @@ void blocked_mods_mount_nothing() {
     install("app.loose", manifest("app.loose"));
     files["rom:/tsuchi/mods/app.loose/Loose.utoc"] = make_container(0xB8, {}).toc;
     install("app.odd", manifest("app.odd"), "Odd name", make_container(0xB9, {}));
-    install("app.old", manifest("app.old"), "Old", make_container(0xBA, {}, {}, false, 3));
+    install("app.old", manifest("app.old"), "Old", make_container(0xBA, {}, {}, false, 4));
     begin();
     CHECK(mounts.empty());
     CHECK(blocked_with("app.lost", "app.gone") && blocked_with("app.broken", "mod.json"));
@@ -1232,6 +1257,7 @@ int main(int argc, char** argv) {
     tsuchi::set_log_sink(sink);
     if (argc == 6 && !std::strcmp(argv[1], "--admit")) return admit_real(argv);
     reads_a_table_of_contents();
+    single_partition_version_three();
     startup_compressed_claims();
     orders_names_raise();
     mounts_in_order();
