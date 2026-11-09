@@ -433,8 +433,10 @@ functions:
     no_memory: The ownership or retention record could not be allocated.
   users: [custom-mod-menus, kadan]
 - name: find_widget
-  doc: Finds a named widget in your UserWidget's own tree. It does not descend into another UserWidget's
-    private tree. A missing name returns no object. The result remains owned by the same root.
+  doc: Finds a named widget in an owned UserWidget's own tree. To look inside an authored nested
+    UserWidget, pass that widget on the next call. It must belong to a UserWidget created by your mod.
+    It does not search nested trees automatically. A missing name returns no object. Independently
+    created UserWidgets keep their own ownership, including when nested in another mod's tree.
   owns: true
   params:
   - {name: widget, type: handle<object>, doc: Your UserWidget root.}

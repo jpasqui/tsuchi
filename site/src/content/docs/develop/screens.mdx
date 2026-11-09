@@ -446,6 +446,10 @@ create it with `ui.create_widget`, then add it to the panel. It stays a widget o
 `ui.find_widget` on it finds its parts, and it comes out of the panel when either widget is destroyed.
 A part of that widget's own tree can't move into yours.
 
+You can also customize the stock parts authored inside a widget you created. Find the nested
+UserWidget by name, then pass it to `ui.find_widget` to find its inner controls. They remain owned
+by your original root. This does not grant access to another mod's independently created widget.
+
 ### Layout by reflection
 
 The engine's widget functions that UMG exposes to Blueprints are callable with

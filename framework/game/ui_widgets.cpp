@@ -150,15 +150,25 @@ void restore(const Hold&, Root*& root, HoldEnd) {
     retire(*root); finish(root); root = nullptr;
 }
 Holds<Root*, Want, create, keep, restore> roots{"ui.widget", HoldOn::object, false};
-bool belongs(const Root& root, uint64_t object) {
+Root* owner_of(uint64_t object) {
     for (uint32_t n = 0; object && n < 128; ++n) {
-        // A nested UserWidget owns a private tree. Its outer chain eventually
-        // reaches ours, but that does not make its internal widgets ours.
-        if (game::is_a(object, tree_class)) return object == resolve(root.tree);
+        // The nearest independently created UserWidget owns its entire authored
+        // subtree. Never cross that boundary to claim another mod's children.
+        const uint64_t handle = game::to_handle(object);
+        for (uint32_t i = 0; i < roots.count(); ++i) {
+            Root* root = roots.kept_at(i);
+            if (root && root->widget == handle) return root;
+        }
+        if (game::is_a(object, tree_class)) {
+            const uint64_t user = game::outer_of(object);
+            if (!game::is_a(user, user_class) ||
+                game::read_or<uint64_t>(user + t::ui_user_widget::tree) != object) return nullptr;
+        }
         object = game::outer_of(object);
     }
-    return false;
+    return nullptr;
 }
+bool belongs(const Root& root, uint64_t object) { return owner_of(object) == &root; }
 TSUCHI_Result locate(TSUCHI_Mod* mod, uint64_t handle, Root*& found, bool root_only = false) {
     found = nullptr;
     if (!available() || !mod || !mod_usable(mod)) return TSUCHI_INVALID;
@@ -326,10 +336,13 @@ TSUCHI_Result ui_construct_widget(TSUCHI_Mod* mod, TSUCHI_Object widget, TSUCHI_
 }
 TSUCHI_Result ui_find_widget(TSUCHI_Mod* mod, TSUCHI_Object widget, const char* name, TSUCHI_Object* out) {
     if (!out || !name || !*name) return TSUCHI_INVALID;
-    Root* root = nullptr; const auto result = locate(mod, widget.id, root, true);
+    Root* root = nullptr; const auto result = locate(mod, widget.id, root);
     if (result != TSUCHI_OK) return result;
     Use use(root); List<uint64_t> pending;
-    const uint64_t tree = resolve(root->tree);
+    const uint64_t user = resolve(widget.id);
+    if (!game::is_a(user, user_class)) return TSUCHI_INVALID;
+    const uint64_t tree = game::read_or<uint64_t>(user + t::ui_user_widget::tree);
+    if (!game::is_a(tree, tree_class) || game::outer_of(tree) != user) return TSUCHI_NOT_READY;
     const uint64_t first = tree ? game::read_or<uint64_t>(tree + t::ui_widget_tree::root) : 0;
     if (!tree) return TSUCHI_NOT_READY;
     if (first && (!game::live(first) || !pending.add(first))) return TSUCHI_NO_MEMORY;
@@ -341,6 +354,7 @@ TSUCHI_Result ui_find_widget(TSUCHI_Mod* mod, TSUCHI_Object widget, const char* 
     }
     pending.clear();
     if (!active(*root)) return TSUCHI_NOT_READY;
+    if (found && !belongs(*root, resolve(found))) return TSUCHI_DENIED;
     if (found && !pin(*root, found)) return TSUCHI_NO_MEMORY;
     *out = {found}; return TSUCHI_OK;
 }
@@ -406,10 +420,11 @@ TSUCHI_Result ui_add_child(TSUCHI_Mod* mod, TSUCHI_Object panel, TSUCHI_Object c
     if (nested && (other->viewport || other->adding_viewport || other->removing ||
         (t::bound(t::fn::ui_widget_in_viewport) && t::fn::ui_widget_in_viewport(reinterpret_cast<void*>(resolve(child.id)))))) return TSUCHI_BUSY;
     if (nested && !root->nested.reserve(root->nested.count + 1)) return TSUCHI_NO_MEMORY;
-    const uint64_t parent = resolve(panel.id), object = resolve(child.id), tree = resolve(root->tree);
+    const uint64_t parent = resolve(panel.id), object = resolve(child.id);
     if (!game::is_a(parent, panel_class) || parent == object) return TSUCHI_INVALID;
+    const uint64_t child_tree = game::outer_of(object);
     if (game::read_or<uint64_t>(object + t::ui_mod_list_tab::slot) ||
-        (tree && game::read_or<uint64_t>(tree + t::ui_widget_tree::root) == object)) return TSUCHI_BUSY;
+        (game::is_a(child_tree, tree_class) && game::read_or<uint64_t>(child_tree + t::ui_widget_tree::root) == object)) return TSUCHI_BUSY;
     uint64_t ancestor = parent;
     for (uint32_t n = 0; ancestor && n < 128; ++n) {
         if (ancestor == object) return TSUCHI_INVALID;
