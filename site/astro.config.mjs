@@ -35,6 +35,7 @@ const sidebars = {
         { label: 'Send network messages', slug: 'develop/network' },
         { label: 'Use IDs and kinds', slug: 'develop/ids-and-kinds' },
         { label: 'Add settings', slug: 'develop/settings' },
+        { label: 'Compose mods', slug: 'develop/compose-mods' },
         { label: 'Create a screen', slug: 'develop/screens' },
         { label: 'Save your mod data', slug: 'develop/save-data' },
         { label: 'Check compatibility', slug: 'develop/versions' },

@@ -143,6 +143,48 @@ Stopping or removing your mod doesn't erase the saved values.
 ## Public settings
 
 If a setting has `"public": true`, another mod can read it as
-`"olimar.clock:report"`. Other mods can't change it. Declare a dependency if the
+`"olimar.clock:report"`. Other mods can't write its saved preference. Declare a dependency if the
 other mod must be present, or handle `not_found` if reading its setting is optional.
 Trying to read a private setting returns `denied`.
+
+## Overrides
+
+Another mod can [declare an override](/develop/compose-mods/) for a player-facing
+setting. Your existing reads then return the effective value. Writes and resets
+return `denied` while the setting is controlled; the player's saved preference
+stays underneath. Listen for `settings.changed` to respond when a controller fails
+or restarts. Changing mod activation takes effect after restarting the game.
+
+Generated forms display the value and its controlling mod names as passive text.
+An open form closes if its controllers change, so reopening it builds the current
+controls. For a custom form, call `settings.controllers("report")`: empty text
+means it is editable, otherwise show the returned IDs and disable editing. The
+same `settings.changed` event reports changes of controllers.
+
+All visible settings allow overrides by default, independently of `public`.
+Use `"hidden": true` for internal counters or bookkeeping; those values are absent
+from generated forms and cannot be overridden. Use `"overridable": false` when a
+visible setting must remain under the player's control alone. Neither flag erases
+the saved preference.
+
+## Control a dependency during gameplay
+
+`settings.hold` temporarily controls a visible scalar setting without writing
+the player's saved preference. Declare the target as a direct required dependency.
+The target can opt out with `overridable: false`; hidden settings always opt out.
+
+```lua
+local cap = assert(settings.hold("jpasqui.population-cap:maximum", 200))
+assert(settings.update_hold(cap, 150))
+assert(settings.release_hold(cap))
+```
+
+The same calls are available in JavaScript and compiled mods. JavaScript integer
+values accept safe integers or BigInt. Values must match the boolean, integer or
+number setting and its manifest bounds. Runtime integer ranges still clamp the
+effective value. A hold ends when its owner stops, revealing the underlying
+preference without changing it. The generated form shows the controlling mod.
+
+Only one runtime hold may control each setting. Manifest overrides retain priority;
+new holds and updates report `busy` while a manifest controller is active.
+Existing runtime holds remain underneath until released or their owner stops.

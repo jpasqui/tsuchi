@@ -89,4 +89,14 @@ check(reflection.set(wordy,"Shape",{[long]:8}) && reflection.get(wordy,"Shape."+
 [result,written]=reflection.call(wordy,long); check(result===null && written[long]===41n && written.Tail===42n);
 for (const [code,fn] of [["not_found",()=>reflection.call(red,"Fly")],["not_found",()=>reflection.call(red,"Heal",{Speed:1})],["invalid",()=>reflection.call(red,"Heal",{Amount:"plenty"})],["invalid",()=>reflection.call(red,"Heal",{1:2})],["not_found",()=>reflection.call(body,"Heal")]]) check(fails(code,fn));
 for (const fn of [()=>reflection.call(red,"Heal",5),()=>reflection.call(red),()=>reflection.get(5,"Health"),()=>reflection.get(red),()=>reflection.set(red,"Health"),()=>combat.life(body)]) check(fails("TypeError",fn));
+const originalHealth = reflection.get(red,"Health");
+const heldField = reflection.hold_field(red,"Health",0.1,"");
+check(reflection.get(red,"Health") > 0.09);
+check(reflection.update_field(heldField,7) && reflection.get(red,"Health")===7);
+check(reflection.release_field(heldField) && reflection.get(red,"Health")===originalHealth);
+check(fails("invalid",()=>reflection.hold_field(red,"Health",{},"")));
+check(fails("invalid",()=>reflection.hold_field(red,"Health",NaN,"")));
+check(fails("TypeError",()=>reflection.hold_field(red,"Health\0ignored",1,"")));
+check(fails("not_found",()=>reflection.update_field(heldField,1)));
+check(reflection.get(red,"Health")===originalHealth);
 print("reflection same stand-in passed");
