@@ -447,6 +447,7 @@ int main(int argc,char** argv) {
  callbacks.host_lost(106);external_load_result=TSUCHI_INVALID;message.clear();
  callbacks.host_ready(107);assert(message.find("Load failed")!=std::string::npos&&message.find("menu full")!=std::string::npos&&message.find("manager")!=std::string::npos);
  cheat_menu_checks();
+ callbacks.host_lost(107);installed_page_checks(150);
  mod_stop(framework);assert(!callbacks.row(0,row));external.clear();external_load_result=TSUCHI_OK;
  diagnostic_samples();
  for(auto& record:records) { record.name.clear();record.settings.list.clear();release_json(record.manifest); }

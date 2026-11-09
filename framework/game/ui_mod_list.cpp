@@ -14,6 +14,9 @@
 #include "objects.h"
 #include "mods.h"
 #include "cost_clock.h"
+#include "packages.h"
+#include "ui_cheats.h"
+#include "frame.h"
 namespace tsuchi { namespace {
 TSUCHI_Mod* frontend_mod = nullptr;
 uint64_t current_host = 0, previous_buttons = UINT64_MAX;
@@ -49,10 +52,13 @@ List<Row> rows;
 uint32_t native_rows = 0;
 TSUCHI_Screen detail{}, settings{};
 TSUCHI_Dialog question{};
-enum class Question { none, dependency, save, defaults };
+enum class Question { none, dependency, save, defaults, remove };
 Question asking = Question::none;
 bool restart_needed = false, detail_external = false, external_overflow = false;
 char selected[kModIdBytes]{}, caption[641]{}, status[641]{};
+CheatMenu cheats;                // a mod's cheats, opened from its details
+char removing[33]{};             // the folder of the package a question asks to remove
+bool screen_up() { return detail.id || settings.id || cheats.showing(); }
 bool live() { return frontend_mod && mod_usable(frontend_mod) && current_host; }
 // Plain labels cannot smuggle stock rich-text markup. Keep the stored data exact.
 void plain(const char* text, char out[641], uint32_t limit = 637) {
@@ -170,7 +176,7 @@ void close_detail() {
     if (old.id && frontend_mod && mod_usable(frontend_mod)) ui::table.destroy(frontend_mod, old);
 }
 void show_detail(ModRecord& record) {
-    if (!live() || detail.id || settings.id) return;
+    if (!live() || screen_up()) return;
     TSUCHI_Screen screen{}; plain(record.name.get(), caption);
     TSUCHI_Result result = ui::table.create(frontend_mod, caption[0] ? caption : record.id, &screen);
     plain(description(record), status);
@@ -179,14 +185,25 @@ void show_detail(ModRecord& record) {
     if (result == TSUCHI_OK && record.problem.get()[0]) {
         plain(record.problem.get(), status); result = ui::table.add_text(frontend_mod, screen, "reason", "Reason", status);
     }
+    // A mod from a downloaded package says which, and the package can be removed here.
+    const package_store::Receipt* package = package_holding(record.id);
+    if (result == TSUCHI_OK && package) {
+        plain(package->title, caption, 300); plain(package->release, status, 300);
+        if (status[0]) { const size_t n = strlen(caption); if (n + 2 + strlen(status) < sizeof caption) { caption[n] = ' '; memcpy(caption + n + 1, status, strlen(status) + 1); } }
+        result = ui::table.add_text(frontend_mod, screen, "package", "Package", caption);
+        plain(package->source, status, 300);
+        if (result == TSUCHI_OK) result = ui::table.add_text(frontend_mod, screen, "source", "Source", status);
+    }
     if (result == TSUCHI_OK) result = ui::table.add_button(frontend_mod, screen, "earlier", "Move earlier");
     if (result == TSUCHI_OK) result = ui::table.add_button(frontend_mod, screen, "later", "Move later");
+    if (result == TSUCHI_OK && mod_has_cheats(record.id)) result = ui::table.add_button(frontend_mod, screen, "cheats", "Cheats");
+    if (result == TSUCHI_OK && package) result = ui::table.add_button(frontend_mod, screen, "remove", "Remove package");
     if (result == TSUCHI_OK) result = ui::table.hold_open(frontend_mod, screen);
     if (result == TSUCHI_OK && live()) { detail = screen; memcpy(selected, record.id, strlen(record.id) + 1); }
     else if (screen.id && mod_usable(frontend_mod)) ui::table.destroy(frontend_mod, screen);
 }
 void show_external_detail(const ExternalModEntry& record) {
-    if (!live() || detail.id || settings.id) return;
+    if (!live() || screen_up()) return;
     TSUCHI_Screen screen{}; plain(record.name.get(), caption);
     TSUCHI_Result result = ui::table.create(frontend_mod, caption[0] ? caption : record.id, &screen);
     const char* kind = record.kind == ExternalModKind::romfs ? "RomFS files" :
@@ -227,8 +244,28 @@ void show_external_detail(const ExternalModEntry& record) {
     } else if (screen.id && mod_usable(frontend_mod)) ui::table.destroy(frontend_mod, screen);
 }
 void activated(void*, const TSUCHI_UiActivated* event) {
+    if (live() && cheats.showing() && event->screen.id == cheats.screen().id) { cheats.activate(*event); return; }
     if (!live() || event->screen.id != detail.id || detail_external) return;
     auto* record = find_mod(selected); if (!record) { close_detail(); return; }
+    if (!strcmp(event->control, "cheats")) {
+        char id[kModIdBytes]; memcpy(id, record->id, strlen(record->id) + 1);
+        close_detail();
+        if (cheats.open(frontend_mod, id) != TSUCHI_OK) note("The cheats could not be shown.");
+        return;
+    }
+    if (!strcmp(event->control, "remove")) {
+        const package_store::Receipt* package = package_holding(record->id);
+        if (!package) return;
+        memcpy(removing, package->folder, sizeof removing);
+        close_detail();
+        plain(package->title, caption, 300);
+        char question[400] = "Remove the package ";
+        const char* tail = "? Its mods stop loading at the next start.";
+        const size_t used = strlen(question), n = strlen(caption), m = strlen(tail);
+        if (used + n + m < sizeof question) { memcpy(question + used, caption, n); memcpy(question + used + n, tail, m + 1); }
+        ask(Question::remove, question);
+        return;
+    }
     uint32_t index = 0; while (index < native_rows && rows[index].native != record) ++index;
     const char* before = nullptr;
     if (!strcmp(event->control, "earlier") && index && index < native_rows) before = rows[index - 1].native->id;
@@ -240,7 +277,12 @@ void activated(void*, const TSUCHI_UiActivated* event) {
         for (uint32_t i = 0; i < native_rows; ++i) if (rows[i].native == record) ui_mod_list_native_focus(current_host, i);
     } else note("The order could not be changed.");
 }
+void changed(void*, const TSUCHI_UiChoiceChanged* event) {
+    if (live() && cheats.showing()) cheats.change(*event);
+}
+void cheats_step() { if (live() && cheats.showing()) cheats.refresh(); else if (!live() && cheats.showing()) cheats.close(); }
 void closed(void*, const TSUCHI_UiClosed* event) {
+    if (cheats.showing() && event->screen.id == cheats.screen().id) cheats.close();
     if (event->screen.id == detail.id) close_detail();
     if (event->screen.id == settings.id) settings = {};
 }
@@ -248,6 +290,17 @@ void answered(void*, const TSUCHI_DialogAnswered* event) {
     if (!live() || event->dialog.id != question.id || asking == Question::none) return;
     const auto kind = asking; asking = Question::none; question = {};
     if (kind == Question::dependency) { if (event->accepted) manager.confirm(); else manager.cancel(); }
+    else if (kind == Question::remove) {
+        if (event->accepted) {
+            // The package by its folder: the list may have changed while the question was up.
+            TSUCHI_Result removed = TSUCHI_NOT_FOUND;
+            for (uint32_t i = 0; i < installed_package_count(); ++i)
+                if (!strcmp(installed_package(i)->folder, removing)) { removed = remove_installed_package(i); break; }
+            note(removed == TSUCHI_OK ? "Removed. Its mods stop loading when Pikmin 4 restarts." :
+                 removed == TSUCHI_BUSY ? "A download is running. Remove the package when it ends." : "The package could not be removed.");
+        }
+        removing[0] = 0;
+    }
     else if (kind == Question::defaults) {
         if (event->accepted) {
             if (manager.defaults() != TSUCHI_OK) note(manager.problem()[0] ? manager.problem() : "The defaults could not be restored.");
@@ -289,7 +342,7 @@ void answered(void*, const TSUCHI_DialogAnswered* event) {
     sync();
 }
 bool selected_action(uint64_t host, uint32_t index, uint32_t action, bool requested) {
-    if (!live() || host != current_host || asking != Question::none || detail.id || settings.id) return false;
+    if (!live() || host != current_host || asking != Question::none || screen_up()) return false;
     if (action == 5) {
         if (external_mods().unread()) { note("Saved requests unread; reopen Mods."); return true; }
         if (manager.changed() || external_mods().changed()) ask(Question::save, external_mods().changed() ?
@@ -344,7 +397,7 @@ bool keep(const Hold&, HoldNothing&) { return live(); }
 void restore(const Hold& hold, HoldNothing&, HoldEnd) {
     if (current_host != hold.object) return;
     current_host = 0; asking = Question::none; question = {}; previous_buttons = UINT64_MAX;
-    close_detail(); if (settings.id && mod_usable(frontend_mod)) ui::table.destroy(frontend_mod, settings);
+    close_detail(); cheats.close(); if (settings.id && mod_usable(frontend_mod)) ui::table.destroy(frontend_mod, settings);
     settings = {}; selected[0] = 0; rows.clear(); native_rows = 0; manager.cleanup(); external_mods().discard();
 }
 Holds<HoldNothing, HoldNothing, apply, keep, restore> sessions{"ui.mods", HoldOn::object, true};
@@ -369,7 +422,7 @@ void buttons(uint64_t held) {
     previous_buttons = held; ++tab_input_sample;
     const bool frontend_live = live();
     const uint32_t gates = uint32_t(!frontend_live) | (asking != Question::none ? 2u : 0u) |
-        (detail.id ? 4u : 0u) | (settings.id ? 8u : 0u);
+        (detail.id ? 4u : 0u) | (settings.id ? 8u : 0u) | (cheats.showing() ? 16u : 0u);
     const bool tracing = current_host && tab_session_traces < 12 && tab_input_traces < 48 &&
         (previous == UINT64_MAX || ((held | previous) & t::constant::ui_next_tab_button));
     TabInputTrace trace{};
@@ -402,6 +455,8 @@ void ui_mod_list_start(TSUCHI_Mod* framework) {
     TSUCHI_Subscription subscription{};
     ui::table.on_activated(frontend_mod, activated, nullptr, &subscription);
     ui::table.on_closed(frontend_mod, closed, nullptr, &subscription);
+    ui::table.on_choice_changed(frontend_mod, changed, nullptr, &subscription);
+    each_frame(cheats_step);
     dialog::table.on_answered(frontend_mod, answered, nullptr, &subscription);
     ui_mod_list_native_start(frontend_mod);
 }
