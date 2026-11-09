@@ -6,6 +6,11 @@ extern "C" {
 #include "tsuchi/tsuchi.h"
 #include <string.h>
 #include "../script_hooks.h"
+namespace tsuchi {
+struct EngineCall;
+struct ScriptWrite;
+struct ScriptWriteTree;
+} // namespace tsuchi
 namespace tsuchi_js {
 constexpr uint64_t kTurn = 20'000'000;
 constexpr size_t kMemory = size_t(128) << 20;
@@ -39,6 +44,17 @@ uint64_t turn_used(JSContext*);
 uint64_t turn_limit(JSContext*);
 void set_turn_limit(JSContext*, uint64_t);
 void report_hook_error(JSContext*, const char*);
+// A script hook's checks and its call, for every kind of script hook (script_hooks.cpp): hook_ready says whether a
+// hook can run now; run_hook runs `body` with `data` within one hook call's allowance, and false, with the
+// message in `error`, when it threw or ran out; a hook that ran out of its own allowance is `disabled`.
+// hook_returned is false, with an exception, for a value a hook must not return, such as a Promise.
+bool hook_ready(JSContext*, bool disabled);
+bool run_hook(JSContext*, bool (*body)(void*), void* data, bool& disabled, char* error, size_t capacity);
+bool hook_returned(JSContext*, JSValueConst returned);
+// Engine function hooks' values (reflect_values.cpp): the value at a path of a call, the way reflection.get gives a
+// field, and a copy of a value for a write.
+TSUCHI_Result engine_value(JSContext*, const tsuchi::EngineCall& call, const char* path, JSValue* out);
+TSUCHI_Result script_write(JSContext*, JSValueConst value, tsuchi::ScriptWriteTree& tree, tsuchi::ScriptWrite** out);
 void begin_turn(JSContext*);
 bool turn_over(JSContext*);
 bool drain(JSContext*);

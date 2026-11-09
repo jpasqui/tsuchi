@@ -1,5 +1,6 @@
 // Plain reflection values share the compiled service's validation and ownership.
 #include "tsuchi_js.h"
+#include "engine_hooks.h"
 #include "script_writes.h"
 #include <stdio.h>
 namespace {
@@ -10,14 +11,15 @@ using tsuchi_js::host;
 using tsuchi_js::mod;
 struct Target {
     JSContext* ctx; TSUCHI_Object object{}; TSUCHI_PreparedCall call{}; const char* row = nullptr;
+    const tsuchi::EngineCall* engine = nullptr; // a call an engine function hook sees, read without the service
     const TSUCHI_ReflectionService& api() const { return *host(ctx)->reflection; }
     const TSUCHI_DatatableService& tables() const { return *host(ctx)->datatable; }
-    TSUCHI_Result get(const char* p, TSUCHI_Value* v) const { return row ? tables().get(mod(ctx), object, row, p, v) : call.id ? api().call_get(mod(ctx), call, p, v) : api().get(mod(ctx), object, p, v); }
+    TSUCHI_Result get(const char* p, TSUCHI_Value* v) const { return engine ? tsuchi::engine_read(*engine, p, v) : row ? tables().get(mod(ctx), object, row, p, v) : call.id ? api().call_get(mod(ctx), call, p, v) : api().get(mod(ctx), object, p, v); }
     TSUCHI_Result set(const char* p, const TSUCHI_Value& v) const { return row ? tables().override(mod(ctx), object, row, p, &v) : call.id ? api().call_set(mod(ctx), call, p, &v) : api().set(mod(ctx), object, p, &v); }
-    TSUCHI_Result get_text(const char* p, char* b, uint64_t c, uint64_t* n) const { return row ? tables().get_text(mod(ctx), object, row, p, b, c, n) : call.id ? api().call_get_text(mod(ctx), call, p, b, c, n) : api().get_text(mod(ctx), object, p, b, c, n); }
+    TSUCHI_Result get_text(const char* p, char* b, uint64_t c, uint64_t* n) const { return engine ? tsuchi::engine_text(*engine, p, b, c, n) : row ? tables().get_text(mod(ctx), object, row, p, b, c, n) : call.id ? api().call_get_text(mod(ctx), call, p, b, c, n) : api().get_text(mod(ctx), object, p, b, c, n); }
     TSUCHI_Result set_text(const char* p, const char* t) const { return row ? tables().override_text(mod(ctx), object, row, p, t) : call.id ? api().call_set_text(mod(ctx), call, p, t) : api().set_text(mod(ctx), object, p, t); }
     TSUCHI_Result resize(const char* p, uint32_t n) const { return row ? TSUCHI_INVALID : call.id ? api().call_resize(mod(ctx), call, p, n) : api().resize(mod(ctx), object, p, n); }
-    TSUCHI_Result field_at(const char* p, uint32_t i, char* b, uint64_t c, uint64_t* n) const { return row ? tables().field_at(mod(ctx), object, row, p, i, b, c, n) : call.id ? api().call_field_at(mod(ctx), call, p, i, b, c, n) : api().field_at(mod(ctx), object, p, i, b, c, n); }
+    TSUCHI_Result field_at(const char* p, uint32_t i, char* b, uint64_t c, uint64_t* n) const { return engine ? tsuchi::engine_field_at(*engine, p, i, b, c, n) : row ? tables().field_at(mod(ctx), object, row, p, i, b, c, n) : call.id ? api().call_field_at(mod(ctx), call, p, i, b, c, n) : api().field_at(mod(ctx), object, p, i, b, c, n); }
 };
 struct Path {
     char text[4096]; size_t length = 0;
@@ -50,7 +52,10 @@ TSUCHI_Result get(const Target& t, Path& p, unsigned depth, JSValue* out) {
     case TSUCHI_VALUE_BOOLEAN: *out = JS_NewBool(ctx, v.as.boolean); break;
     case TSUCHI_VALUE_INTEGER: *out = JS_NewBigInt64(ctx, v.as.integer); break;
     case TSUCHI_VALUE_NUMBER: *out = JS_NewFloat64(ctx, v.as.number); break;
-    case TSUCHI_VALUE_OBJECT: *out = object(ctx, v.as.object.id); break;
+    case TSUCHI_VALUE_OBJECT:
+        // Inside a hook the service can't be asked what the object is.
+        *out = !t.engine ? object(ctx, v.as.object.id) : v.as.object.id ? tsuchi_js::push_handle(ctx, tsuchi::engine_object_kind(v.as.object.id), v.as.object.id) : JS_NULL;
+        break;
     case TSUCHI_VALUE_TEXT: {
         Buffer text(ctx); if (!text.resize(v.count)) return TSUCHI_NO_MEMORY;
         uint64_t n = 0; r = t.get_text(p.text, static_cast<char*>(text.data), v.count, &n);
@@ -239,3 +244,16 @@ JSValue tsuchi_js_reflection_call(JSContext* ctx, int argc, JSValueConst* argv) 
     if (r != TSUCHI_OK) return finish(ctx, r, JS_UNDEFINED);
     Value tuple(ctx, JS_NewArray(ctx)); JS_SetPropertyUint32(ctx, tuple, 0, result.take()); JS_SetPropertyUint32(ctx, tuple, 1, outputs.take()); return tuple.take();
 }
+namespace tsuchi_js {
+TSUCHI_Result engine_value(JSContext* ctx, const tsuchi::EngineCall& call, const char* path, JSValue* out) {
+    const Target t{ctx, {}, {}, nullptr, &call};
+    Path at;
+    if (!at.set(path)) return TSUCHI_INVALID;
+    *out = JS_UNDEFINED;
+    return get(t, at, 0, out);
+}
+TSUCHI_Result script_write(JSContext* ctx, JSValueConst value, tsuchi::ScriptWriteTree& tree, tsuchi::ScriptWrite** out) {
+    void* ancestors[17]{};
+    return materialize(ctx, value, 0, tree, out, ancestors);
+}
+} // namespace tsuchi_js

@@ -349,10 +349,15 @@ TSUCHI_Result service_wrap(TSUCHI_Mod* mod, const char* slot, void* function, TS
 }
 
 TSUCHI_Result (*dynamic_remove_function)(TSUCHI_Mod*, uint64_t) = nullptr;
+TSUCHI_Result (*engine_remove_function)(TSUCHI_Mod*, uint64_t) = nullptr;
 
 TSUCHI_Result service_remove(TSUCHI_Mod* mod, TSUCHI_HookId id) {
     if (dynamic_remove_function) {
         const TSUCHI_Result result = dynamic_remove_function(mod, id.id);
+        if (result != TSUCHI_NOT_FOUND) return result;
+    }
+    if (engine_remove_function) {
+        const TSUCHI_Result result = engine_remove_function(mod, id.id);
         if (result != TSUCHI_NOT_FOUND) return result;
     }
     if (native_hooks) {
@@ -390,6 +395,7 @@ void hooks_start() { hook::set_backend(&service); }
 void set_native_hooks(const NativeHooks* backend) { native_hooks = backend; }
 const NativeHooks* native_hooks_backend() { return native_hooks; }
 void set_dynamic_remove(TSUCHI_Result (*remove)(TSUCHI_Mod*, uint64_t)) { dynamic_remove_function = remove; }
+void set_engine_remove(TSUCHI_Result (*remove)(TSUCHI_Mod*, uint64_t)) { engine_remove_function = remove; }
 
 HookStats hook_stats() {
     Lock lock;

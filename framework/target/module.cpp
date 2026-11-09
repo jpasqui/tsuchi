@@ -15,6 +15,7 @@
 #include "cost_clock.h"
 #include "angles.h"
 #include "dynamic_hooks.h"
+#include "engine_hooks.h"
 #include "families.h"
 #include "flow.h"
 #include "frame.h"
@@ -237,6 +238,7 @@ extern "C" void tsuchi_initialize() {
     });
     hooks_start();
     dynamic_hooks_start();
+    engine_hooks_start();
     target::code_memory_start();
     reflect_start();
     actors_start();

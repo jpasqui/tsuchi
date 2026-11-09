@@ -784,7 +784,19 @@ structs:
   struct_type:                      # a class, a struct or a function: something with fields
     fields: {super: 0x40, properties: 0x50, bytes: 0x58, alignment: 0x5C}
   function:
-    fields: {flags: 0xB0}
+    # The native function the engine runs it with, as (object, frame, where the result goes): a Blueprint function's is
+    # the script interpreter. UObject::ProcessEvent (0x3988180) calls it at +0xD8. A Blueprint event without arguments
+    # runs as an entry into its class's event graph: ProcessEvent calls that function (+0xC8) instead, with this entry
+    # (+0xD0) as its one int32 argument.
+    fields: {flags: 0xB0, func: 0xD8, event_graph: 0xC8, event_graph_entry: 0xD0}
+  # The frame a function runs in (FFrame), as UObject::ProcessEvent builds it: the function, the object, its locals
+  # (the arguments first, laid out as the function's fields), and its list of the arguments it writes, which are
+  # elsewhere, in the caller's memory.
+  script_frame:
+    fields: {node: 0x10, object: 0x18, locals: 0x28, out_parms: 0x78}
+  out_parm:                         # one entry of that list (FOutParmRec)
+    size: 0x18
+    fields: {property: 0x0, address: 0x8, next: 0x10}
   class_type:
     fields: {default_object: 0x118}
   property:                         # one field of a struct_type

@@ -620,7 +620,12 @@ structs:
   struct_type:
     fields: {super: 0x48, properties: 0x60, bytes: 0x68, alignment: 0x6C}
   function:
-    fields: {flags: 0x70}
+    fields: {flags: 0x70, func: 0x80, event_graph: 0x88, event_graph_entry: 0x90}
+  script_frame:
+    fields: {node: 0x8, object: 0x10, locals: 0x20, out_parms: 0x30}
+  out_parm:
+    size: 0x20
+    fields: {property: 0x8, address: 0x0, next: 0x18}
   class_type:
     fields: {default_object: 0x78}
   property:

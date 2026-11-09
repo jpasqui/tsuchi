@@ -700,6 +700,21 @@ structs:
   function:
     fields:
       flags: 176
+      func: absent              # not checked in this build's code yet
+      event_graph: absent
+      event_graph_entry: absent
+  script_frame:
+    fields:
+      node: absent
+      object: absent
+      locals: absent
+      out_parms: absent
+  out_parm:
+    size: absent
+    fields:
+      property: absent
+      address: absent
+      next: absent
   class_type:
     fields:
       default_object: 280

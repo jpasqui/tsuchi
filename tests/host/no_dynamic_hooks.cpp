@@ -14,3 +14,5 @@ uint64_t stack_room() { return UINT64_MAX; }
 uint64_t engine_frame_number() { return 0; }
 bool each_dynamic_frame(void (*)()) { return true; }
 }
+// Nor engine function hooks.
+#include "no_engine_hooks.cpp"

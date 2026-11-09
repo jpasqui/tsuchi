@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "tsuchi_lua.h"
+#include "engine_hooks.h"
 #include "script_writes.h"
 
 namespace {
@@ -14,17 +15,20 @@ using tsuchi_lua::mod;
 
 constexpr int kMaxDepth = 16; // structs inside structs; references to objects are not followed
 
-// Where values are: an object's fields, the arguments and results of a call, or
-// a row of a data table, where `object` is the table.
+// Where values are: an object's fields, the arguments and results of a call, a
+// row of a data table, where `object` is the table, or a call that an engine
+// function hook sees, which is read without the service.
 struct Target {
     lua_State* L;
     TSUCHI_Object object{};
     TSUCHI_PreparedCall call{};
     const char* row = nullptr;
+    const tsuchi::EngineCall* engine = nullptr;
 
     const TSUCHI_ReflectionService& api() const { return *host(L)->reflection; }
     const TSUCHI_DatatableService& tables() const { return *host(L)->datatable; }
     TSUCHI_Result get(const char* path, TSUCHI_Value* out) const {
+        if (engine) return tsuchi::engine_read(*engine, path, out);
         if (row) return tables().get(mod(L), object, row, path, out);
         return call.id ? api().call_get(mod(L), call, path, out) : api().get(mod(L), object, path, out);
     }
@@ -33,6 +37,7 @@ struct Target {
         return call.id ? api().call_set(mod(L), call, path, &value) : api().set(mod(L), object, path, &value);
     }
     TSUCHI_Result get_text(const char* path, char* buffer, uint64_t capacity, uint64_t* needed) const {
+        if (engine) return tsuchi::engine_text(*engine, path, buffer, capacity, needed);
         if (row) return tables().get_text(mod(L), object, row, path, buffer, capacity, needed);
         return call.id ? api().call_get_text(mod(L), call, path, buffer, capacity, needed)
                     : api().get_text(mod(L), object, path, buffer, capacity, needed);
@@ -47,6 +52,7 @@ struct Target {
         return call.id ? api().call_resize(mod(L), call, path, count) : api().resize(mod(L), object, path, count);
     }
     TSUCHI_Result field_at(const char* path, uint32_t index, char* buffer, uint64_t capacity, uint64_t* needed) const {
+        if (engine) return tsuchi::engine_field_at(*engine, path, index, buffer, capacity, needed);
         if (row) return tables().field_at(mod(L), object, row, path, index, buffer, capacity, needed);
         return call.id ? api().call_field_at(mod(L), call, path, index, buffer, capacity, needed)
                     : api().field_at(mod(L), object, path, index, buffer, capacity, needed);
@@ -123,7 +129,11 @@ TSUCHI_Result push_value(const Target& target, Path& path, int depth) {
     case TSUCHI_VALUE_BOOLEAN: lua_pushboolean(L, value.as.boolean); return TSUCHI_OK;
     case TSUCHI_VALUE_INTEGER: lua_pushinteger(L, static_cast<lua_Integer>(value.as.integer)); return TSUCHI_OK;
     case TSUCHI_VALUE_NUMBER: lua_pushnumber(L, value.as.number); return TSUCHI_OK;
-    case TSUCHI_VALUE_OBJECT: push_object(L, value.as.object.id); return TSUCHI_OK;
+    case TSUCHI_VALUE_OBJECT:
+        // Inside a hook the service can't be asked what the object is.
+        if (target.engine) tsuchi_lua::push_handle(L, tsuchi::engine_object_kind(value.as.object.id), value.as.object.id);
+        else push_object(L, value.as.object.id);
+        return TSUCHI_OK;
     case TSUCHI_VALUE_TEXT: {
         luaL_Buffer buffer;
         char* text = luaL_buffinitsize(L, &buffer, value.count ? value.count : 1);
@@ -356,3 +366,16 @@ int tsuchi_lua_reflection_call(lua_State* L) {
     api.end_call(mod(L), target.call);
     return result == TSUCHI_OK ? 2 : tsuchi_lua::fail(L, result);
 }
+
+namespace tsuchi_lua {
+TSUCHI_Result push_engine_value(lua_State* L, const tsuchi::EngineCall& call, const char* path) {
+    const Target target{L, {}, {}, nullptr, &call};
+    Path at;
+    if (!at.set(path)) return TSUCHI_INVALID;
+    return push_value(target, at, 0);
+}
+TSUCHI_Result script_write(lua_State* L, int index, tsuchi::ScriptWriteTree& tree, tsuchi::ScriptWrite** out) {
+    const void* ancestors[kMaxDepth + 1]{};
+    return materialize(L, index, 0, tree, out, ancestors);
+}
+} // namespace tsuchi_lua

@@ -23,8 +23,9 @@ description: |
   still call them. If too many hooked calls are running at once, the next call
   goes straight to the game's original function.
 
-  Scripts use `wrap`, `watch`, and `instruction`. `remove` works for both
-  scripts and compiled mods; the other functions below are for compiled mods.
+  Scripts use `wrap`, `watch`, `instruction`, and `engine_function`. `remove`
+  works for both scripts and compiled mods; the other functions below are for
+  compiled mods.
 
   A compiled hook runs on whichever thread calls the game's function. Every
   Tsuchi call fails with `invalid` on other threads. A script wrapper or
@@ -300,4 +301,48 @@ functions:
       busy: "The instruction there isn't `expected`, or another kind of code change owns it."
       not_ready: "This install doesn't have code access."
       capacity: "Every one of the 256 script hook gateways is in use."
+    completes: wrap_site
+
+  - name: engine_function
+    only: script
+    owns: true
+    doc: |
+      Runs your handlers before and after one of the engine's reflected functions,
+      found by its path, such as `"/Script/Engine.PlayerController:ClientRestart"`
+      or `"/Game/Example/BP_Lamp.BP_Lamp_C:ReceiveBeginPlay"`. The path is the class's
+      path, a colon, and the function's name, the same as `reflection.path` gives
+      for the function. Case doesn't matter.
+
+      `handlers` is a table with `before`, `after`, or both. Each gets one table,
+      `call`, with `object`, the object the function runs on, and `args`, the
+      function's arguments by name. Values are the same as `reflection.get` gives.
+      `after` also gets `result`, the function's result, which is `nil` (or
+      `null`) for a function without one. A change to `call.args` in `before`
+      changes what the function gets. In `after`, a value that your function
+      returns replaces the result, and a change to `call.args` changes the
+      arguments the function writes. If a handler raises an error, none of its
+      changes apply.
+
+      Only calls that the engine makes through `ProcessEvent` reach your
+      handlers. Those are the calls that C++ code makes into reflected functions:
+      events such as `ReceiveBeginPlay`, input bindings, timers, delegates,
+      network calls, and `reflection.call`. A C++ function that other C++ code
+      calls directly, a function that a Blueprint calls, and a Blueprint
+      function that another Blueprint function calls all skip your handlers.
+
+      The rules of `wrap` apply: handlers run on the game thread only, every other
+      Tsuchi call fails with `invalid` inside them, and calls past 8 levels of
+      recursion skip them. The function keeps a hook of Tsuchi's until the game
+      closes. If the game unloads the class and loads it again, hook the new
+      function again.
+    params:
+      - {name: path, type: text, doc: "The function's path: the class's path, a colon, and the function's name."}
+      - {name: handlers, type: value, doc: "A table with `before`, `after`, or both, each a function that gets the call."}
+    returns: {type: handle<hook_id>, doc: "The hook, to pass to `remove`."}
+    fails:
+      invalid: "`handlers` has neither function, or this is called inside a hook."
+      not_found: "No function with that path is loaded."
+      not_ready: "The function's entry can't be read or written."
+      unsupported: "The running build of the game doesn't have what engine function hooks need."
+      capacity: "Every one of the 256 engine function hooks or hooked functions is in use."
     completes: wrap_site

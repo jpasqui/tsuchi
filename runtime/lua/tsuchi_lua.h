@@ -10,6 +10,12 @@ extern "C" {
 }
 #include "tsuchi/tsuchi.h"
 
+namespace tsuchi {
+struct EngineCall;
+struct ScriptWrite;
+struct ScriptWriteTree;
+} // namespace tsuchi
+
 namespace tsuchi_lua {
 
 // Sets up one Lua state for one mod: handle types, subscriptions and every service's table.
@@ -115,6 +121,16 @@ void pin_hook(lua_State* L);
 void unpin_hook(lua_State* L);
 void close_when_unused(lua_State* L, void (*close)(lua_State*));
 void report_hook_error(lua_State* L, const char* message);
+// A script hook's checks and its call, for every kind of script hook (script_hooks.cpp): ready says whether a
+// hook can run now; run_hook runs `body` with `data` as light userdata, protected and within one hook call's
+// allowance. False when it raised an error or ran out; the message goes in `error`, and a hook that ran out
+// of its own allowance is `disabled`.
+bool hook_ready(lua_State* L, bool disabled);
+bool run_hook(lua_State* L, lua_CFunction body, void* data, bool& disabled, char* error, size_t capacity);
+// Engine function hooks' values (reflect_values.cpp): pushes the value at a path of a call, the way
+// reflection.get pushes a field, or fails with nothing pushed; and copies the value at `index` for a write.
+TSUCHI_Result push_engine_value(lua_State* L, const tsuchi::EngineCall& call, const char* path);
+TSUCHI_Result script_write(lua_State* L, int index, tsuchi::ScriptWriteTree& tree, tsuchi::ScriptWrite** out);
 void open_services(lua_State* L); // generated
 
 } // namespace tsuchi_lua
