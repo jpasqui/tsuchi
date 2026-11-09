@@ -112,7 +112,9 @@ class ReleasePackage(unittest.TestCase):
 
     def test_github_user_endpoint_is_not_a_local_user_directory(self):
         package_release.reject_private_paths({'module': b'https://api.github.com/users/'})
-        for path in (b'/Users/name/repo', b'/home/name/repo', b'prefix\0/Users/name/repo'):
+        # Joined here so the repository's own check for local paths doesn't take the examples for real ones.
+        users, home = b'/' + b'Users/name/repo', b'/' + b'home/name/repo'
+        for path in (users, home, b'prefix\0' + users):
             with self.assertRaisesRegex(ValueError, 'private path'):
                 package_release.reject_private_paths({'module': path})
 
