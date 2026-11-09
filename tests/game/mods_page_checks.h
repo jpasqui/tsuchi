@@ -125,7 +125,24 @@ void mods_page_checks(uint64_t host) {
     assert(ui::table.hold_menu_input(rival) == TSUCHI_OK);
     mod_stop(rival); listener(0); listener(0);
     assert(!ui_menu_input_held());
-    mod_stop(pager);
+    // With an input service the game is shown no button while the page is held, and after the release not
+    // until the controller is at rest: the listener hears nothing meanwhile, since everything is hidden.
+    can_hide = true;
+    assert(ui::table.hold_menu_input(pager) == TSUCHI_OK && buttons_are_hidden && hides == 1);
+    assert(ui::table.hold_menu_input(pager) == TSUCHI_OK && hides == 1);
+    physical_buttons = uint64_t(game::table::constant::ui_confirm_button);
+    listener(0);
+    assert(ui::table.release_menu_input(pager) == TSUCHI_OK && buttons_are_hidden && ui_menu_input_held());
+    listener(0); listener(0);
+    assert(buttons_are_hidden && ui_menu_input_held() && shows == 0);
+    physical_buttons = 0;
+    listener(0);
+    assert(!buttons_are_hidden && !ui_menu_input_held() && shows == 1);
+    // A holder that stops is shown its buttons again the same way.
+    assert(ui::table.hold_menu_input(pager) == TSUCHI_OK && buttons_are_hidden && hides == 2);
+    mod_stop(pager); listener(0); listener(0);
+    assert(!buttons_are_hidden && !ui_menu_input_held() && shows == 2);
+    can_hide = false;
     callbacks.host_lost(host); active = 0;
 
     // ui.open_mods: the page on its own when Settings is not up, and the Mods tab when it takes input.

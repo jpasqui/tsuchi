@@ -727,9 +727,9 @@ functions:
   users: [mod-downloader, custom-mod-menus]
 - name: hold_menu_input
   doc: |
-    Keeps the game's menus from acting on presses while your mod shows a page of its own over them: the
-    title screen's menu, and Settings with the Mods page. Read the presses yourself with `input`. It ends
-    when released or your mod stops. The menus act again once every button has been let go.
+    Keeps the game's menus from acting on presses while your mod shows a page of its own over them. The
+    game is shown none of the first player's buttons meanwhile; `input.pad` still shows them to your mod.
+    It ends when released or your mod stops. The menus act again once every button has been let go.
   owns: true
   fails:
     busy: "Another mod holds the menus' input."

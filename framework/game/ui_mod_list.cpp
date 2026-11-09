@@ -72,9 +72,20 @@ uint32_t shown_entries = 0;      // how many of them the page showing now has
 bool leaving = false;            // the page on its own is to close: the game's own Back goes through
 bool screen_up() { return detail.id || settings.id || cheats.showing(); }
 // A mod's own page over the menus (ui.hold_menu_input): while it holds their input, and after it lets go
-// until every button is up, the list and the title menu act on no press.
+// until every button is up, the list and the title menu act on no press, and the game is shown no button at
+// all. The pause menu closes on Plus and Minus by a path of its own, which only hiding them stops.
 TSUCHI_Mod* input_holder = nullptr;
-bool input_quiet = false;
+bool input_quiet = false, buttons_hidden = false;
+// Ends the quiet after a release once nothing is down, and shows the game its buttons again.
+void settle_input() {
+    if (input_holder && !mod_usable(input_holder)) { input_holder = nullptr; input_quiet = true; }
+    if (!input_quiet || input_holder) return;
+    uint64_t down = 0;
+    // Without a reading of the controller, the press that released it may still be down: one step more.
+    if (buttons_hidden && ui_native_buttons_down(down) && down) return;
+    if (buttons_hidden) { ui_native_hide_buttons(false); buttons_hidden = false; }
+    input_quiet = false;
+}
 // A dialog on the screen, the game's own or any mod's, takes the presses. The list acts on none of them, nor
 // on the Confirm that closed it until that is let go.
 bool confirm_spent = false;
@@ -484,9 +495,10 @@ void buttons(uint64_t held) {
     namespace t = game::table;
     const uint64_t previous = previous_buttons, edges = held & ~previous;
     previous_buttons = held; ++tab_input_sample;
-    if (input_holder && !mod_usable(input_holder)) { input_holder = nullptr; input_quiet = true; }
-    if (input_quiet && !input_holder && !held) input_quiet = false;
-    if (input_holder || input_quiet) { confirm_spent = true; return; }
+    const bool was_quiet = input_quiet;
+    if (!buttons_hidden && input_quiet && !input_holder && held) { confirm_spent = true; return; }   // not hidden: wait for all up here
+    settle_input();
+    if (input_holder || input_quiet || was_quiet) { confirm_spent = true; return; }
     const bool frontend_live = live();
     if (leaving && frontend_live && asking == Question::none && !screen_up() && !dialog_up()) {
         // Sent until the menu takes it in: a message over the page keeps the menu's input for a while.
@@ -580,6 +592,8 @@ void entry_chosen(void*, const TSUCHI_UiEntryChosen* event) {
 TSUCHI_Result hold_menu_input(TSUCHI_Mod* mod) {
     if (!mod) return TSUCHI_INVALID;
     if (input_holder && input_holder != mod && mod_usable(input_holder)) return TSUCHI_BUSY;
+    // Hidden where an input service can: the list and the title menu are quiet either way.
+    if (!buttons_hidden) buttons_hidden = ui_native_hide_buttons(true);
     input_holder = mod; input_quiet = false;
     return TSUCHI_OK;
 }

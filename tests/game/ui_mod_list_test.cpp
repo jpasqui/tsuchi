@@ -45,6 +45,11 @@ unsigned expected_note_menu_calls = 0;
 bool note_ended_session = false;
 // The page on its own, the Mods tab shown directly, and the title menu's adapter for entries.
 bool page_alone = false;
+// The input service as the native adapter reaches it: whether buttons can be hidden from the game, how often
+// they were hidden and shown, and what is physically down.
+bool can_hide = false, buttons_are_hidden = false;
+unsigned hides = 0, shows = 0;
+uint64_t physical_buttons = 0;
 unsigned page_opens = 0, tab_shows = 0, stock_backs = 0;
 TSUCHI_Result page_open_result = TSUCHI_OK;
 uint64_t settings_host = 0;
@@ -143,6 +148,8 @@ bool ui_menu_action(uint64_t host,uint32_t action) {
  return known&&handled&&result;
 }
 bool ui_mod_page_alone() { return page_alone; }
+bool ui_native_hide_buttons(bool hide) { if (!can_hide) return false; ++(hide ? hides : shows); buttons_are_hidden = hide; return true; }
+bool ui_native_buttons_down(uint64_t& held) { if (!can_hide) return false; held = physical_buttons; return true; }
 bool ui_mod_page_supported() { return true; }
 TSUCHI_Result ui_mod_page_open() { ++page_opens; return page_open_result; }
 uint64_t ui_mod_list_native_host() { return settings_host; }

@@ -18,4 +18,9 @@ void ui_buttons_provider(bool (*read)(uint32_t player, uint64_t& buttons));
 void ui_menu_dispatcher(bool (*dispatch)(uint64_t host, uint32_t action, bool& handled, bool& result));
 bool ui_menu_action(uint64_t host, uint32_t action);
 void ui_button_listener(void (*listener)(uint64_t buttons));
+// For a mod's own page over the menus: hides every button of the first player's controller from the game, or
+// shows them again. False when there is no input service or another mod holds that controller's input.
+bool ui_native_hide_buttons(bool hide);
+// The buttons that are physically down on it, hidden ones included. False when that is not known.
+bool ui_native_buttons_down(uint64_t& held);
 }
