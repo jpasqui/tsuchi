@@ -20,6 +20,7 @@ struct Patch {
     uint64_t id;           // the native backend's
     uint16_t owner;        // the cheat's index, or cheat::kMaster
     bool used;
+    bool removing;         // off, but the game's instruction couldn't be put back yet: tried again each frame
 };
 
 // One mod's cheat file and what the player and the runs made of it.
@@ -32,6 +33,7 @@ struct Set {
     cheat::State state;
     Patch patches[kCheatPatches];
     bool needs_code[cheat::kCheats + 1]; // a run found a write to code it couldn't make; the last is the master's
+    bool code_refused[cheat::kCheats + 1]; // a run's write to code was refused: another holds the instruction
 };
 
 Set* sets[kCheatSets] = {};
@@ -73,9 +75,21 @@ Patch* free_patch(Set& set) {
 
 void drop_patch(Set& set, Patch& patch) {
     const NativeHooks* native = native_hooks_backend();
-    if (native) native->remove(set.context, patch.id); // gives the game its own instruction back
+    // Gives the game its own instruction back. Inside a hook, or before the code alias can be written, that can't
+    // happen yet: the patch is kept and tried again at the next frame. Any other answer means the patch is gone
+    // or someone else changed the instruction since, so there's nothing left to put back.
+    const TSUCHI_Result result = native ? native->remove(set.context, patch.id) : TSUCHI_OK;
+    if (result == TSUCHI_INVALID || result == TSUCHI_NOT_READY) {
+        patch.removing = true;
+        return;
+    }
     patch = Patch{};
     if (stats.patches) --stats.patches;
+}
+
+void retry_removals(Set& set) {
+    for (Patch& patch : set.patches)
+        if (patch.used && patch.removing) drop_patch(set, patch);
 }
 
 void drop_patches(Set& set, uint16_t owner) {
@@ -85,16 +99,21 @@ void drop_patches(Set& set, uint16_t owner) {
 
 uint32_t owner_slot(uint16_t owner) { return owner == cheat::kMaster ? cheat::kCheats : owner; }
 
-// Writes code by holding a patch on each word the write covers.
+// Writes code by holding a patch on each word the write covers. A cheat's code changes are all or nothing: a word
+// that can't be patched marks the cheat, and the run turns it off with every patch it holds.
 bool patch_code(Set& set, uint64_t address, const void* value, uint32_t bytes, uint16_t owner) {
     const NativeHooks* native = native_hooks_backend();
     if (!native) {
         set.needs_code[owner_slot(owner)] = true;
         return false;
     }
+    const auto refuse = [&] {
+        set.code_refused[owner_slot(owner)] = true;
+        return false;
+    };
     const uint8_t* source = static_cast<const uint8_t*>(value);
     for (uint64_t word = address & ~uint64_t(3); word < address + bytes; word += 4) {
-        if (!host.readable || !host.readable(word, 4)) return false;
+        if (!host.readable || !host.readable(word, 4)) return refuse();
         uint32_t current;
         memcpy(&current, reinterpret_cast<const void*>(word), sizeof current);
         uint8_t merged[4];
@@ -108,19 +127,30 @@ bool patch_code(Set& set, uint64_t address, const void* value, uint32_t bytes, u
         const uint64_t offset = word - host.code_start;
         uint32_t original = current;
         if (Patch* held = find_patch(set, offset)) {
+            if (held->removing) {
+                // Turned off but still in the game's code: wanted again as it is, it's kept.
+                if (held->replacement != wanted) return refuse();
+                held->removing = false;
+                held->owner = owner;
+                continue;
+            }
             if (held->replacement == wanted) continue;
-            if (held->owner != owner) return false; // another cheat of the file holds this instruction
+            if (held->owner != owner) return refuse(); // another cheat of the file holds this instruction
             original = held->original;
             drop_patch(set, *held);
+            if (held->used) return refuse(); // its earlier word couldn't be put back yet
         }
         if (wanted == original) continue; // the game's own instruction: nothing to hold
         Patch* patch = free_patch(set);
-        if (!patch) return false;
+        if (!patch) return refuse();
         uint64_t id = 0;
         const TSUCHI_Result result = native->patch(set.context, offset, original, wanted, &id);
-        if (result == TSUCHI_NOT_READY) set.needs_code[owner_slot(owner)] = true;
-        if (result != TSUCHI_OK) return false;
-        *patch = Patch{offset, original, wanted, id, owner, true};
+        if (result == TSUCHI_NOT_READY) {
+            set.needs_code[owner_slot(owner)] = true;
+            return false;
+        }
+        if (result != TSUCHI_OK) return refuse();
+        *patch = Patch{offset, original, wanted, id, owner, true, false};
         ++stats.patches;
     }
     return true;
@@ -403,6 +433,9 @@ void find_new() {
 // ---- Running ------------------------------------------------------------------
 
 uint32_t program[cheat::kProgramWords];
+// Atmosphère runs cheats twelve times a second, and existing cheats are written for that.
+constexpr uint64_t kRunMicroseconds = 1000000 / 12;
+uint64_t last_run = 0;
 uint16_t owners[cheat::kProgramWords];
 
 void turn_off(Set& set, uint32_t index, const char* why) {
@@ -426,6 +459,7 @@ void run_set(Set& set, const uint64_t base[4], uint64_t keys) {
         if (set.on[i]) add(set.file.cheats[i], uint16_t(i));
     cheat::Memory memory{{base[0], base[1], base[2], base[3]}, &set, read_memory, write_memory, keys, previous_keys};
     memset(set.needs_code, 0, sizeof set.needs_code);
+    memset(set.code_refused, 0, sizeof set.code_refused);
     const cheat::Report report = cheat::run(program, owners, count, memory, set.state);
     ++stats.runs;
     stats.faults += report.faults;
@@ -444,6 +478,12 @@ void run_set(Set& set, const uint64_t base[4], uint64_t keys) {
     if (set.needs_code[cheat::kCheats])
         for (uint32_t i = 0; i < set.file.count; ++i)
             if (set.on[i]) turn_off(set, i, code);
+    const char* refused = "the game's code it changes is already changed by Tsuchi, a mod or another cheat";
+    for (uint32_t i = 0; i < set.file.count; ++i)
+        if (set.on[i] && set.code_refused[i]) turn_off(set, i, refused);
+    if (set.code_refused[cheat::kCheats])
+        for (uint32_t i = 0; i < set.file.count; ++i)
+            if (set.on[i]) turn_off(set, i, "the master block's change to the game's code was refused");
     if (!any_on(set)) drop_patches(set, cheat::kMaster);
 }
 
@@ -462,6 +502,13 @@ void cheats_frame() {
     if (!choices_ready && !load_choices()) return;
     forget_stopped();
     find_new();
+    for (Set* set : sets)
+        if (set) retry_removals(*set);
+    if (host.now_us) {
+        const uint64_t now = host.now_us();
+        if (last_run && now - last_run < kRunMicroseconds) return;
+        last_run = now ? now : 1;
+    }
     uint64_t base[4] = {};
     if (!host.regions || !host.regions(base)) return;
     const uint64_t keys = host.keys ? host.keys() : 0;
@@ -492,7 +539,8 @@ bool cheat_at(uint32_t index, CheatEntry& out) {
 }
 
 TSUCHI_Result set_cheat(const char* mod_id, const char* name, bool on) {
-    if (!mod_id || !name || !on_game_thread()) return TSUCHI_INVALID;
+    // Inside a hook the game's code can't be put back, so a cheat isn't switched there.
+    if (!mod_id || !name || !on_game_thread() || in_hook_client()) return TSUCHI_INVALID;
     Set* set = set_of(mod_id);
     if (!set) return TSUCHI_NOT_FOUND;
     uint32_t index = 0;
@@ -520,6 +568,7 @@ void cheats_reset() {
         set = nullptr;
     }
     checked_count = 0;
+    last_run = 0;
     forget_saved();
     choices_ready = false;
     previous_keys = 0;

@@ -412,9 +412,10 @@ struct Machine {
                 break;
             }
             case 0x4: { // if these buttons are held, or were just pressed
+                // As Atmosphère: all of them held now; without repeat, not all of them held at the last run.
                 const uint64_t mask = uint64_t(w[1]) << 32 | w[2];
-                const uint64_t keys = nibble(first, 2) ? memory.keys : memory.keys & ~memory.previous_keys;
-                condition((keys & mask) == mask && mask);
+                const bool held = (memory.keys & mask) == mask;
+                condition(nibble(first, 2) ? held : held && (memory.previous_keys & mask) != mask);
                 break;
             }
             }

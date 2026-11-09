@@ -228,6 +228,14 @@ void buttons() {
     CHECK(at<uint32_t>(main_memory, 0) == 0);
     run(edge, 1, 0);
     CHECK(at<uint32_t>(main_memory, 0) == 1);
+    // As Atmosphère: a combination fires when its last button joins one already held.
+    clear();
+    const std::vector<uint32_t> combo = {0xC4000000, 0x00000000, 0x00000003, 0x04000000, 0x00000000, 0x00000001, 0x20000000};
+    run(combo, 3, 1);
+    CHECK(at<uint32_t>(main_memory, 0) == 1);
+    clear();
+    run(combo, 3, 3);
+    CHECK(at<uint32_t>(main_memory, 0) == 0);
 }
 
 void unreadable_instructions() {
@@ -308,8 +316,11 @@ void host_note(const char*, const char* text) { notes.push_back(text); }
 // A native backend that patches the test's code array, as the real one patches the game's.
 struct Held { uint64_t id, offset; uint32_t original, replacement; bool live; };
 std::vector<Held> held;
+uint64_t refused_offset = UINT64_MAX; // a word another owner holds
+int removals_not_ready = 0;           // removals that can't happen yet, as inside a hook
 TSUCHI_Result native_patch(TSUCHI_Mod*, uint64_t offset, uint32_t expected, uint32_t replacement, uint64_t* id) {
     if (offset + 4 > sizeof code) return TSUCHI_INVALID;
+    if (offset == refused_offset) return TSUCHI_BUSY;
     uint32_t there;
     std::memcpy(&there, code + offset, 4);
     if (there != expected) return TSUCHI_BUSY;
@@ -319,6 +330,10 @@ TSUCHI_Result native_patch(TSUCHI_Mod*, uint64_t offset, uint32_t expected, uint
     return TSUCHI_OK;
 }
 TSUCHI_Result native_remove(TSUCHI_Mod*, uint64_t id) {
+    if (removals_not_ready > 0) {
+        --removals_not_ready;
+        return TSUCHI_NOT_READY;
+    }
     for (Held& h : held)
         if (h.id == id && h.live) {
             uint32_t there;
@@ -355,6 +370,94 @@ uint32_t code_word(uint64_t offset) {
     uint32_t word;
     std::memcpy(&word, code + offset, 4);
     return word;
+}
+
+uint64_t clock_us = 0;
+uint64_t host_now() { return clock_us; }
+
+void code_changes_are_all_or_nothing() {
+    std::memset(code, 0, sizeof code);
+    std::memset(data, 0, sizeof data);
+    put<uint32_t>(code, 0x20, 0x540008CA);
+    put<uint32_t>(code, 0x24, 0x52800020);
+    cheat_text = "[Two words]\n04000000 00000020 D503201F\n04000000 00000024 D503201F\n";
+    tsuchi::set_native_hooks(&native);
+    start_runtime();
+    tsuchi::cheats_frame();
+    // The second word is held by someone else: the first is put back and the cheat goes off, saying why.
+    refused_offset = 0x24;
+    CHECK(tsuchi::set_cheat("cheat.mod", "Two words", true) == TSUCHI_OK);
+    tsuchi::cheats_frame();
+    tsuchi::CheatEntry entry{};
+    CHECK(tsuchi::cheat_at(0, entry) && !entry.on && std::strstr(entry.problem, "already changed"));
+    CHECK(code_word(0x20) == 0x540008CA && code_word(0x24) == 0x52800020 && tsuchi::cheat_stats().patches == 0);
+    refused_offset = UINT64_MAX;
+}
+
+void a_removal_that_has_to_wait_is_tried_again() {
+    std::memset(code, 0, sizeof code);
+    put<uint32_t>(code, 0x20, 0x540008CA);
+    cheat_text = "[No limit]\n04000000 00000020 D503201F\n";
+    tsuchi::set_native_hooks(&native);
+    start_runtime();
+    tsuchi::cheats_frame();
+    CHECK(tsuchi::set_cheat("cheat.mod", "No limit", true) == TSUCHI_OK);
+    tsuchi::cheats_frame();
+    CHECK(code_word(0x20) == 0xD503201F);
+    // Off while the backend can't write yet: the patch is still known, and goes at the next frame.
+    removals_not_ready = 1;
+    CHECK(tsuchi::set_cheat("cheat.mod", "No limit", false) == TSUCHI_OK);
+    CHECK(code_word(0x20) == 0xD503201F && tsuchi::cheat_stats().patches == 1);
+    tsuchi::cheats_frame();
+    CHECK(code_word(0x20) == 0x540008CA && tsuchi::cheat_stats().patches == 0);
+    // On again before the removal happened: the patch is kept as it is.
+    CHECK(tsuchi::set_cheat("cheat.mod", "No limit", true) == TSUCHI_OK);
+    tsuchi::cheats_frame();
+    removals_not_ready = 1;
+    CHECK(tsuchi::set_cheat("cheat.mod", "No limit", false) == TSUCHI_OK);
+    CHECK(tsuchi::set_cheat("cheat.mod", "No limit", true) == TSUCHI_OK);
+    removals_not_ready = 0;
+    tsuchi::cheats_frame();
+    CHECK(code_word(0x20) == 0xD503201F && tsuchi::cheat_stats().patches == 1);
+    tsuchi::CheatEntry entry{};
+    CHECK(tsuchi::cheat_at(0, entry) && entry.on && !entry.problem[0]);
+}
+
+void cheats_run_twelve_times_a_second() {
+    std::memset(data, 0, sizeof data);
+    cheat_text = "[Money]\n04100000 00000010 000003E7\n";
+    tsuchi::set_native_hooks(&native);
+    start_runtime();
+    tsuchi::CheatHost host;
+    host.mod_at = host_mod_at;
+    host.read_file = host_read;
+    host.load_choices = host_load;
+    host.save_choices = host_save;
+    host.regions = host_regions;
+    host.keys = host_keys;
+    host.readable = host_readable;
+    host.writable = host_writable;
+    host.code_start = code_at();
+    host.code_bytes = sizeof code;
+    host.build = "0123456789ABCDEF0011223344556677";
+    host.note = host_note;
+    host.now_us = host_now;
+    tsuchi::set_cheat_host(host);
+    clock_us = 1000000;
+    tsuchi::cheats_frame();
+    CHECK(tsuchi::set_cheat("cheat.mod", "Money", true) == TSUCHI_OK);
+    clock_us += 100000;
+    tsuchi::cheats_frame();
+    CHECK(at<uint32_t>(data, 0x10) == 999);
+    // A frame later, at 30 frames a second, the cheat waits.
+    put<uint32_t>(data, 0x10, 5);
+    clock_us += 33333;
+    tsuchi::cheats_frame();
+    CHECK(at<uint32_t>(data, 0x10) == 5);
+    // A twelfth of a second after its last run, it runs again.
+    clock_us += 50000;
+    tsuchi::cheats_frame();
+    CHECK(at<uint32_t>(data, 0x10) == 999);
 }
 
 void runtime() {
@@ -441,6 +544,9 @@ int main() {
     buttons();
     unreadable_instructions();
     runtime();
+    code_changes_are_all_or_nothing();
+    a_removal_that_has_to_wait_is_tried_again();
+    cheats_run_twelve_times_a_second();
     if (failures) std::printf("%d failures\n", failures);
     else std::puts("cheats passed");
     return failures;

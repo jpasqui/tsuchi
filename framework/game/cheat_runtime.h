@@ -45,6 +45,8 @@ struct CheatHost {
     const char* build = nullptr;
     // A line in the log, as a mod's.
     void (*note)(const char* mod_id, const char* text) = nullptr;
+    // Microseconds, for running cheats twelve times a second as Atmosphère does. Without it, every frame.
+    uint64_t (*now_us)() = nullptr;
 };
 void set_cheat_host(const CheatHost& host);
 // Finds new cheat files, forgets the cheats of mods that stopped, and runs the cheats that are on. The engine frame

@@ -1,5 +1,6 @@
 // The game behind the cheat runtime: the running mods, their files, the save, the controllers and memory.
 #include "cheat_runtime.h"
+#include "cost_clock.h"
 
 #include "files.h"
 #include "game.h"
@@ -80,6 +81,7 @@ void cheats_game_start(bool (*heap_alias_aslr)(uint64_t[3])) {
     host.code_bytes = t::builds[t::selected_build].code_size;
     host.build = t::builds[t::selected_build].build_id;
     host.note = mod_note;
+    host.now_us = cost_now;
     set_cheat_host(host);
     cheats_start();
 }
