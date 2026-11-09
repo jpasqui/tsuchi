@@ -37,7 +37,8 @@ it, Tsuchi calls it with the game's arguments. If the callback raises after call
 it, Tsuchi returns the last completed original call's result. Service calls inside
 the callback fail with `invalid`; keep the values it needs in script variables
 updated by event handlers. Lua callbacks cannot yield, and JavaScript callbacks
-cannot return promises or thenables. Queued JavaScript jobs run after the hook.
+cannot return promises or thenables. Promise jobs queued during a hook run when
+your mod next handles an event.
 
 If you pass a `text16` argument to `original` unchanged, the game gets its own text
 back. If you change it, the game gets a copy that lasts only for that call, so use a
@@ -47,7 +48,7 @@ Use `hook.watch(target, fn)` to hear calls at the next frame without changing th
 game's call. Each callback receives `args`, `result`, `thread`, and `dropped`.
 Lua's `args` starts at 1; JavaScript's starts at 0. Pointer arguments are numbers,
 not references that keep game objects alive. Text arguments are copied before
-the original runs. A watch holds 256 calls between frames. `dropped` counts the
+the original runs. A watch holds 256 calls between frames, and a mod can have 16 watches. `dropped` counts the
 calls your callback didn't hear since the one before, because the watch was full
 or your callback couldn't run.
 
@@ -65,9 +66,9 @@ and a shared per-frame allowance; other calls continue to the original.
 
 Remove any script hook with `hook.remove(id)`. Stopping the mod also removes it,
 and the runtime stays alive until calls already using its hooks have returned.
-Function and instruction targets need the code-access build described in
-[Port native hooks](/develop/native-hooks/); scripting does not grant code-write
-permissions. Table-entry hooks use the ordinary runtime.
+Function and instruction targets need code access, which the release's `main.npdm`
+gives every installation (see [Port native hooks](/develop/native-hooks/)). Without
+it they fail with `not_ready`. Table-entry hooks need no code access.
 
 ## Entries
 

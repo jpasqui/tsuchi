@@ -116,79 +116,19 @@ struct FillInline<0> {
 };
 
 #if defined(__aarch64__)
-// Every register a supported signature can use. See the header for why one prototype takes any of them.
-using IntFunction = uint64_t (*)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
-                                 double, double, double, double, double, double, double, double);
-using FloatFunction = float (*)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
-                                double, double, double, double, double, double, double, double);
-double as_double(uint64_t bits) {
-    double value;
-    __builtin_memcpy(&value, &bits, sizeof value);
-    return value;
+} // namespace
+} // namespace tsuchi
+// start.S: two instructions per gateway, and the call that hands a frame's registers to a function.
+extern "C" char tsuchi_dynamic_gateways[], tsuchi_dynamic_gateways_end[];
+extern "C" void tsuchi_dynamic_call(uint64_t target, tsuchi::CallFrame* frame);
+namespace tsuchi {
+namespace {
+uint64_t arm_gateway(uint32_t number, bool) {
+    const uint64_t first = reinterpret_cast<uint64_t>(tsuchi_dynamic_gateways);
+    const uint64_t count = (reinterpret_cast<uint64_t>(tsuchi_dynamic_gateways_end) - first) / 8;
+    return number < count && number < kDynamicGateways ? first + uint64_t(number) * 8 : 0;
 }
-uint64_t double_bits(double value) {
-    uint64_t bits;
-    __builtin_memcpy(&bits, &value, sizeof bits);
-    return bits;
-}
-#define TSUCHI_GATEWAY_PARAMETERS                                                                              \
-    uint64_t x0, uint64_t x1, uint64_t x2, uint64_t x3, uint64_t x4, uint64_t x5, uint64_t x6, uint64_t x7,  \
-        double d0, double d1, double d2, double d3, double d4, double d5, double d6, double d7
-#define TSUCHI_GATEWAY_FRAME                                                                                   \
-    CallFrame frame{{x0, x1, x2, x3, x4, x5, x6, x7},                                                         \
-                    {double_bits(d0), double_bits(d1), double_bits(d2), double_bits(d3), double_bits(d4),     \
-                     double_bits(d5), double_bits(d6), double_bits(d7)}}
-template <unsigned N>
-uint64_t int_gateway(TSUCHI_GATEWAY_PARAMETERS) {
-    TSUCHI_GATEWAY_FRAME;
-    tsuchi_dynamic_dispatch(N, &frame);
-    return frame.x[0];
-}
-template <unsigned N>
-float float_gateway(TSUCHI_GATEWAY_PARAMETERS) {
-    TSUCHI_GATEWAY_FRAME;
-    tsuchi_dynamic_dispatch(N, &frame);
-    const uint32_t bits = uint32_t(frame.f[0]);
-    float value;
-    __builtin_memcpy(&value, &bits, sizeof value);
-    return value;
-}
-#undef TSUCHI_GATEWAY_FRAME
-#undef TSUCHI_GATEWAY_PARAMETERS
-IntFunction int_gateways[kDynamicGateways];
-FloatFunction float_gateways[kDynamicGateways];
-template <unsigned N>
-struct FillWrap {
-    static void fill() {
-        FillWrap<N - 1>::fill();
-        int_gateways[N - 1] = &int_gateway<N - 1>;
-        float_gateways[N - 1] = &float_gateway<N - 1>;
-    }
-};
-template <>
-struct FillWrap<0> {
-    static void fill() {}
-};
-uint64_t arm_gateway(uint32_t number, bool float_result) {
-    if (number >= kDynamicGateways) return 0;
-    return float_result ? reinterpret_cast<uint64_t>(float_gateways[number]) : reinterpret_cast<uint64_t>(int_gateways[number]);
-}
-void arm_call(uint64_t target, CallFrame* frame, bool float_result) {
-    const uint64_t* x = frame->x;
-    const uint64_t* f = frame->f;
-    if (float_result) {
-        const float value = reinterpret_cast<FloatFunction>(target)(
-            x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], as_double(f[0]), as_double(f[1]), as_double(f[2]),
-            as_double(f[3]), as_double(f[4]), as_double(f[5]), as_double(f[6]), as_double(f[7]));
-        uint32_t bits;
-        __builtin_memcpy(&bits, &value, sizeof bits);
-        frame->f[0] = bits;
-    } else {
-        frame->x[0] = reinterpret_cast<IntFunction>(target)(
-            x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], as_double(f[0]), as_double(f[1]), as_double(f[2]),
-            as_double(f[3]), as_double(f[4]), as_double(f[5]), as_double(f[6]), as_double(f[7]));
-    }
-}
+void arm_call(uint64_t target, CallFrame* frame, bool) { tsuchi_dynamic_call(target, frame); }
 #endif
 
 bool gateways_ready = false;
@@ -196,7 +136,6 @@ void prepare_gateways() {
     if (gateways_ready) return;
     FillInline<kDynamicGateways>::fill();
 #if defined(__aarch64__)
-    FillWrap<kDynamicGateways>::fill();
     if (!platform.gateway) platform = DynamicPlatform{kDynamicGateways, arm_gateway, arm_call};
 #endif
     gateways_ready = true;
@@ -261,6 +200,8 @@ void copy_text(WatchRecord& record, uint32_t argument, uint64_t address, uint16_
 
 void (*frame_work[4])() = {};
 
+void call_original(uint64_t target, CallFrame& frame, CallType result);
+
 void watch_call(Record& record, CallFrame& frame, uint64_t original) {
     WatchRecord watched{};
     const Signature& signature = record.signature;
@@ -270,7 +211,7 @@ void watch_call(Record& record, CallFrame& frame, uint64_t original) {
         // The game's function may free or change the text, so it's copied before the call.
         if (signature.args[i] == CallType::text16) copy_text(watched, i, watched.args[i], used);
     }
-    call_with_frame(original, frame, signature.result);
+    call_original(original, frame, signature.result);
     watched.result = frame_result(frame, signature.result);
     watched.game_thread = known_game_thread_token() != 0;
     if (record.ring) push(*record.ring, watched);
@@ -415,25 +356,27 @@ uint64_t frame_argument(const CallFrame& frame, const Signature& signature, uint
     if (index >= signature.count) return 0;
     const CallType type = signature.args[index];
     const uint8_t reg = signature.reg[index];
-    return normalized(type, is_float(type) ? frame.f[reg] : frame.x[reg]);
+    return normalized(type, is_float(type) ? frame.q[reg][0] : frame.x[reg]);
 }
 
 void set_frame_argument(CallFrame& frame, const Signature& signature, uint32_t index, uint64_t bits) {
     if (index >= signature.count) return;
     const CallType type = signature.args[index];
     const uint8_t reg = signature.reg[index];
-    (is_float(type) ? frame.f[reg] : frame.x[reg]) = normalized(type, bits);
+    (is_float(type) ? frame.q[reg][0] : frame.x[reg]) = normalized(type, bits);
 }
 
 uint64_t frame_result(const CallFrame& frame, CallType type) {
-    return normalized(type, is_float(type) ? frame.f[0] : frame.x[0]);
+    return normalized(type, is_float(type) ? frame.q[0][0] : frame.x[0]);
 }
 
 void set_frame_result(CallFrame& frame, CallType type, uint64_t bits) {
     if (type == CallType::void_) return;
-    (is_float(type) ? frame.f[0] : frame.x[0]) = normalized(type, bits);
+    (is_float(type) ? frame.q[0][0] : frame.x[0]) = normalized(type, bits);
 }
 
+// A client's `original`: the barrier its call raised is lifted while the game's function runs, so other mods'
+// hooks it reaches work as usual.
 void call_with_frame(uint64_t target, CallFrame& frame, CallType result) {
     if (!target || !platform.call) return;
     const bool game_thread = known_game_thread_token() != 0;
@@ -441,6 +384,14 @@ void call_with_frame(uint64_t target, CallFrame& frame, CallType result) {
     platform.call(target, &frame, is_float(result));
     if (game_thread) hook_client_restore(barrier);
 }
+
+// The original when no client runs for this call. A barrier stays as it was: the call may come from inside a
+// script runtime, such as its allocator, and must not let a hook further in enter that runtime.
+namespace {
+void call_original(uint64_t target, CallFrame& frame, CallType result) {
+    if (target && platform.call) platform.call(target, &frame, is_float(result));
+}
+} // namespace
 
 TSUCHI_Result dynamic_hook(TSUCHI_Mod* mod, DynamicKind kind, const DynamicTarget& target, const Signature& signature,
                            const DynamicClient& client, void* user, uint64_t* id) {
@@ -468,6 +419,9 @@ TSUCHI_Result dynamic_hook(TSUCHI_Mod* mod, DynamicKind kind, const DynamicTarge
     if (target.site != DynamicSite::entry && !native) return TSUCHI_NOT_READY;
     Ring* ring = nullptr;
     if (kind == DynamicKind::watch) {
+        uint32_t watches = 0;
+        for (const Record& other : records) watches += other.id && other.mod == mod && other.kind == DynamicKind::watch;
+        if (watches >= kWatchesPerMod) return TSUCHI_CAPACITY;
         ring = static_cast<Ring*>(allocate(sizeof(Ring)));
         if (!ring) return TSUCHI_NO_MEMORY;
         memset(ring, 0, sizeof *ring);
@@ -589,7 +543,7 @@ extern "C" void tsuchi_dynamic_dispatch(uint32_t gateway, tsuchi::CallFrame* fra
         return;
     }
     if (!client_may_run(record)) {
-        call_with_frame(original, *frame, result);
+        call_original(original, *frame, result);
         return;
     }
     const CallFrame game = *frame;
@@ -601,6 +555,6 @@ extern "C" void tsuchi_dynamic_dispatch(uint32_t gateway, tsuchi::CallFrame* fra
     if (!done) {
         count(counters.failed);
         *frame = game;
-        call_with_frame(original, *frame, result);
+        call_original(original, *frame, result);
     }
 }

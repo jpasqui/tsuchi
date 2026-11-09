@@ -57,7 +57,9 @@ Shape shape = Shape::integers;
 
 template <unsigned N>
 uint64_t integer_gateway(uint64_t a, uint64_t b, uint64_t c, uint64_t d, uint64_t e, uint64_t f) {
-    CallFrame frame{{a, b, c, d, e, f, 0, 0}, {}};
+    CallFrame frame{};
+    const uint64_t args[] = {a, b, c, d, e, f};
+    for (unsigned i = 0; i < 6; ++i) frame.x[i] = args[i];
     tsuchi_dynamic_dispatch(N, &frame);
     return frame.x[0];
 }
@@ -74,7 +76,10 @@ float bits_float(uint64_t bits) {
 }
 template <unsigned N>
 void tick_gateway(void* engine, float seconds, bool idle) {
-    CallFrame frame{{reinterpret_cast<uint64_t>(engine), uint64_t(idle), 0, 0, 0, 0, 0, 0}, {float_bits(seconds)}};
+    CallFrame frame{};
+    frame.x[0] = reinterpret_cast<uint64_t>(engine);
+    frame.x[1] = uint64_t(idle);
+    frame.q[0][0] = float_bits(seconds);
     tsuchi_dynamic_dispatch(N, &frame);
 }
 template <size_t... I>
@@ -96,7 +101,7 @@ void host_call(uint64_t target, CallFrame* frame, bool) {
     if (shape == Shape::integers) {
         frame->x[0] = thunks::call(target, frame->x[0], frame->x[1], frame->x[2], frame->x[3], frame->x[4], frame->x[5]);
     } else {
-        reinterpret_cast<thunks::EngineTick>(target)(reinterpret_cast<void*>(frame->x[0]), bits_float(frame->f[0]), frame->x[1] != 0);
+        reinterpret_cast<thunks::EngineTick>(target)(reinterpret_cast<void*>(frame->x[0]), bits_float(frame->q[0][0]), frame->x[1] != 0);
     }
 }
 
@@ -149,6 +154,12 @@ uint64_t recursive_entry = 0;
 uint64_t recursive_stock(uint64_t level, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t) {
     if (level >= 10) return level;
     return thunks::call(fake::get<uint64_t>(recursive_entry), level + 1, 0, 0, 0, 0, 0);
+}
+// The game's function calls another hooked function through its entry.
+uint64_t inner_entry = 0;
+uint64_t inner_stock(uint64_t a, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t) { return a + 1; }
+uint64_t outer_stock(uint64_t a, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t) {
+    return thunks::call(fake::get<uint64_t>(inner_entry), a, 0, 0, 0, 0, 0);
 }
 uint64_t text_stock(uint64_t text, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t) {
     // The game's function changes the text it was given.
@@ -270,7 +281,10 @@ void signatures() {
     CHECK(tsuchi::parse_signature("void(u64,u64,u64,u64,u64,u64,u64,u64,f32)", signature) == TSUCHI_OK);
     // Bits keep the meaning of their type.
     signature = parsed("void(bool, i32, u32, f32)");
-    CallFrame frame{{0x1234500, 0xFFFFFFFFull | (7ull << 40), 0xFFFFFFFFull | (7ull << 40)}, {0xAAAAAAAA3F800000ull}};
+    CallFrame frame{};
+    frame.x[0] = 0x1234500;
+    frame.x[1] = frame.x[2] = 0xFFFFFFFFull | (7ull << 40);
+    frame.q[0][0] = 0xAAAAAAAA3F800000ull;
     CHECK(tsuchi::frame_argument(frame, signature, 0) == 0);
     CHECK(tsuchi::frame_argument(frame, signature, 1) == UINT64_MAX);
     CHECK(tsuchi::frame_argument(frame, signature, 2) == 0xFFFFFFFFull);
@@ -351,6 +365,56 @@ void recursion_stops_at_the_depth_limit(TSUCHI_Mod* mod) {
     CHECK(client.calls == int(tsuchi::kDynamicDepth));
     CHECK(tsuchi::dynamic_stats().depth == deep + 3);
     tsuchi::dynamic_remove(mod, id);
+    tsuchi::dynamic_hooks_frame();
+}
+
+// A script runtime's allocator raises the barrier and reaches a hooked function. No client runs there, and the
+// original it goes to keeps the barrier up, so a hook further in can't enter the runtime either.
+void a_barrier_stays_up_on_the_way_to_an_original(TSUCHI_Mod* mod) {
+    inner_entry = new_entry(inner_stock);
+    const uint64_t outer_entry = new_entry(outer_stock);
+    Client outer, inner, watcher;
+    outer.mod = inner.mod = watcher.mod = mod;
+    uint64_t outer_id = 0, inner_id = 0, watch_id = 0;
+    CHECK(tsuchi::dynamic_hook(mod, DynamicKind::wrap, DynamicTarget{DynamicSite::entry, offset_of(inner_entry), 0},
+                               parsed("u64(u64)"), client_for(), &inner, &inner_id) == TSUCHI_OK);
+    CHECK(tsuchi::dynamic_hook(mod, DynamicKind::wrap, DynamicTarget{DynamicSite::entry, offset_of(outer_entry), 0},
+                               parsed("u64(u64)"), client_for(), &outer, &outer_id) == TSUCHI_OK);
+    // No barrier: both clients add ten, the inner one reached through the outer one's original.
+    CHECK(thunks::call(fake::get<uint64_t>(outer_entry), 1, 0, 0, 0, 0, 0) == 22 && outer.calls == 1 && inner.calls == 1);
+    tsuchi::hook_client_enter();
+    CHECK(thunks::call(fake::get<uint64_t>(outer_entry), 1, 0, 0, 0, 0, 0) == 2);
+    tsuchi::hook_client_leave();
+    CHECK(outer.calls == 1 && inner.calls == 1);
+    // The same through a watch, which calls the original without a client.
+    tsuchi::dynamic_remove(mod, outer_id);
+    tsuchi::dynamic_hooks_frame();
+    CHECK(tsuchi::dynamic_hook(mod, DynamicKind::watch, DynamicTarget{DynamicSite::entry, offset_of(outer_entry), 0},
+                               parsed("u64(u64)"), client_for(), &watcher, &watch_id) == TSUCHI_OK);
+    tsuchi::hook_client_enter();
+    CHECK(thunks::call(fake::get<uint64_t>(outer_entry), 1, 0, 0, 0, 0, 0) == 2);
+    tsuchi::hook_client_leave();
+    CHECK(inner.calls == 1);
+    tsuchi::dynamic_remove(mod, watch_id);
+    tsuchi::dynamic_remove(mod, inner_id);
+    tsuchi::dynamic_hooks_frame();
+}
+
+void a_mod_has_at_most_sixteen_watches(TSUCHI_Mod* mod) {
+    const uint64_t entry = new_entry(stock);
+    Client client;
+    client.mod = mod;
+    uint64_t ids[tsuchi::kWatchesPerMod] = {}, extra = 0;
+    for (uint64_t& id : ids)
+        CHECK(tsuchi::dynamic_hook(mod, DynamicKind::watch, DynamicTarget{DynamicSite::entry, offset_of(entry), 0},
+                                   parsed("u64(u64, u64)"), client_for(), &client, &id) == TSUCHI_OK);
+    CHECK(tsuchi::dynamic_hook(mod, DynamicKind::watch, DynamicTarget{DynamicSite::entry, offset_of(entry), 0},
+                               parsed("u64(u64, u64)"), client_for(), &client, &extra) == TSUCHI_CAPACITY);
+    // Another mod has its own allowance.
+    CHECK(tsuchi::dynamic_hook(other_mod, DynamicKind::watch, DynamicTarget{DynamicSite::entry, offset_of(entry), 0},
+                               parsed("u64(u64, u64)"), client_for(), &client, &extra) == TSUCHI_OK);
+    tsuchi::dynamic_remove(other_mod, extra);
+    for (uint64_t id : ids) tsuchi::dynamic_remove(mod, id);
     tsuchi::dynamic_hooks_frame();
 }
 
@@ -551,7 +615,8 @@ int main() {
     for (uint64_t pointer : all_tick) fake::code().push_back(pointer);
     for (auto pointer : {reinterpret_cast<uint64_t>(stock), reinterpret_cast<uint64_t>(holding_stock),
                          reinterpret_cast<uint64_t>(text_stock), reinterpret_cast<uint64_t>(tick_stock),
-                         reinterpret_cast<uint64_t>(inline_end), reinterpret_cast<uint64_t>(compiled)})
+                         reinterpret_cast<uint64_t>(inline_end), reinterpret_cast<uint64_t>(compiled),
+                         reinterpret_cast<uint64_t>(inner_stock), reinterpret_cast<uint64_t>(outer_stock)})
         fake::code().push_back(pointer);
     tsuchi::set_dynamic_platform(tsuchi::DynamicPlatform{tsuchi::kDynamicGateways, host_gateway, host_call});
     tsuchi::set_thread_probe(thread_number);
@@ -575,6 +640,8 @@ int main() {
 
     wraps_share_chains_with_compiled_hooks(mod);
     recursion_stops_at_the_depth_limit(mod);
+    a_barrier_stays_up_on_the_way_to_an_original(mod);
+    a_mod_has_at_most_sixteen_watches(mod);
     a_stock_check_refuses_a_changed_entry(mod);
     removal_waits_for_running_calls(mod);
     watches(mod);
