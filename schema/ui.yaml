@@ -684,6 +684,30 @@ functions:
     busy: "A screen is open over the menu."
     unsupported: "This build of the game has no adapter for the Mods page."
   users: [mod-downloader, custom-mod-menus]
+- name: create_texture
+  doc: Creates a texture from pixels and keeps it for your mod, such as a picture downloaded with net.get.
+    Show it with reflection, for example Image.SetBrushFromTexture on a widget your mod owns. Release it when
+    no widget shows it. It ends when your mod stops.
+  owns: true
+  params:
+  - {name: width, type: u32, doc: "The width in pixels, from 1 to 2048."}
+  - {name: height, type: u32, doc: "The height in pixels, from 1 to 2048."}
+  - {name: pixels, type: bytes, doc: "Four bytes a pixel, red, green, blue and alpha, row by row from the top: exactly width times height times 4 bytes."}
+  returns: {type: handle<object>, doc: "The texture, which is a Texture2D."}
+  fails:
+    invalid: "A size is outside its range, or the pixels are not width times height times 4 bytes."
+    unsupported: This build of the game has no adapter for textures.
+    not_ready: The engine did not make the texture.
+    no_memory: The texture could not be kept.
+  users: [mod-downloader, custom-mod-menus]
+- name: release_texture
+  doc: Lets go of a texture your mod created. The engine collects it once nothing else uses it.
+  owns: true
+  params:
+  - {name: texture, type: handle<object>, doc: Your texture.}
+  fails:
+    not_found: Your mod has no such texture.
+  completes: create_texture
 events:
 - name: activated
   doc: Emitted when the player selects a button. Only the screen's owning mod receives this event.

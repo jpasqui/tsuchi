@@ -295,6 +295,8 @@ constants:
   shader_map_registered: 0x1        # the bit of a shader map's `flags` that says the engine finds it by its hash
   listed_pikmin_types: 8            # the types of Pikmin the list of areas shows beside an area: this many, counted from the first
   widget_visible: 0                 # a widget is drawn and takes input
+  texture_format_bgra8: 2           # EPixelFormat PF_B8G8R8A8: four bytes a pixel, blue first
+  texture_not_offline_processed: 0x10  # the bit of UTexture2D's flags byte for bNotOfflineProcessed
   widget_collapsed: 1               # how a widget is shown when it is not drawn and takes no room,
   widget_hidden: 2                  # and when it is not drawn and keeps its room
   collision_records_most: 128       # how many collision parts the game's own rebuild of an actor's tree has room for,
@@ -800,6 +802,11 @@ structs:
   announce_widget:
     fields: {wait_time: 0x514,        # seconds the banner stays
              state: 0x540}            # see the announce_ constants
+  # UTexture2D: its PlatformData, the byte holding bNotOfflineProcessed, and UpdateResource in its function table.
+  texture_2d: {fields: {platform_data: 0x190, flags: 0x85, update_resource: {at: 0x2E0, args: [pointer]}}}
+  # FTexturePlatformData: size, pixel format, and the array of FTexture2DMipMap pointers.
+  texture_platform_data: {fields: {width: 0x0, height: 0x4, format: 0xC, mips: 0x18, mip_count: 0x20}}
+  texture_mip: {fields: {bulk_data: 0x10}}   # FTexture2DMipMap: its FByteBulkData
   widget_table:                     # entries in a widget's function table
     fields: {set_visibility: {at: 0x288, args: [pointer, u32]}}   # (widget, how)
   sound_system:
@@ -1423,6 +1430,10 @@ functions:
   ui_context_world: {address: 0x05B14720, returns: pointer, args: [pointer, pointer, u32]}
   ui_widget_in_viewport: {address: 0x4c97e00, returns: bool, args: [pointer]}
   ui_widget_viewport: {address: 0x04C94C80, args: [pointer, i32, bool]}
+  texture_create_transient: {address: 0x5AB0820, returns: pointer, args: [i32, i32, u32, u64]}  # UTexture2D::CreateTransient(width, height, format, name)
+  bulk_data_size: {address: 0x381F120, returns: u64, args: [pointer]}     # FBulkDataBase::GetBulkDataSize
+  bulk_data_lock: {address: 0x3821230, returns: pointer, args: [pointer, u32]}  # FBulkDataBase::Lock(bulk, flags): 2 reads and writes
+  bulk_data_unlock: {address: 0x3821420, args: [pointer]}                 # FBulkDataBase::Unlock
   ui_scroll_offset: {address: 0x04C581B0, args: [f32, pointer]}
   ui_scroll_reveal: {address: 0x04C581F0, args: [f32, pointer, pointer, bool, u32]}
   ui_size_box_width: {address: 0x04C59100, args: [f32, pointer]}

@@ -396,6 +396,60 @@ label. The value stays when you hide the widget and ends with its owning root.
 The setter changes the text property; layout and decorators remain configured
 by the authored widget. Generic reflection's existing FText limits still apply.
 
+### Pictures
+
+[`ui.create_texture`](/reference/ui/#create_texture) makes a texture from pixels your mod has, such as
+a picture it decoded from a download. Pixels are four bytes each, red, green, blue, and alpha, row by
+row from the top, up to 2048 by 2048. Show the texture on an `Image` in your owned tree with the
+reflected `Image.SetBrushFromTexture`:
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua
+local function show_picture(widget, width, height, pixels)
+    local image = assert(ui.find_widget(widget, "Picture"))
+    local texture = assert(ui.create_texture(width, height, pixels))
+    local _, outputs = reflection.call(image, "SetBrushFromTexture", {Texture = texture, bMatchSize = true})
+    assert(type(outputs) == "table", outputs)
+    return texture
+end
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript
+function showPicture(widget, width, height, pixels) {
+    const image = ui.find_widget(widget, "Picture");
+    const texture = ui.create_texture(width, height, pixels);
+    reflection.call(image, "SetBrushFromTexture", { Texture: texture, bMatchSize: true });
+    return texture;
+}
+```
+
+</TabItem>
+</Tabs>
+
+The texture stays your mod's until [`ui.release_texture`](/reference/ui/#release_texture) or your mod
+stops. Release it once no image shows it.
+
+### Layout by reflection
+
+The engine's widget functions that UMG exposes to Blueprints are callable with
+[`reflection`](/develop/reflection-and-assets/). Use them for layout, instead of a `ui` call:
+
+| Task | Reflected function |
+| --- | --- |
+| Place and size a widget on a canvas | `CanvasPanelSlot.SetPosition`, `SetSize`, `SetOffsets`, `SetAnchors`, `SetAlignment`, `SetZOrder` on the slot `ui.add_child` returns |
+| Place a widget in a grid | `GridSlot.SetRow`, `SetColumn`, `SetRowSpan`, `SetColumnSpan`, `SetPadding`, `SetNudge`, `SetHorizontalAlignment`, `SetVerticalAlignment` |
+| Show text as it is, without markup | `TextBlock.SetText` on a `TextBlock`; `ui.set_widget_text` is for a `CarrotRichTextBlock` |
+| Style text | `TextBlock.SetFont`, `SetColorAndOpacity`, `SetShadowColorAndOpacity`, `SetShadowOffset`, `SetJustification`, `SetAutoWrapText` |
+| Measure a widget | `Widget.ForceLayoutPrepass`, then `Widget.GetDesiredSize` |
+| Scroll | `ScrollBox.GetScrollOffset`, `SetScrollOffset`, `ScrollWidgetIntoView`, `ScrollToEnd` |
+| Move, turn, or fade a widget | `Widget.SetRenderTransform`, `SetRenderOpacity` |
+| Show a material | `Image.SetBrushFromMaterial`, `Image.GetDynamicMaterial` |
+
 ### Button events
 
 To observe a native UMG Button, call `ui.hold_button_events(button)` and listen

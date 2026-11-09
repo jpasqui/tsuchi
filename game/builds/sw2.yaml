@@ -261,6 +261,8 @@ constants:
   shader_map_registered: 1
   listed_pikmin_types: 8
   widget_visible: 0
+  texture_format_bgra8: 2
+  texture_not_offline_processed: 16
   widget_collapsed: 1
   widget_hidden: 2
   collision_records_most: 128
@@ -638,6 +640,21 @@ structs:
     fields:
       wait_time: 1300
       state: 1344
+  texture_2d:
+    fields:
+      platform_data: absent
+      flags: absent
+      update_resource: absent
+  texture_platform_data:
+    fields:
+      width: absent
+      height: absent
+      format: absent
+      mips: absent
+      mip_count: absent
+  texture_mip:
+    fields:
+      bulk_data: absent
   widget_table:
     fields:
       set_visibility: 656
@@ -1729,6 +1746,10 @@ functions:
   ui_post_sound: 6162000
   ui_context_world: 2909680
   ui_widget_in_viewport: 9958848
+  texture_create_transient: absent
+  bulk_data_size: absent
+  bulk_data_lock: absent
+  bulk_data_unlock: absent
   ui_widget_viewport: 15774736
   ui_scroll_offset: absent
   ui_scroll_reveal: absent

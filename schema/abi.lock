@@ -527,7 +527,9 @@
    "ask_text",
    "on_entry_chosen",
    "on_text_entered",
-   "open_mods"
+   "open_mods",
+   "create_texture",
+   "release_texture"
   ],
   "world": [
    "ground",

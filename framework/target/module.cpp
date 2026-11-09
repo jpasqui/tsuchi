@@ -51,6 +51,7 @@ extern "C" unsigned long long tsuchi_libc_ticks(); // script_library.cpp
 #include "ui_keyboard.h"
 #include "player_choice.h"
 #include "ui_widgets.h"
+#include "ui_textures.h"
 #include "ui_settings.h"
 #include "ui_mod_list.h"
 #include "ui_mod_page.h"
@@ -376,6 +377,7 @@ extern "C" void tsuchi_initialize() {
     if (serves(t::family::title_menu) && serves(t::family::mods_page)) ui_mod_page_start(self);
     if (serves(t::family::keyboard)) ui_keyboard_start();
     if (serves(t::family::player_choice)) player_choice_start(self);
+    if (serves(t::family::textures)) ui_textures_start();
     if (serves(t::family::ui) && ui_native_start(self)) {
         ui_settings_start(self);
         ui_mod_list_start(self);

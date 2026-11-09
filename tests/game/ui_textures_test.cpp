@@ -1,0 +1,99 @@
+// ui.create_texture and ui.release_texture against a made-up engine laid out as tests/fixtures/game_table.yaml
+// says: the transient texture, its one mip's bulk data, the pixel order, UpdateResource and garbage-collector roots.
+#include "fake_game.h"
+#include "ui_textures.h"
+#include "ui_screens.h"
+#include "ui_service.h"
+#include "objects.h"
+#include <cassert>
+#include <cstdio>
+#include <vector>
+
+using namespace tsuchi;
+namespace t = game::table;
+
+namespace {
+uint64_t texture_class = 0, vtable = 0;
+std::vector<uint8_t> bulk_bytes;
+int updates = 0, unlocks = 0, locks = 0, made = 0;
+bool wrong_format = false, two_mips = false, null_texture = false;
+uint64_t last_texture = 0;
+
+void update_resource(void*) { ++updates; }
+void* create_transient(int32_t width, int32_t height, uint32_t format, uint64_t) {
+    ++made;
+    if (null_texture) return nullptr;
+    const uint64_t texture = fake::object(u"Texture2D", texture_class, 0x200);
+    fake::put(texture, vtable);
+    const uint64_t platform = fake::memory(0x40), mips = fake::memory(16), mip = fake::memory(0x40);
+    fake::put(texture + t::texture_2d::platform_data, platform);
+    fake::put<int32_t>(platform + t::texture_platform_data::width, width);
+    fake::put<int32_t>(platform + t::texture_platform_data::height, height);
+    fake::put<uint32_t>(platform + t::texture_platform_data::format, wrong_format ? 1 : format);
+    fake::put(platform + t::texture_platform_data::mips, mips);
+    fake::put<int32_t>(platform + t::texture_platform_data::mip_count, two_mips ? 2 : 1);
+    fake::put(mips, mip);
+    bulk_bytes.assign(size_t(width) * size_t(height) * 4, 0);
+    last_texture = texture;
+    return reinterpret_cast<void*>(texture);
+}
+uint64_t bulk_size(void*) { return bulk_bytes.size(); }
+void* bulk_lock(void*, uint32_t how) { assert(how == 2); ++locks; return bulk_bytes.data(); }
+void bulk_unlock(void*) { ++unlocks; }
+bool kept(uint64_t texture) { return game::object_kept(texture); }
+}
+
+namespace tsuchi {
+ui::Backend& ui_screen_backend() { static ui::Backend backend{}; return backend; }
+}
+
+int main() {
+    note_game_thread();
+    fake::start();
+    const uint64_t root = fake::object(u"Class", 0, 0x100);
+    texture_class = fake::object(u"Texture2D", root, 0x100);
+    vtable = fake::memory(0x100);
+    fake::put(vtable + t::texture_2d::update_resource, &update_resource);
+    fake::code().push_back(reinterpret_cast<uint64_t>(&update_resource));
+    const TSUCHI_UiService& ui = ui::table;
+    TSUCHI_Mod* mod = mod_create("pictures.mod");
+    const uint8_t pixels[2 * 2 * 4] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+    TSUCHI_Object texture{};
+    // Without the game's calls the family is unsupported.
+    ui_textures_start();
+    assert(ui.create_texture(mod, 2, 2, pixels, sizeof pixels, &texture) == TSUCHI_UNSUPPORTED);
+    t::fn::texture_create_transient = create_transient; t::fn::bulk_data_size = bulk_size;
+    t::fn::bulk_data_lock = bulk_lock; t::fn::bulk_data_unlock = bulk_unlock;
+    // Sizes and byte counts are checked before the engine is asked.
+    assert(ui.create_texture(mod, 0, 2, pixels, sizeof pixels, &texture) == TSUCHI_INVALID);
+    assert(ui.create_texture(mod, 2049, 1, pixels, sizeof pixels, &texture) == TSUCHI_INVALID);
+    assert(ui.create_texture(mod, 2, 2, pixels, sizeof pixels - 1, &texture) == TSUCHI_INVALID && made == 0);
+    // Made: the pixels in the engine's order, the resource updated, the texture kept and owned.
+    assert(ui.create_texture(mod, 2, 2, pixels, sizeof pixels, &texture) == TSUCHI_OK && texture.id);
+    const uint64_t object = game::from_handle(texture.id);
+    assert(object == last_texture && locks == 1 && unlocks == 1 && updates == 1);
+    const std::vector<uint8_t> expected = {3, 2, 1, 4, 7, 6, 5, 8, 11, 10, 9, 12, 15, 14, 13, 16};
+    assert(bulk_bytes == expected);
+    assert(fake::get<uint8_t>(object + t::texture_2d::flags) & t::constant::texture_not_offline_processed);
+    assert(kept(object) && owned_count(mod) == 1);
+    // Released: no longer kept, and not the mod's.
+    assert(ui.release_texture(mod, texture) == TSUCHI_OK && !kept(object) && owned_count(mod) == 0);
+    assert(ui.release_texture(mod, texture) == TSUCHI_NOT_FOUND);
+    // A texture that is not what was asked for is not written, and not kept.
+    wrong_format = true;
+    assert(ui.create_texture(mod, 2, 2, pixels, sizeof pixels, &texture) == TSUCHI_NOT_READY && locks == 1 && !kept(last_texture));
+    wrong_format = false; two_mips = true;
+    assert(ui.create_texture(mod, 2, 2, pixels, sizeof pixels, &texture) == TSUCHI_NOT_READY && locks == 1 && !kept(last_texture));
+    two_mips = false; null_texture = true;
+    assert(ui.create_texture(mod, 2, 2, pixels, sizeof pixels, &texture) == TSUCHI_NOT_READY);
+    null_texture = false;
+    // Another mod cannot release it, and the owner stopping lets go of it.
+    TSUCHI_Mod* other = mod_create("other.mod");
+    assert(ui.create_texture(mod, 2, 2, pixels, sizeof pixels, &texture) == TSUCHI_OK);
+    const uint64_t second = game::from_handle(texture.id);
+    assert(ui.release_texture(other, texture) == TSUCHI_NOT_FOUND && kept(second));
+    mod_stop(mod);
+    assert(!kept(second));
+    std::puts("textures ok");
+    return 0;
+}
