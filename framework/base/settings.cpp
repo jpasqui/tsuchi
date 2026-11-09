@@ -10,8 +10,25 @@ namespace {
 
 using JsonKind = Json::Kind;
 
-const char* const kKinds[] = {"toggle", "integer", "number", "text", "choice", "set"};
-const char* const kKnown[] = {"type", "default", "name", "description", "public", "min", "max", "max_length", "choices"};
+const char* const kKinds[] = {"toggle", "integer", "number", "text", "choice", "set", "binding"};
+constexpr int kKindCount = sizeof kKinds / sizeof kKinds[0];
+const char* const kKnown[] = {"type", "default", "name", "description", "public", "min", "max", "max_length", "choices", "accepts"};
+
+// A controller's buttons in the order of the bits of input's Buttons, by name and as a player reads them.
+const char* const kButtonNames[kBindingButtons] = {"a", "b", "x", "y", "left_stick", "right_stick", "l", "r",
+                                                   "zl", "zr", "plus", "minus", "left", "up", "right", "down"};
+const char* const kButtonLabels[kBindingButtons] = {"A", "B", "X", "Y", "L Stick Button", "R Stick Button", "L", "R",
+                                                    "ZL", "ZR", "+", "-", "D-Pad Left", "D-Pad Up", "D-Pad Right", "D-Pad Down"};
+// Keyboard keys by USB HID usage: 4 to 101 here, and the modifiers from 224 to 231 below.
+const char* const kKeyLabels[] = {
+    "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z",
+    "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "Enter", "Esc", "Backspace", "Tab", "Space", "-", "=", "[", "]", "\\",
+    "#", ";", "'", "`", ",", ".", "/", "Caps Lock", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12",
+    "Print Screen", "Scroll Lock", "Pause", "Insert", "Home", "Page Up", "Delete", "End", "Page Down", "Right", "Left", "Down",
+    "Up", "Num Lock", "Keypad /", "Keypad *", "Keypad -", "Keypad +", "Keypad Enter", "Keypad 1", "Keypad 2", "Keypad 3",
+    "Keypad 4", "Keypad 5", "Keypad 6", "Keypad 7", "Keypad 8", "Keypad 9", "Keypad 0", "Keypad .", "\\", "Menu"};
+const char* const kModifierLabels[] = {"Left Ctrl", "Left Shift", "Left Alt", "Left Win", "Right Ctrl", "Right Shift", "Right Alt", "Right Win"};
+static_assert(sizeof kKeyLabels / sizeof kKeyLabels[0] == 102 - 4, "one label for each usage from 4 to 101");
 
 bool is_text(const Json* value) { return value && value->kind == JsonKind::text && strlen(value->text) == value->bytes; }
 bool is_whole(const Json* value) { return value && value->kind == JsonKind::number && value->whole; }
@@ -59,6 +76,19 @@ bool text_allowed(const Setting& setting, const char* value) {
     const Json* longest = setting.declared->find("max_length");
     return !longest || strlen(value) <= uint64_t(longest->integer);
 }
+bool binding_allowed(const Setting& setting, const char* value) {
+    BindingValue binding{};
+    return read_binding(value, binding) && (binding_accepts(setting) & uint32_t(binding.device));
+}
+// What a setting of a text kind allows: a text within its length, one of a choice's words, a binding it accepts.
+bool text_kind_allowed(const Setting& setting, const char* value) {
+    switch (setting.kind) {
+    case SettingKind::text: return text_allowed(setting, value);
+    case SettingKind::choice: return choice_at(setting, value) >= 0;
+    case SettingKind::binding: return binding_allowed(setting, value);
+    default: return false;
+    }
+}
 
 // The changes themselves. Each tells whether the value is another than before.
 bool put_integer(Setting& setting, int64_t value) {
@@ -90,7 +120,8 @@ TSUCHI_Result to_default(Setting& setting, bool& changed) {
     case SettingKind::integer: changed = put_integer(setting, value->integer); break;
     case SettingKind::number: changed = put_number(setting, value->number); break;
     case SettingKind::text:
-    case SettingKind::choice: return put_text(setting, value->text, changed);
+    case SettingKind::choice:
+    case SettingKind::binding: return put_text(setting, value->text, changed);
     case SettingKind::set: {
         int64_t index = 0;
         for (const Json* choice = choices_of(setting)->first; choice; choice = choice->next, ++index) {
@@ -112,7 +143,8 @@ bool at_default(const Setting& setting) {
     case SettingKind::integer: return setting.integer == value->integer;
     case SettingKind::number: return setting.number == value->number;
     case SettingKind::text:
-    case SettingKind::choice: return !strcmp(setting.text.get(), value->text);
+    case SettingKind::choice:
+    case SettingKind::binding: return !strcmp(setting.text.get(), value->text);
     case SettingKind::set: {
         int64_t index = 0;
         for (const Json* choice = choices_of(setting)->first; choice; choice = choice->next, ++index) {
@@ -140,9 +172,9 @@ bool declare(Setting& setting, const Json& declared, Text& problem) {
     const Json* type = declared.find("type"), *value = declared.find("default"), *least = declared.find("min"), *most = declared.find("max");
     const Json* longest = declared.find("max_length"), *choices = declared.find("choices"), *open = declared.find("public");
     int kind = -1;
-    for (int i = 0; i < 6; ++i)
+    for (int i = 0; i < kKindCount; ++i)
         if (is_text(type) && !strcmp(type->text, kKinds[i])) kind = i;
-    if (kind < 0) return wrong(problem, key, "needs a \"type\": toggle, integer, number, text, choice or set");
+    if (kind < 0) return wrong(problem, key, "needs a \"type\": toggle, integer, number, text, choice, set or binding");
     setting.declared = &declared;
     setting.kind = SettingKind(kind);
     const char* const shown[] = {"name", "description"};
@@ -157,6 +189,10 @@ bool declare(Setting& setting, const Json& declared, Text& problem) {
     if (!ranged && (least || most)) return wrong(problem, key, "has a \"min\" or a \"max\", which only an integer or a number has");
     if (setting.kind != SettingKind::text && longest) return wrong(problem, key, "has a \"max_length\", which only a text has");
     if (!listed && choices) return wrong(problem, key, "has \"choices\", which only a choice or a set has");
+    const Json* accepts = declared.find("accepts");
+    if (setting.kind != SettingKind::binding && accepts) return wrong(problem, key, "has an \"accepts\", which only a binding has");
+    if (accepts && !(is_text(accepts) && (!strcmp(accepts->text, "pad") || !strcmp(accepts->text, "key") || !strcmp(accepts->text, "any"))))
+        return wrong(problem, key, "has an \"accepts\" that is not pad, key or any");
     const Json* const bounds[] = {least, most};
     for (const Json* bound : bounds) {
         if (!bound) continue;
@@ -191,6 +227,9 @@ bool declare(Setting& setting, const Json& declared, Text& problem) {
         break;
     case SettingKind::text:
         if (!is_text(value) || !text_allowed(setting, value->text)) return wrong(problem, key, no_default);
+        break;
+    case SettingKind::binding:
+        if (!is_text(value) || !binding_allowed(setting, value->text)) return wrong(problem, key, no_default);
         break;
     case SettingKind::choice:
         if (!is_text(value) || choice_at(setting, value->text) < 0) return wrong(problem, key, no_default);
@@ -325,7 +364,8 @@ void write_value(Writer& to, const Setting& setting) {
         to.add(digits);
         break;
     case SettingKind::text:
-    case SettingKind::choice: to.quoted(setting.text.get()); break;
+    case SettingKind::choice:
+    case SettingKind::binding: to.quoted(setting.text.get()); break;
     case SettingKind::set: {
         to.add("[");
         bool first = true;
@@ -351,6 +391,7 @@ bool take(Setting& setting, const Json& value) {
     case SettingKind::number: return value.kind == JsonKind::number && number_allowed(setting, value.number) && put_number(setting, value.number);
     case SettingKind::text: return is_text(&value) && text_allowed(setting, value.text) && put_text(setting, value.text, changed) == TSUCHI_OK && changed;
     case SettingKind::choice: return is_text(&value) && choice_at(setting, value.text) >= 0 && put_text(setting, value.text, changed) == TSUCHI_OK && changed;
+    case SettingKind::binding: return is_text(&value) && binding_allowed(setting, value.text) && put_text(setting, value.text, changed) == TSUCHI_OK && changed;
     case SettingKind::set: {
         if (value.kind != JsonKind::list) return false;
         int64_t index = 0;
@@ -417,7 +458,7 @@ TSUCHI_Result setting_number(const Setting& setting, float& out) {
     return TSUCHI_OK;
 }
 TSUCHI_Result setting_text(const Setting& setting, const char*& out) {
-    if (setting.kind != SettingKind::text && setting.kind != SettingKind::choice) return TSUCHI_INVALID;
+    if (setting.kind != SettingKind::text && setting.kind != SettingKind::choice && setting.kind != SettingKind::binding) return TSUCHI_INVALID;
     out = setting.text.get();
     return TSUCHI_OK;
 }
@@ -447,8 +488,7 @@ TSUCHI_Result set_setting_number(Setting& setting, float value, bool& changed) {
     return TSUCHI_OK;
 }
 TSUCHI_Result set_setting_text(Setting& setting, const char* value, bool& changed) {
-    const bool allowed = setting.kind == SettingKind::text ? text_allowed(setting, value) : setting.kind == SettingKind::choice && choice_at(setting, value) >= 0;
-    if (!allowed) return TSUCHI_INVALID;
+    if (!text_kind_allowed(setting, value)) return TSUCHI_INVALID;
     const TSUCHI_Result result = put_text(setting, value, changed);
     if (result == TSUCHI_OK) setting.touched = true;
     return result;
@@ -498,5 +538,132 @@ bool take_settings(Settings& settings, const char* text, size_t bytes, void (*ch
 }
 
 void setting_number_text(float value, char out[48]) { number_text(value, out); }
+void setting_integer_text(int64_t value, char out[24]) {
+    char digits[24];
+    const char* text = whole_text(value, digits);
+    memcpy(out, text, strlen(text) + 1);
+}
+
+namespace {
+const char* past_spaces(const char* at) {
+    while (*at == ' ') ++at;
+    return at;
+}
+bool only_spaces(const char* at) { return !*past_spaces(at); }
+bool starts(const char* text, const char* lead) {
+    while (*lead && *text == *lead) ++text, ++lead;
+    return !*lead;
+}
+} // namespace
+
+bool read_setting_integer(const char* text, int64_t& out) {
+    const char* at = past_spaces(text);
+    const bool negative = *at == '-';
+    if (*at == '-' || *at == '+') ++at;
+    if (*at < '0' || *at > '9') return false;
+    // Counted toward the negative side, which holds one more.
+    int64_t value = 0;
+    for (; *at >= '0' && *at <= '9'; ++at) {
+        const int digit = *at - '0';
+        if (value < (INT64_MIN + digit) / 10) return false;
+        value = value * 10 - digit;
+    }
+    if (!only_spaces(at)) return false;
+    if (!negative && value == INT64_MIN) return false;
+    out = negative ? value : -value;
+    return true;
+}
+
+bool read_setting_number(const char* text, double& out) {
+    // As JSON writes a number, once a sign, a leading `.` and a trailing `.` are made into it: `+1`, `.5`, `2.`.
+    const char* at = past_spaces(text);
+    char written[72];
+    size_t used = 0;
+    if (*at == '+') ++at;
+    else if (*at == '-') written[used++] = *at++;
+    if (*at == '.') written[used++] = '0';
+    const char* end = at;
+    while (*end && *end != ' ') ++end;
+    if (end == at || !only_spaces(end) || size_t(end - at) + used + 2 > sizeof written) return false;
+    memcpy(written + used, at, size_t(end - at));
+    used += size_t(end - at);
+    if (written[used - 1] == '.') written[used++] = '0';
+    written[used] = 0;
+    bool digit = false; // in the text as typed: `.` alone is no number
+    for (const char* typed = at; typed < end; ++typed) digit = digit || (*typed >= '0' && *typed <= '9');
+    for (size_t i = 0; i < used; ++i) {
+        const char c = written[i];
+        if (!((c >= '0' && c <= '9') || c == '.' || c == '-' || c == '+' || c == 'e' || c == 'E')) return false;
+    }
+    if (!digit) return false;
+    const Json* read = read_json(written, used);
+    const bool number = read && read->kind == JsonKind::number;
+    if (number) out = read->number;
+    release_json(read);
+    return number;
+}
+
+bool read_binding(const char* text, BindingValue& out) {
+    if (!text) return false;
+    if (starts(text, "pad:")) {
+        for (uint32_t i = 0; i < kBindingButtons; ++i)
+            if (!strcmp(text + 4, kButtonNames[i])) return out = {BindingDevice::pad, i, 0}, true;
+        return false;
+    }
+    if (!starts(text, "key:")) return false;
+    const char* digits = text + 4;
+    const size_t count = strlen(digits);
+    if (!count || count > 3 || (count > 1 && digits[0] == '0')) return false;
+    uint32_t usage = 0;
+    for (size_t i = 0; i < count; ++i) {
+        if (digits[i] < '0' || digits[i] > '9') return false;
+        usage = usage * 10 + uint32_t(digits[i] - '0');
+    }
+    if (usage > 255) return false;
+    out = {BindingDevice::key, 0, usage};
+    return true;
+}
+
+void binding_text(const BindingValue& value, char out[24]) {
+    if (value.device == BindingDevice::pad) {
+        memcpy(out, "pad:", 4);
+        const char* name = value.button < kBindingButtons ? kButtonNames[value.button] : "a";
+        memcpy(out + 4, name, strlen(name) + 1);
+        return;
+    }
+    memcpy(out, "key:", 4);
+    char digits[24];
+    const char* text = whole_text(value.usage > 255 ? 0 : value.usage, digits);
+    memcpy(out + 4, text, strlen(text) + 1);
+}
+
+void binding_label(const char* text, char out[48]) {
+    BindingValue value{};
+    const char* label = text ? text : "";
+    if (read_binding(label, value) && value.device == BindingDevice::pad) {
+        label = kButtonLabels[value.button];
+    } else if (read_binding(label, value)) {
+        char number[24];
+        const char* key = nullptr;
+        if (value.usage >= 4 && value.usage < 102) key = kKeyLabels[value.usage - 4];
+        else if (value.usage >= 224 && value.usage <= 231) key = kModifierLabels[value.usage - 224];
+        const char* lead = key ? "Keyboard: " : "Keyboard: Key ";
+        if (!key) key = whole_text(value.usage, number);
+        const size_t lead_bytes = strlen(lead), key_bytes = strlen(key);
+        memcpy(out, lead, lead_bytes);
+        memcpy(out + lead_bytes, key, key_bytes + 1);
+        return;
+    }
+    const size_t bytes = strlen(label) < 47 ? strlen(label) : 47;
+    memcpy(out, label, bytes);
+    out[bytes] = 0;
+}
+
+uint32_t binding_accepts(const Setting& setting) {
+    const Json* accepts = setting.declared ? setting.declared->find("accepts") : nullptr;
+    if (accepts && is_text(accepts) && !strcmp(accepts->text, "pad")) return uint32_t(BindingDevice::pad);
+    if (accepts && is_text(accepts) && !strcmp(accepts->text, "key")) return uint32_t(BindingDevice::key);
+    return uint32_t(BindingDevice::pad) | uint32_t(BindingDevice::key);
+}
 
 } // namespace tsuchi

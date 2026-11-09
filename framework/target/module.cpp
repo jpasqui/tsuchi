@@ -48,6 +48,7 @@ extern "C" unsigned long long tsuchi_libc_ticks(); // script_library.cpp
 #include "ui_screens.h"
 #include "ui_native.h"
 #include "ui_widgets.h"
+#include "ui_keyboard.h"
 #include "ui_settings.h"
 #include "ui_mod_list.h"
 #include "ui_mod_list_native.h"
@@ -365,8 +366,11 @@ extern "C" void tsuchi_initialize() {
     // One entry for each register the request can be in, two instructions each.
     if (serves(t::family::dialog)) dialogs_start(self, reinterpret_cast<void*>(reinterpret_cast<uint64_t>(&tsuchi_dialog_setup_entries) + 8 * t::route_frame::dialog_setup_call::request));
     if (serves(t::family::ui)) ui_widgets_start(self);
+    if (serves(t::family::keyboard)) ui_keyboard_start();
     if (serves(t::family::ui) && ui_native_start(self)) {
         ui_settings_start(self);
+        // With the software keyboard in this build, a mod's settings page types its texts and numbers with it.
+        if (serves(t::family::keyboard)) ui_settings_text_provider(ui_keyboard_ask);
         ui_mod_list_start(self);
     }
     set_log_sink(log_line);

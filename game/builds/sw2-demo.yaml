@@ -1414,6 +1414,8 @@ structs:
     fields:
       maximum: absent
       minimum: absent
+      input_form: absent
+      new_lines: absent
       utf8: absent
       work: absent
       work_bytes: absent

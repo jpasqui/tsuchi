@@ -1215,7 +1215,8 @@ structs:
   # ui
   ui_keyboard:
     size: 0x500
-    fields: {maximum: 0x3AC, minimum: 0x3B0, utf8: 0x3BD, work: 0x4D0, work_bytes: 0x4D8}
+    # input_form: 0 is one line; new_lines: whether Enter adds one. The game's name entry clears both.
+    fields: {maximum: 0x3AC, minimum: 0x3B0, input_form: 0x3B8, new_lines: 0x3BC, utf8: 0x3BD, work: 0x4D0, work_bytes: 0x4D8}
 
   # ui
   effect_owner:

@@ -169,6 +169,9 @@ families:
   ui:
     services: [ui]
     files: [game/ui_feedback.cpp, game/ui_label_layout.h, game/ui_mod_list.cpp, game/ui_mod_list_native.cpp, game/ui_native.cpp, game/ui_native_classes.h, game/ui_widgets.cpp]
+  keyboard:
+    calls: [ui.ask_text]
+    files: [game/ui_keyboard.cpp]
   world:
     services: [world]
     files: [game/world_backend.cpp]

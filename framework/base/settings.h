@@ -15,7 +15,7 @@
 
 namespace tsuchi {
 
-enum class SettingKind : uint8_t { toggle, integer, number, text, choice, set };
+enum class SettingKind : uint8_t { toggle, integer, number, text, choice, set, binding };
 
 struct Setting {
     const Json* declared; // its object in the manifest, whose name there is its key
@@ -24,7 +24,7 @@ struct Setting {
     bool touched;         // changed by a call since the mod started, so that what the save holds does not undo it
     int64_t integer;      // a toggle's value, 0 or 1, or an integer's
     double number;        // a number's
-    Text text;            // a text's, or the word a choice is at
+    Text text;            // a text's, the word a choice is at, or a binding's `pad:<button>` or `key:<usage>`
     uint8_t* chosen;      // a set's: one byte for each of its choices, in their order
 
     const char* key() const { return declared->name; }
@@ -44,6 +44,30 @@ bool declare_settings(Settings& out, const Json* declared, Text& problem);
 void forget_settings(Settings& settings);
 Setting* find_setting(Settings& settings, const char* key);
 void setting_number_text(float value, char out[48]);
+// An integer's digits, with a minus sign when it is below zero.
+void setting_integer_text(int64_t value, char out[24]);
+// Typed text read as an integer or a number: digits with an optional sign, and for a number a decimal point and
+// an exponent. Spaces around it are passed over. False when the text is not one, or the integer does not fit.
+bool read_setting_integer(const char* text, int64_t& out);
+bool read_setting_number(const char* text, double& out);
+
+// A binding's value. `pad:<button>`, the button by its name among input's Buttons, which is bit `button` of them,
+// or `key:<usage>`, a USB HID usage from 0 to 255.
+enum class BindingDevice : uint8_t { pad = 1, key = 2 };
+constexpr uint32_t kBindingButtons = 16;
+struct BindingValue {
+    BindingDevice device;
+    uint32_t button; // the bit's number, for a pad
+    uint32_t usage;  // for a key
+};
+// False when the text is not a binding as it is written: one of the names, or the usage in decimal with no leading zero.
+bool read_binding(const char* text, BindingValue& out);
+// A binding as it is written, into `out`, which holds 24 bytes.
+void binding_text(const BindingValue& value, char out[24]);
+// A binding as a player reads it: `ZL`, `Keyboard: T`. `out` holds 48 bytes. The text itself when it is no binding.
+void binding_label(const char* text, char out[48]);
+// The devices a binding setting takes, as BindingDevice bits: its `accepts`, or both.
+uint32_t binding_accepts(const Setting& setting);
 
 // Reading a value. TSUCHI_INVALID when the setting is of another kind, or a word is not one of its choices.
 TSUCHI_Result setting_toggle(const Setting& setting, bool& out);

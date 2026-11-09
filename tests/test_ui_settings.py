@@ -11,19 +11,20 @@ import generate
 
 class UiSettingsTests(unittest.TestCase):
     def test_declared_kinds_and_cleanup(self):
+        """Every declared kind on the page, typed edits through a stand-in keyboard, and a binding's capture."""
         gen = ROOT / 'build/gen'
         generate.write(gen)
         binary = ROOT / 'build' / ('ui_settings_test.exe' if sys.platform == 'win32' else 'ui_settings_test')
         sources = ['framework/core/registry.cpp', 'framework/core/ids.cpp', 'framework/core/text.cpp',
                    'framework/core/texts.cpp', 'framework/core/json.cpp', 'framework/base/settings.cpp',
                    'framework/game/holds.cpp', 'framework/game/ui_screens.cpp',
-                   'framework/game/ui_settings.cpp', 'tests/game/ui_settings_test.cpp']
+                   'framework/game/ui_settings.cpp', 'framework/game/ui_keyboard.cpp', 'tests/game/ui_settings_test.cpp']
         command = [shutil.which('clang++'), '-std=c++17', '-Wall', '-Wextra', '-Werror']
         for folder in [gen / 'include', gen / 'framework', ROOT / 'framework/core',
                        ROOT / 'framework/base', ROOT / 'framework/game']:
             command += ['-I', str(folder)]
         command += [str(ROOT / source) for source in sources]
-        command += [str(gen / 'framework/ui_service.cpp'), '-o', str(binary)]
+        command += [str(gen / 'framework/ui_service.cpp'), str(gen / 'framework/input_service.cpp'), '-o', str(binary)]
         compiled = subprocess.run(command, capture_output=True, text=True, encoding='utf-8')
         self.assertEqual(compiled.returncode, 0, compiled.stdout + compiled.stderr)
         ran = subprocess.run([str(binary)], capture_output=True, text=True, encoding='utf-8', timeout=120)

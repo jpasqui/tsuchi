@@ -90,13 +90,9 @@ Declare one entry per setting under `settings`. Its key follows the
 `default`. Use `name` and `description` for its display text. Settings can appear
 in the game's Settings tabs or on the mod's page.
 
-:::note[Coming soon]
-The settings screens in the game are coming soon. Until then, only your mod can change its settings.
-:::
-
 | Key | Required | Value |
 | --- | --- | --- |
-| `type` | Yes | `toggle`, `integer`, `number`, `text`, `choice`, or `set`. |
+| `type` | Yes | `toggle`, `integer`, `number`, `text`, `choice`, `set`, or `binding`. |
 | `default` | Yes | A value of the setting's type that fits its limits and choices. |
 | `name` | No | Display name as text. |
 | `description` | No | Help text for the setting. |
@@ -105,10 +101,14 @@ The settings screens in the game are coming soon. Until then, only your mod can 
 | `max` | No | Inclusive upper bound for `integer` or `number`. |
 | `max_length` | No | Maximum UTF-8 bytes for `text`, as a nonnegative whole number. |
 | `choices` | For `choice` and `set` | A nonempty list of distinct, nonempty words. |
+| `accepts` | No | What a `binding` can be: `pad` for a controller button, `key` for a keyboard key, or `any` for either. Defaults to `any`. |
 
 For a toggle, use `true` or `false`. For an integer, use a whole number. A number
 can have a fractional part. Text uses a string, a choice uses one string from
-`choices`, and a set uses a list of strings from `choices`.
+`choices`, and a set uses a list of strings from `choices`. A binding uses a
+string: `pad:` and a button's name from [`input`](/reference/input/)'s `Buttons`,
+such as `"pad:zl"`, or `key:` and a keyboard key's USB HID usage, such as
+`"key:23"` for **T**. See [Bindings](/develop/settings/#bindings).
 
 For example, declare a toggle and a bounded integer:
 

@@ -51,6 +51,12 @@ enums:
     - {name: l, value: 4, doc: The L button.}
     - {name: r, value: 5, doc: The R button.}
     - {name: zr, value: 6, doc: The ZR button.}
+  TextKind:
+    open: false
+    doc: Which keys the software keyboard offers.
+    values:
+    - {name: text, value: 1, doc: "The full keyboard, with letters and symbols."}
+    - {name: number, value: 2, doc: "A number pad with only digits."}
 functions:
 - name: create
   doc: Creates an empty screen. Add controls before you open it. The framework destroys the screen when
@@ -561,6 +567,22 @@ functions:
     no_memory: The widget could not be retained for the call.
   completes: create_widget
 
+- name: ask_text
+  doc: |
+    Shows the system's software keyboard and emits `text_entered` with what the player typed. It opens
+    at the start of the next frame, and the game waits while it is open, as it does for its own name
+    entry. One keyboard can wait at a time.
+  owns: true
+  params:
+    - {name: prompt, type: text, doc: "The line above the text field, at most 256 bytes."}
+    - {name: initial, type: text, doc: "The text the field starts with. Empty for none."}
+    - {name: most, type: u32, doc: "The most characters the player can type, from 1 to 256."}
+    - {name: kind, type: enum<TextKind>, doc: The keys the keyboard offers.}
+  fails:
+    invalid: "A text isn't valid UTF-8 or is too long, or the limit or kind is invalid."
+    busy: "A keyboard is already waiting to open."
+    unsupported: "This build of the game has no software keyboard call."
+  users: [online-coop, custom-mod-menus]
 events:
 - name: activated
   doc: Emitted when the player selects a button. Only the screen's owning mod receives this event.
@@ -649,3 +671,9 @@ events:
   - {name: widget, type: handle<object>, doc: The owned Button.}
   - {name: signal, type: enum<ButtonSignal>, doc: The native event.}
   users: [custom-mod-menus, kadan]
+- name: text_entered
+  doc: Emitted when the player closes the keyboard that your mod opened with `ask_text`.
+  fields:
+  - {name: accepted, type: bool, doc: "`true` if the player confirmed the text, `false` if they cancelled."}
+  - {name: text, type: text, doc: "What the player typed. Empty when they cancelled."}
+  users: [online-coop, custom-mod-menus]

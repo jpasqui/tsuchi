@@ -13,7 +13,8 @@ has already changed. Settings can appear in the game's Settings tabs or on the m
 page.
 
 Open **Settings**, select **Mods**, and open the mod's details to edit its
-declared settings. Text values are read-only in this build.
+declared settings. Players type text, integers, and numbers with the system's
+keyboard, and choose a [binding](#bindings)'s button by pressing it.
 
 ## Declaration
 
@@ -127,6 +128,143 @@ TSUCHI_Result tsuchi_mod_start(const TSUCHI_Host *given, TSUCHI_Mod *mod) {
 Every listener receives every mod's changes, so check both `mod` and `key`.
 Setting a value to its current value doesn't emit an event. When a value changes,
 the event arrives on the game thread at the start of the next world step.
+
+## Typed values
+
+On your mod's page, a `text` setting has an **Edit** button that opens the
+system's keyboard with the current value. An `integer` setting keeps its arrows
+and also gets **Edit**, and so does a `number` setting beside **Decrease** and
+**Increase**. An integer whose `min` is `0` or more opens the number pad. Other
+integers and all numbers open the full keyboard, since the number pad has no
+minus sign or decimal point.
+
+If the player types text longer than `max_length`, text that isn't a number, or a
+value outside `min` and `max`, Tsuchi keeps the old value. Canceling the keyboard
+keeps it too.
+
+## Bindings
+
+A `binding` setting holds one button that the player chooses. For example, let the
+player pick a push-to-talk button on the controller:
+
+```json title="mod.json"
+"settings": {
+  "talk_button": {
+    "type": "binding",
+    "default": "pad:zl",
+    "accepts": "pad",
+    "name": "Push to Talk Button"
+  }
+}
+```
+
+The value is text. A controller button is `pad:` and the button's name from
+[`input`](/reference/input/)'s `Buttons`, such as `pad:zl` or `pad:left_stick`.
+A keyboard key is `key:` and its USB HID usage, such as `key:23` for **T**. Set
+`accepts` to `pad`, `key`, or `any` to choose what the player can pick. Leave it
+out to allow both.
+
+On your mod's page, the row shows the binding the way a player reads it, such as
+**ZL** or **Keyboard: T**. When the player selects **Change Push to Talk Button**,
+the row reads **Press a button...**, and the next button the player presses becomes
+the binding. A keyboard binding reads **Press a key...** and takes the next key. The
+**A** press that selected the row only counts if the player releases **A** and
+presses it again. While the page waits, the game ignores the controller, so the
+press doesn't also move the menu. To cancel, press **Esc** on a keyboard or wait five
+seconds without pressing anything. **Esc** can't be bound.
+
+Read the binding with `settings.text`, and check the button on each world step:
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua title="main.lua"
+local function talk_held(player)
+    local device, name = settings.text("talk_button"):match("^(%a+):(.+)$")
+    if device == "pad" then
+        local pad = input.pad(player)
+        return pad ~= nil and pad.held[name] == true
+    end
+    return input.key(tonumber(name)) == true
+end
+
+time.on_step(function()
+    if talk_held(0) then print("Talking") end
+end)
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript title="main.js"
+function talk_held(player) {
+    const [device, name] = settings.text("talk_button").split(":");
+    try {
+        if (device === "pad") return input.pad(player).held.includes(name);
+        return input.key(Number(name));
+    } catch (error) {
+        return false;
+    }
+}
+
+time.on("step", () => {
+    if (talk_held(0)) print("Talking");
+});
+```
+
+</TabItem>
+<TabItem label="C">
+
+```c title="main.c"
+#include "tsuchi/tsuchi.h"
+
+static const TSUCHI_Host *host;
+static TSUCHI_Mod *self;
+static TSUCHI_Subscription steps;
+static const char *const buttons[16] = {"a", "b", "x", "y", "left_stick", "right_stick", "l", "r",
+                                        "zl", "zr", "plus", "minus", "left", "up", "right", "down"};
+
+static bool same(const char *a, const char *b) {
+    while (*a && *a == *b) { ++a; ++b; }
+    return *a == *b;
+}
+
+static bool talk_held(uint32_t player) {
+    char binding[24];
+    uint64_t needed = 0;
+    if (host->settings->text(self, "talk_button", binding, sizeof binding, &needed) != TSUCHI_OK) return false;
+    if (binding[0] == 'k') { // key:<usage>
+        uint32_t usage = 0;
+        for (const char *digit = binding + 4; *digit; ++digit) usage = usage * 10 + (uint32_t)(*digit - '0');
+        bool down = false;
+        return host->input->key(self, usage, &down) == TSUCHI_OK && down;
+    }
+    TSUCHI_PadState pad;
+    if (host->input->pad(self, player, &pad) != TSUCHI_OK) return false;
+    for (uint32_t bit = 0; bit < 16; ++bit)
+        if (same(binding + 4, buttons[bit])) return (pad.held & (1u << bit)) != 0;
+    return false;
+}
+
+static void on_step(void *user, const TSUCHI_TimeStep *event) {
+    (void)user;
+    (void)event;
+    if (talk_held(0)) host->mod->log(self, "Talking");
+}
+
+TSUCHI_Result tsuchi_mod_start(const TSUCHI_Host *given, TSUCHI_Mod *mod) {
+    host = given;
+    self = mod;
+    return host->time->on_step(self, on_step, 0, &steps);
+}
+```
+
+</TabItem>
+</Tabs>
+
+In C, bit `n` of `held` is the `n`th button in that list, the same order as the
+`TSUCHI_BUTTONS_` values. When the player picks another button, your mod receives
+the `changed` event like any other setting.
 
 ## Saving
 

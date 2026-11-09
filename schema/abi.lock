@@ -502,13 +502,15 @@
    "glyph",
    "set_footer",
    "set_widget_text",
+   "ask_text",
    "on_activated",
    "on_changed",
    "on_closed",
    "on_choice_changed",
    "on_integer_changed",
    "on_reset_requested",
-   "on_button_event"
+   "on_button_event",
+   "on_text_entered"
   ],
   "world": [
    "ground",
