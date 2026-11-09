@@ -23,7 +23,27 @@ wrappers and then the game's function.
 
 Tsuchi checks the instruction before installation. A mismatch returns `busy`.
 An existing named function-entry site reuses its chain and consumes no dynamic
-gateway. Named call sites must use `wrap_site` instead.
+gateway. Call sites use `wrap_site` or `wrap_call` instead.
+
+## Calls with before and after work
+
+Use compiled `hook.wrap_call` for one direct ARM64 BL instruction. Pass its
+main-code offset, expected word, and a wrapper with the called function's ABI.
+Call the returned `Hook.original` to continue the chain. Other callers of the
+same function keep their existing behavior. The destination must be in main code.
+An existing named call site reuses its chain.
+
+The hook engine retains the whole invocation until the wrapper returns. Work
+after `Hook.original` therefore still runs when the hook is removed inside the
+callee. This is useful for restoring temporary fields around a native operation.
+Two independent inline callbacks before and after a call do not provide that
+lifetime guarantee. Keep the hook record until all of its calls return, including
+when a developer restart would otherwise reuse the same global storage.
+
+As with function-entry wrappers, the callee sees a return address in the hook
+chain. Functions that inspect the original caller's return address need a
+different approach. Check `TSUCHI_HAS(host->hook, wrap_call)` before using this
+appended service member; older runtimes do not offer it.
 
 ## Inline callbacks
 
@@ -84,12 +104,12 @@ valid. Multi-instruction patch transactions are not offered.
 ## Runtime
 
 The native runtime allocates one 16 KiB executable arena for up to 256 distinct
-dynamic function or inline targets. Each target keeps one gateway until the game
+dynamic function, call or inline targets. Each target keeps one gateway until the game
 closes. Removing and reinstalling
 hooks at that target reuses its gateway. With no live handlers, the gateway runs
-the stock instruction. Instruction patches have 256 ownership records and need
+the stock instruction or original callee. Instruction patches have 256 ownership records and need
 no gateway. Framework sites and the patch region are excluded from dynamic targets.
-A target also retains its hook kind. Switching it between function and inline
+A target also retains its hook kind. Switching it between function, call and inline
 hooks, or replacing it with an instruction patch, requires a new process.
 The write backend caches aliases for up to 512 distinct main-code
 pages until the process closes. Removing a patch frees its ownership record but

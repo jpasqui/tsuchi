@@ -4240,6 +4240,22 @@ bool game_post_order(void* pikmin, void* memory) {
 
 void herding() {
     const TSUCHI_PikminService& flock = *tsuchi::host.pikmin;
+    // Registered types include active content, not inactive saved allocations or live actors.
+    uint32_t types=0;
+    CHECK(flock.type_count(mod,&types)==TSUCHI_OK && types==9);
+    auto* provider=tsuchi::mod_create("test.type-count"); CHECK(provider);
+    CHECK(tsuchi::id_add(tsuchi::pikmin::PikminType_vocabulary,provider,"orange",8)==TSUCHI_OK);
+    CHECK(flock.type_count(mod,&types)==TSUCHI_OK && types==10);
+    CHECK(tsuchi::id_add(tsuchi::pikmin::PikminType_vocabulary,provider,"brown",10)==TSUCHI_OK);
+    CHECK(flock.type_count(mod,&types)==TSUCHI_OK && types==11);
+    CHECK(tsuchi::id_remove(tsuchi::pikmin::PikminType_vocabulary,provider,"orange")==TSUCHI_OK);
+    CHECK(flock.type_count(mod,&types)==TSUCHI_OK && types==10);
+    uint32_t reserved=0;
+    CHECK(tsuchi::id_allocate(tsuchi::pikmin::PikminType_vocabulary,provider,"reserved",11,12,&reserved)==TSUCHI_OK);
+    CHECK(tsuchi::id_remove(tsuchi::pikmin::PikminType_vocabulary,provider,"reserved")==TSUCHI_OK);
+    CHECK(flock.type_count(mod,&types)==TSUCHI_OK && types==10);
+    tsuchi::mod_stop(provider);
+    CHECK(flock.type_count(mod,&types)==TSUCHI_OK && types==9);
     const TSUCHI_SquadService& band = *tsuchi::host.squad;
     const TSUCHI_CombatService& fight = *tsuchi::host.combat;
     const uint64_t main = fake::main_image(), chief = w.chief, mutt = w.mutt;
@@ -7336,6 +7352,27 @@ void configuring() {
     CHECK(kept("set.one", "{}\n") && tsuchi::settings_counts().written == 3);
     settings_heard.clear();
 
+    // Runtime integer ranges are owned metadata, not a replacement saved preference.
+    const uint32_t range_owned=tsuchi::owned_count(one);
+    CHECK(set.set_integer_range(one,"count",0,2)==TSUCHI_OK);
+    CHECK(set.integer(one,"count",&whole)==TSUCHI_OK && whole==2);
+    CHECK(set.integer(two,"set.one:count",&whole)==TSUCHI_OK && whole==2);
+    CHECK(tsuchi::owned_count(one)==range_owned+1);
+    CHECK(set.set_integer_range(one,"count",0,2)==TSUCHI_OK && tsuchi::owned_count(one)==range_owned+1);
+    CHECK(set.set_integer(one,"count",3)==TSUCHI_INVALID);
+    CHECK(set.set_integer_range(two,"set.one:count",0,1)==TSUCHI_DENIED);
+    CHECK(set.set_integer_range(one,"loud",0,1)==TSUCHI_INVALID);
+    CHECK(set.set_integer_range(one,"count",3,2)==TSUCHI_INVALID);
+    CHECK(set.set_integer_range(one,"count",-3,2)==TSUCHI_INVALID);
+    CHECK(set.set_integer_range(one,"count",0,11)==TSUCHI_INVALID);
+    tsuchi::frame(0.03f);
+    CHECK(heard("set.one:count ") && kept("set.one","{}\n"));
+    CHECK(set.set_integer_range(one,"count",0,0)==TSUCHI_OK && set.reset(one,"count")==TSUCHI_OK);
+    CHECK(set.integer(one,"count",&whole)==TSUCHI_OK && whole==0);
+    CHECK(set.set_integer_range(one,"count",-2,10)==TSUCHI_OK);
+    CHECK(set.integer(one,"count",&whole)==TSUCHI_OK && whole==3);
+    tsuchi::frame(0.03f); settings_heard.clear();
+
     // Another mod's setting is read as `<mod id>:<key>` when it is public, and never changed.
     CHECK(set.integer(two, "set.one:count", &whole) == TSUCHI_OK && whole == 3 && set.text(two, "set.one:mode", text, sizeof text, &needed) == TSUCHI_OK && !std::strcmp(text, "calm") &&
           set.integer(two, "count", &whole) == TSUCHI_OK && whole == 77);
@@ -7349,6 +7386,30 @@ void configuring() {
     CHECK(set.toggle(one, "set.one:loud", &flag) == TSUCHI_OK && flag && set.set_integer(one, "set.one:count", 4) == TSUCHI_OK && set.integer(two, "set.one:count", &whole) == TSUCHI_OK && whole == 4);
     tsuchi::frame(0.03f), tsuchi::frame(0.03f);
     CHECK(heard("set.one:count ") && kept("set.one", "{\n  \"count\": 4\n}\n"));
+
+    // Runtime dependency control is owned, attributed, and never a saved edit.
+    TSUCHI_Value held_value{}; held_value.kind=TSUCHI_VALUE_INTEGER; held_value.as.integer=8;
+    TSUCHI_SettingHold held_setting{}, other_setting{};
+    CHECK(set.hold(two,"set.one:count",&held_value,&held_setting)==TSUCHI_OK);
+    CHECK(set.integer(one,"count",&whole)==TSUCHI_OK && whole==8);
+    CHECK(set.controllers(one,"count",text,sizeof text,&needed)==TSUCHI_OK && !std::strcmp(text,"set.two"));
+    CHECK(set.set_integer(one,"count",5)==TSUCHI_DENIED && set.reset(one,"count")==TSUCHI_DENIED);
+    CHECK(set.hold(one,"count",&held_value,&other_setting)==TSUCHI_BUSY);
+    CHECK(set.update_hold(one,held_setting,&held_value)==TSUCHI_DENIED && set.release_hold(one,held_setting)==TSUCHI_DENIED);
+    held_value.as.integer=11;
+    CHECK(set.update_hold(two,held_setting,&held_value)==TSUCHI_INVALID && set.integer(one,"count",&whole)==TSUCHI_OK && whole==8);
+    held_value.as.integer=6;
+    CHECK(set.update_hold(two,held_setting,&held_value)==TSUCHI_OK && set.integer(one,"count",&whole)==TSUCHI_OK && whole==6);
+    const auto isolation=tsuchi::isolate_ownership(two,tsuchi::ownership_mark(two));
+    CHECK(set.update_hold(two,held_setting,&held_value)==TSUCHI_BUSY && set.release_hold(two,held_setting)==TSUCHI_BUSY);
+    tsuchi::isolate_ownership(two,isolation);
+    tsuchi::frame(0.03f);
+    CHECK(kept("set.one","{\n  \"count\": 4\n}\n"));
+    CHECK(set.release_hold(two,held_setting)==TSUCHI_OK && set.release_hold(two,held_setting)==TSUCHI_NOT_FOUND);
+    CHECK(set.integer(one,"count",&whole)==TSUCHI_OK && whole==4);
+    CHECK(set.hold(context("set.none"),"set.one:count",&held_value,&other_setting)==TSUCHI_DENIED);
+    CHECK(set.controllers(one,"count",text,sizeof text,&needed)==TSUCHI_OK && !*text);
+    tsuchi::frame(0.03f); settings_heard.clear();
 
     // Numbers are written the shortest way that reads back as the same value.
     const struct {
@@ -7529,6 +7590,10 @@ print(settings.set_number("speed", 2.5), settings.set_text("mode", "wild"), sett
 print(settings.integer("set.one:count"), settings.toggle("set.one:loud"))
 print(settings.integer("count"), settings.number("speed"), settings.text("mode"), settings.has("extras", "boots"), settings.toggle("loud"))
 print(pcall(settings.set_integer, "count", 1.5), pcall(settings.toggle))
+local live_setting = assert(settings.hold("set.one:count", 8))
+assert(settings.integer("set.one:count") == 8)
+assert(settings.update_hold(live_setting, 6) and settings.integer("set.one:count") == 6)
+assert(settings.release_hold(live_setting) and settings.integer("set.one:count") == 3)
 settings.on_changed(function(event) print("changed", event.mod, event.key) end)
 )";
     tsuchi::set_log_sink(log_sink);
@@ -7539,12 +7604,35 @@ settings.on_changed(function(event) print("changed", event.mod, event.key) end)
     logged.lines.clear();
     tsuchi::frame(0.03f), tsuchi::frame(0.03f);
     CHECK(logged.lines == "[set.script] changed\tset.script\tcount\n[set.script] changed\tset.script\tspeed\n[set.script] changed\tset.script\tmode\n"
-                          "[set.script] changed\tset.script\textras\n[set.script] changed\tset.script\tloud\n");
+                          "[set.script] changed\tset.script\textras\n[set.script] changed\tset.script\tloud\n"
+                          "[set.script] changed\tset.one\tcount\n[set.script] changed\tset.one\tcount\n[set.script] changed\tset.one\tcount\n");
     CHECK(kept("set.script", "{\n  \"loud\": false,\n  \"count\": 7,\n  \"speed\": 2.5,\n  \"mode\": \"wild\",\n  \"extras\": [\"hats\", \"boots\", \"capes\"]\n}\n"));
     tsuchi::set_log_sink(nullptr);
     logged.lines.clear();
     settings_heard.clear();
 
+    TSUCHI_Mod* range_script=context("set.script");
+    CHECK(set.set_integer_range(range_script,"count",0,1)==TSUCHI_OK);
+    auto* ranged_setting=tsuchi::find_setting(tsuchi::find_mod("set.script")->settings,"count");
+    CHECK(ranged_setting && ranged_setting->ranged && ranged_setting->integer==7);
+    held_value.as.integer=6;
+    CHECK(set.hold(range_script,"set.one:count",&held_value,&other_setting)==TSUCHI_OK);
+    CHECK(set.integer(context("set.one"),"count",&whole)==TSUCHI_OK && whole==6);
+    tsuchi::mod_stop(range_script);
+    CHECK(!ranged_setting->ranged && ranged_setting->integer==7);
+    CHECK(set.integer(context("set.one"),"count",&whole)==TSUCHI_OK && whole==3);
+    manifest("set.javascript", "", ", \"requires\": {\"set.one\": \"*\"}");
+    disk.files[mods_at + "set.javascript/main.js"] = R"(
+function check(value) { if (!value) throw new Error("runtime settings check"); }
+const held = settings.hold("set.one:count", 8);
+check(settings.integer("set.one:count") === 8n);
+check(settings.update_hold(held, 6n) && settings.integer("set.one:count") === 6n);
+check(settings.release_hold(held) && settings.integer("set.one:count") === 3n);
+let refused = false;
+try { settings.hold("set.one:count", 3.5); } catch (_) { refused = true; }
+check(refused);
+)";
+    CHECK(started("set.javascript") == "<running>");
     // Nothing of a mod's settings is left when the mods are forgotten.
     tsuchi::forget_mods();
     tsuchi::frame(0.03f);

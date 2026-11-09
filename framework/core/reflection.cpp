@@ -7,6 +7,7 @@
 #include "reflect.h"
 #include "reflection_service.h"
 #include "registry.h"
+#include "reflection_fields.h"
 
 namespace tsuchi {
 namespace {
@@ -357,7 +358,8 @@ TSUCHI_Result console_release(TSUCHI_Mod* mod, const char* name) {
 const reflection::Backend service{find_class, class_of,      is_a,        name,   path,   get,      set,           get_text,
                                set_text,   resize,        field_at,    begin_call, call_set, call_set_text, call_resize,
                                invoke,     call_get,      call_get_text, call_field_at, call_output_at, end_call,
-                               console_read, console_hold, console_release};
+                               console_read, console_hold, console_release,
+                               field_holds::hold, field_holds::update, field_holds::end};
 
 } // namespace
 

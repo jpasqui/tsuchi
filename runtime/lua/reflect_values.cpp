@@ -290,6 +290,58 @@ int tsuchi_lua_reflection_set(lua_State* L) {
     return 1;
 }
 
+namespace {
+bool held_scalar(lua_State* L, int index, TSUCHI_Value& value) {
+    luaL_checkany(L, index);
+    if (lua_type(L, index) == LUA_TBOOLEAN) {
+        value.kind = TSUCHI_VALUE_BOOLEAN; value.as.boolean = lua_toboolean(L, index); return true;
+    }
+    if (lua_type(L, index) != LUA_TNUMBER) return false;
+    if (lua_isinteger(L, index)) { value.kind = TSUCHI_VALUE_INTEGER; value.as.integer = lua_tointeger(L, index); }
+    else { value.kind = TSUCHI_VALUE_NUMBER; value.as.number = lua_tonumber(L, index); }
+    return true;
+}
+}
+int tsuchi_lua_reflection_hold_field(lua_State* L) {
+    const TSUCHI_Object object{tsuchi_lua::check_handle(L, 1, "object", false)};
+    size_t path_size = 0, identity_size = 0;
+    const char* path = luaL_checklstring(L, 2, &path_size);
+    TSUCHI_Value value{};
+    if (!held_scalar(L, 3, value)) return tsuchi_lua::fail(L, TSUCHI_INVALID);
+    const char* identity = luaL_checklstring(L, 4, &identity_size);
+    if (strlen(path) != path_size || strlen(identity) != identity_size) return tsuchi_lua::fail(L, TSUCHI_INVALID);
+    TSUCHI_FieldHold hold{};
+    const auto result = host(L)->reflection->hold_field(mod(L), object, path, &value, identity, &hold);
+    if (result != TSUCHI_OK) return tsuchi_lua::fail(L, result);
+    tsuchi_lua::push_handle(L, "field_hold", hold.id); return 1;
+}
+int tsuchi_lua_reflection_update_field(lua_State* L) {
+    const TSUCHI_FieldHold hold{tsuchi_lua::check_handle(L, 1, "field_hold", false)};
+    TSUCHI_Value value{};
+    if (!held_scalar(L, 2, value)) return tsuchi_lua::fail(L, TSUCHI_INVALID);
+    const auto result = host(L)->reflection->update_field(mod(L), hold, &value);
+    if (result != TSUCHI_OK) return tsuchi_lua::fail(L, result);
+    lua_pushboolean(L, 1); return 1;
+}
+
+int tsuchi_lua_settings_hold(lua_State* L) {
+    size_t bytes = 0; const char* key = luaL_checklstring(L, 1, &bytes);
+    TSUCHI_Value value{};
+    if (strlen(key) != bytes || !held_scalar(L, 2, value)) return tsuchi_lua::fail(L, TSUCHI_INVALID);
+    TSUCHI_SettingHold hold{};
+    const auto result = host(L)->settings->hold(mod(L), key, &value, &hold);
+    if (result != TSUCHI_OK) return tsuchi_lua::fail(L, result);
+    tsuchi_lua::push_handle(L, "setting_hold", hold.id); return 1;
+}
+int tsuchi_lua_settings_update_hold(lua_State* L) {
+    const TSUCHI_SettingHold hold{tsuchi_lua::check_handle(L, 1, "setting_hold", false)};
+    TSUCHI_Value value{};
+    if (!held_scalar(L, 2, value)) return tsuchi_lua::fail(L, TSUCHI_INVALID);
+    const auto result = host(L)->settings->update_hold(mod(L), hold, &value);
+    if (result != TSUCHI_OK) return tsuchi_lua::fail(L, result);
+    lua_pushboolean(L, 1); return 1;
+}
+
 int tsuchi_lua_datatable_get(lua_State* L) {
     const Target target{L, {tsuchi_lua::check_handle(L, 1, "object", false)}, {}, luaL_checkstring(L, 2)};
     Path path;

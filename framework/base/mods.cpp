@@ -32,6 +32,7 @@ List<ManifestSection> sections;
 struct KeyOff { const char* key; const char* family; };
 List<KeyOff> keys_off;
 void (*before_start)(ModRecord&) = nullptr;
+void (*override_changed)(ModRecord&, const Setting&) = nullptr;
 void (*log_sink)(const char*, const char*) = nullptr;
 uint32_t lines_logged = 0;
 
@@ -41,6 +42,7 @@ struct Lifecycle {
     uint64_t generation = discovery_generation;
     Lifecycle() { lifecycle_active = true; }
     ~Lifecycle() {
+        if (!forget_pending) refresh_setting_overrides();
         lifecycle_active = false;
         if (forget_pending) { forget_pending = false; forget_mods(); }
     }
@@ -124,7 +126,7 @@ void forget(ModRecord& record) {
 // The keys a manifest may have at its top. Anything else is a mistake its author should hear of.
 bool known_key(const char* key) {
     const char* const every[] = {"id", "name", "version", "framework", "game", "author", "description", "url", "meta",
-                                 "requires", "optional", "conflicts", "settings"};
+                                 "requires", "optional", "conflicts", "settings", "settings_overrides", "restart"};
     for (const char* known : every)
         if (!strcmp(key, known)) return true;
     for (uint32_t i = 0; i < sections.count; ++i)
@@ -193,6 +195,12 @@ bool read_manifest(ModRecord& record, const char* text, size_t bytes) {
         const Json* said = manifest.find(key);
         if (said && (said->kind != Json::Kind::text || strlen(said->text) != said->bytes)) return blocked(record, "mod.json: \"", key, "\" is text");
     }
+    if (const Json* restart = manifest.find("restart")) {
+        if (restart->kind != Json::Kind::text || strlen(restart->text) != restart->bytes ||
+            (strcmp(restart->text, "mod") && strcmp(restart->text, "game")))
+            return blocked(record, "mod.json: \"restart\" is either \"mod\" or \"game\"");
+        record.game_restart = !strcmp(restart->text, "game");
+    }
     // A mod that only works with some builds of the game says which, by key or by version.
     if (const Json* game = manifest.find("game")) {
         const auto names_this_build = [](const Json& said) {
@@ -226,6 +234,16 @@ bool read_manifest(ModRecord& record, const char* text, size_t bytes) {
         if (conflicts->kind != Json::Kind::list) return blocked(record, "mod.json: \"conflicts\" is a list of mod IDs");
         for (const Json* other = conflicts->first; other; other = other->next)
             if (other->kind != Json::Kind::text || !valid_mod_id(other->text) || !strcmp(other->text, record.id)) return blocked(record, "mod.json: \"conflicts\" is a list of other mods' IDs");
+    }
+    if (const Json* overrides = manifest.find("settings_overrides")) {
+        if (overrides->kind != Json::Kind::object) return blocked(record, "mod.json: settings_overrides must be an object of required mod IDs");
+        const Json* needs = manifest.find("requires");
+        for (const Json* target = overrides->first; target; target = target->next) {
+            if (!needs || !needs->find(target->name)) return blocked(record, "settings_overrides needs a direct requires dependency: ", target->name);
+            if (target->kind != Json::Kind::object || !target->count) return blocked(record, "settings_overrides needs setting keys and values for ", target->name);
+            for (const Json* value = target->first; value; value = value->next)
+                if (!valid_mod_id(value->name)) return blocked(record, "settings_overrides has an invalid setting key: ", value->name);
+        }
     }
     Text wrong;
     if (!declare_settings(record.settings, manifest.find("settings"), wrong)) {
@@ -276,6 +294,59 @@ void block_unmet() {
             changed = changed || record.state != ModState::ready;
         }
     }
+}
+
+const Json* overrides_of(const ModRecord& source, const char* target) {
+    const Json* overrides = source.manifest ? source.manifest->find("settings_overrides") : nullptr;
+    return overrides ? overrides->find(target) : nullptr;
+}
+
+void validate_overrides() {
+    for (uint32_t i = 0; i < records.count; ++i) {
+        ModRecord& source = records[i];
+        if (source.state != ModState::ready) continue;
+        const Json* overrides = source.manifest->find("settings_overrides");
+        for (const Json* target = overrides ? overrides->first : nullptr; target && source.state == ModState::ready; target = target->next) {
+            ModRecord* there = find_mod(target->name);
+            for (const Json* value = target->first; value && source.state == ModState::ready; value = value->next) {
+                Setting* setting = there ? find_setting(there->settings, value->name) : nullptr;
+                if (!setting) blocked(source, "settings_overrides: unknown setting ", target->name, ":", value->name);
+                else if (!setting->overridable) blocked(source, "settings_overrides: setting does not allow overrides: ", target->name, ":", value->name);
+                else if (!setting_value_allowed(*setting, *value)) blocked(source, "settings_overrides: invalid value for ", target->name, ":", value->name);
+            }
+        }
+    }
+    block_unmet();
+    for (uint32_t t = 0; t < records.count; ++t) {
+        ModRecord& target = records[t];
+        for (uint32_t s = 0; s < target.settings.list.count; ++s) {
+            const Setting& setting = target.settings.list[s];
+            const Json* first = nullptr;
+            bool clash = false;
+            for (uint32_t i = 0; i < records.count; ++i) {
+                const ModRecord& source = records[i];
+                const Json* part = source.state == ModState::ready ? overrides_of(source, target.id) : nullptr;
+                const Json* value = part ? part->find(setting.key()) : nullptr;
+                if (!value) continue;
+                if (first && !setting_values_equal(setting, *first, *value)) clash = true;
+                first = value;
+            }
+            if (!clash) continue;
+            for (uint32_t i = 0; i < records.count; ++i) {
+                ModRecord& source = records[i];
+                const Json* part = source.state == ModState::ready ? overrides_of(source, target.id) : nullptr;
+                if (!part || !part->find(setting.key())) continue;
+                source.override_conflict = true;
+                // Retain selection until every contested setting has been examined.
+                const ModState state = source.state;
+                blocked(source, "conflicting settings_overrides for ", target.id, ":", setting.key());
+                source.state = state;
+            }
+        }
+    }
+    for (uint32_t i = 0; i < records.count; ++i)
+        if (records[i].override_conflict) records[i].state = ModState::blocked;
+    block_unmet();
 }
 
 // Blocks every mod that cannot run beside one that can: one it says it conflicts with, or one it works with only
@@ -620,6 +691,8 @@ TSUCHI_Result find_mods() {
     block_clashes();
     do block_unmet();
     while (order_mods());
+    validate_overrides();
+    refresh_setting_overrides();
     return TSUCHI_OK;
 }
 
@@ -789,7 +862,11 @@ void mark_with_dependents(ModRecord& target) {
         grew = false;
         for (uint32_t i = 0; i < records.count; ++i) {
             ModRecord& record = records[i];
-            if (record.seen == stamp || !had_turn(record) || !requires_marked(record)) continue;
+            if (record.seen == stamp || !had_turn(record)) continue;
+            bool included = requires_marked(record);
+            for (uint32_t j = 0; j < records.count && !included; ++j)
+                included = records[j].seen == stamp && overrides_of(records[j], record.id);
+            if (!included) continue;
             record.seen = stamp;
             grew = true;
         }
@@ -798,13 +875,21 @@ void mark_with_dependents(ModRecord& target) {
 
 // Restarts the mods marked with the current stamp together.
 void restart_marked() {
-    // Nothing stops unless the entry of every running one compiles, read from where its next start reads it.
+    // Nothing stops unless every running mod permits restart and its entry compiles.
+    // Check the whole dependent group first: removing even a provider's resources
+    // could invalidate a session-long consumer's native allocations.
     Text problem;
     bool fine = true;
     for (uint32_t i = 0; i < records.count; ++i) {
         ModRecord& record = records[i];
         if (record.seen != stamp) continue;
         record.restart_asked = false;
+        if (fine && record.state == ModState::running && record.game_restart) {
+            Texts why;
+            if (why.add(record.id, " requires restarting the game")) problem.set(why.data);
+            why.clear();
+            fine = false;
+        }
         const bool before = record.dev_folder;
         record.dev_folder = dev_folder_there(record.id);
         if (fine && record.state == ModState::running && !compiles(record, problem)) fine = false;
@@ -826,6 +911,9 @@ void restart_marked() {
             stop_context(record);
             record.state = ModState::stopped;
         }
+    for (uint32_t i = 0; i < records.count; ++i)
+        if (records[i].seen == stamp) records[i].state = ModState::stopped;
+    refresh_setting_overrides();
     for (uint32_t place = 0; place < records.count; ++place)
         for (uint32_t i = 0; i < records.count; ++i)
             if (records[i].seen == stamp && records[i].order == place) start_one(records[i]);
@@ -1081,6 +1169,59 @@ TSUCHI_Result manifest_part(const char* key, TSUCHI_Mod* mod, const Json& part, 
     return TSUCHI_NOT_READY;
 }
 void set_before_start(void (*prepare)(ModRecord&)) { before_start = prepare; }
+void set_setting_override_changed(void (*changed)(ModRecord&, const Setting&)) { override_changed = changed; }
+
+void refresh_setting_overrides() {
+    if (forget_pending) return;
+    if (!lifecycle_active) {
+        Lifecycle phase;
+        refresh_setting_overrides();
+        return;
+    }
+    bool changed = false;
+    for (uint32_t i = 0; i < records.count; ++i) {
+        ModRecord& source = records[i];
+        const bool active = source.manifest_valid && source.manifest->find("settings_overrides") &&
+            (source.state == ModState::ready || source.state == ModState::stopped ||
+             (source.state == ModState::running && mod_usable(source.context)));
+        changed |= active != source.override_active;
+        source.override_active = active;
+    }
+    if (!changed) return;
+    bool failed = false;
+    for (uint32_t t = 0; t < records.count; ++t) {
+        ModRecord& target = records[t];
+        for (uint32_t s = 0; s < target.settings.list.count; ++s) {
+            Setting& setting = target.settings.list[s];
+            const Json* value = nullptr;
+            Texts owners;
+            for (uint32_t i = 0; i < records.count; ++i) {
+                const ModRecord& source = records[i];
+                const Json* part = source.override_active ? overrides_of(source, target.id) : nullptr;
+                const Json* declared = part ? part->find(setting.key()) : nullptr;
+                if (!declared) continue;
+                value = declared;
+                if (owners.used) --owners.used;
+                if (!owners.add(owners.used ? ", " : "", source.id)) failed = true;
+            }
+            const bool different = value != setting.override_value || strcmp(setting.controllers.get(), owners.used ? owners.data : "");
+            setting.override_value = value;
+            setting.controllers.clear();
+            setting.controllers.data = owners.data;
+            setting.controllers.capacity = owners.capacity;
+            owners = {};
+            if (different && target.state == ModState::running && override_changed) override_changed(target, setting);
+        }
+    }
+    if (failed) {
+        // A provenance allocation failure must not publish an unlabelled or partial override.
+        for (uint32_t i = 0; i < records.count; ++i)
+            if (records[i].override_active) blocked(records[i], "settings_overrides: there is no memory for the controlling mod IDs");
+        block_unmet();
+        refresh_setting_overrides();
+        stop_blocked_contexts();
+    }
+}
 
 void forget_mods() {
     if (lifecycle_active) { ++discovery_generation; forget_pending = true; return; }

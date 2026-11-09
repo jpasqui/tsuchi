@@ -44,7 +44,10 @@ struct ModRecord {
     bool manifest_valid; // read and admitted before activation or dependency decisions
     const char* clash;
     const char* clash_version;
+    bool override_active = false;
+    bool override_conflict = false;
     bool prepared = false; // the opted-in early declarations began successfully in this context
+    bool game_restart = false; // native allocations/effects require a new game process before restarting this mod
 };
 
 // Where mods are looked for.
@@ -83,6 +86,8 @@ bool add_manifest_key_off(const char* key, const char* family);
 TSUCHI_Result manifest_part(const char* key, TSUCHI_Mod* mod, const Json& part, Text& problem, bool apply);
 // What is done for a mod that has its context, before its code runs.
 void set_before_start(void (*prepare)(ModRecord& record));
+void set_setting_override_changed(void (*changed)(ModRecord&, const Setting&));
+void refresh_setting_overrides();
 
 // Reads one manifest into a record that has its ID. False when the mod is blocked by what its manifest says or
 // fails to say; `problem` then tells why.
