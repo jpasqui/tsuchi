@@ -272,7 +272,7 @@ functions:
       unsupported: "The signature has an argument that would go on the stack."
       busy: "The instruction at `function_at` isn't `expected`, or the table entry no longer holds `stock`."
       not_ready: "A function target needs code access, and this install doesn't have it."
-      capacity: "Every one of the 256 script hook gateways is in use."
+      capacity: "Every one of the 256 script hook gateways is in use, or your mod already has 16 watches."
       no_memory: "There's no memory for the watch's records."
     completes: wrap_site
 

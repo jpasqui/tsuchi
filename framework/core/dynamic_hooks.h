@@ -7,13 +7,12 @@
 // CallFrame and calls tsuchi_dynamic_dispatch with its number. The dispatch decides whether
 // the hook's client runs, and puts the result back in the frame.
 //
-// On ARM64 a gateway is an ordinary C++ function that takes eight integer and eight
-// floating-point arguments. AAPCS64 gives integer and floating-point arguments their own
-// registers, x0 to x7 and v0 to v7, so that one prototype receives every register any
-// supported signature uses, whatever the game's function takes. A gateway returns either an
-// integer or a float, so each number has one of each, and the hook picks by its signature's
-// result. The same holds the other way for calling the original. Inline hooks have a fixed
-// prototype of their own and need no platform part.
+// On ARM64 the gateways are assembly in start.S. Each keeps every register a call can use:
+// x0 to x7, x8 for a result the caller gives memory for, and q0 to q7 whole, and returns
+// x0, x1, x8 and q0 to q3 from the frame, so a function that returns a structure in memory,
+// two registers or four floats gets them through a hook unchanged. tsuchi_dynamic_call calls
+// the original the same way. Inline hooks have a fixed prototype of their own and need no
+// platform part.
 #pragma once
 #include <stdint.h>
 
@@ -25,18 +24,23 @@ namespace tsuchi {
 constexpr uint32_t kDynamicGateways = 256;
 constexpr uint32_t kDynamicDepth = 8;      // deeper calls of one hook go to the original
 constexpr uint32_t kWatchRecords = 256;    // records per watch, between two frames
+constexpr uint32_t kWatchesPerMod = 16;    // each keeps its records in about 180 KB of the game's memory
 constexpr uint32_t kWatchTextUnits = 256;  // UTF-16 units of text16 arguments a watch record keeps
 constexpr uint32_t kSignatureArguments = 16;
 constexpr uint32_t kRegisterArguments = 8; // of each kind
 // The game's thread has a stack of 1 MB: nnMain creates it with the size the command-line parser defaults to.
 constexpr uint64_t kGameStackBytes = 0x100000;
 
-// The argument registers of one call, as a gateway stores them, and its result afterward in
-// x[0] or the low 32 bits of f[0].
-struct CallFrame {
-    uint64_t x[kRegisterArguments]; // x0 to x7
-    uint64_t f[kRegisterArguments]; // the low 64 bits of v0 to v7
+// The registers of one call, as a gateway stores them, and its result afterward in x[0] (and
+// x[1]) or q[0] to q[3]. A signature's f32 is the low 32 bits of q[n][0]. start.S knows this layout.
+struct alignas(16) CallFrame {
+    uint64_t x[kRegisterArguments];    // x0 to x7
+    uint64_t x8;                       // where the caller wants a result it gives memory for
+    uint64_t reserved;
+    uint64_t q[kRegisterArguments][2]; // v0 to v7, low half first
 };
+static_assert(sizeof(CallFrame) == 208, "start.S stores the frame at fixed offsets");
+
 
 enum class CallType : uint8_t { void_, boolean, i32, u32, u64, pointer, const_pointer, f32, text16 };
 
