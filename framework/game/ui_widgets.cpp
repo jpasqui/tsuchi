@@ -30,6 +30,7 @@ struct Root {
     TSUCHI_Mod* mod;
     uint64_t context, world, widget, tree, key;
     List<uint64_t> pins, made;
+    List<uint64_t> nested;   // other UserWidgets of the same mod that were put in this one's panels
     List<Observation> observations;
     uint32_t calls;
     bool retired, viewport, removing, adding_viewport;
@@ -73,7 +74,7 @@ game::CallGuard guard(Root& root) { return {allowed, &root}; }
 void finish(Root* root) {
     if (--root->calls || !root->retired) return;
     cleanup(*root);
-    root->pins.clear(); root->made.clear(); root->observations.clear(); release(root);
+    root->pins.clear(); root->made.clear(); root->nested.clear(); root->observations.clear(); release(root);
 }
 struct Use {
     Root* root;
@@ -106,6 +107,8 @@ void detach_attached(uint64_t handle) {
 void cleanup(Root& root) {
     // All native calls using this state have returned before the final reference
     // releases its objects. Native Construct/Destruct may collect garbage.
+    // The mod's other UserWidgets in this one's panels come out first: they are their own roots, and stay.
+    for (uint32_t i = root.nested.count; i--;) detach_attached(root.nested[i]);
     detach_attached(root.widget);
     for (uint32_t i = root.made.count; i--;) detach_attached(root.made[i]);
     for (uint32_t i = root.pins.count; i--;) release_game_object(root.pins[i]);
@@ -396,8 +399,13 @@ TSUCHI_Result ui_add_child(TSUCHI_Mod* mod, TSUCHI_Object panel, TSUCHI_Object c
     if (result != TSUCHI_OK) return result;
     Use use(root); Root* other = nullptr; result = locate(mod, child.id, other);
     if (result != TSUCHI_OK) return result;
-    if (other != root) return TSUCHI_DENIED;
-    if (child.id == root->widget) return TSUCHI_INVALID;
+    // A widget of this tree, or another UserWidget the mod created, whole: never a part of that one's tree.
+    const bool nested = other != root;
+    if (nested && child.id != other->widget) return TSUCHI_DENIED;
+    if (!nested && child.id == root->widget) return TSUCHI_INVALID;
+    if (nested && (other->viewport || other->adding_viewport || other->removing ||
+        (t::bound(t::fn::ui_widget_in_viewport) && t::fn::ui_widget_in_viewport(reinterpret_cast<void*>(resolve(child.id)))))) return TSUCHI_BUSY;
+    if (nested && !root->nested.reserve(root->nested.count + 1)) return TSUCHI_NO_MEMORY;
     const uint64_t parent = resolve(panel.id), object = resolve(child.id), tree = resolve(root->tree);
     if (!game::is_a(parent, panel_class) || parent == object) return TSUCHI_INVALID;
     if (game::read_or<uint64_t>(object + t::ui_mod_list_tab::slot) ||
@@ -406,7 +414,14 @@ TSUCHI_Result ui_add_child(TSUCHI_Mod* mod, TSUCHI_Object panel, TSUCHI_Object c
     for (uint32_t n = 0; ancestor && n < 128; ++n) {
         if (ancestor == object) return TSUCHI_INVALID;
         const uint64_t slot = game::read_or<uint64_t>(ancestor + t::ui_mod_list_tab::slot);
-        ancestor = slot ? game::read_or<uint64_t>(slot + t::ui_mod_list_tab::parent) : 0;
+        if (slot) ancestor = game::read_or<uint64_t>(slot + t::ui_mod_list_tab::parent);
+        else {
+            // The top of a tree: on to the UserWidget whose tree it is, which may sit in a panel itself.
+            uint64_t outer = game::outer_of(ancestor);
+            for (uint32_t hops = 0; outer && !game::is_a(outer, tree_class) && hops < 8; ++hops) outer = game::outer_of(outer);
+            const uint64_t user = outer && game::is_a(outer, tree_class) ? game::outer_of(outer) : 0;
+            ancestor = user && user != ancestor && game::is_a(user, user_class) ? user : 0;
+        }
         if (n == 127 && ancestor) return TSUCHI_INVALID;
     }
     if (!t::bound(t::fn::ui_add_child)) return TSUCHI_NOT_READY;
@@ -419,6 +434,11 @@ TSUCHI_Result ui_add_child(TSUCHI_Mod* mod, TSUCHI_Object panel, TSUCHI_Object c
         detach(child.id); return TSUCHI_NOT_READY;
     }
     if (!pin(*root, handle)) { detach(child.id); return TSUCHI_NO_MEMORY; }
+    if (nested) {
+        bool listed = false;
+        for (uint32_t i = 0; i < root->nested.count; ++i) listed = listed || root->nested[i] == child.id;
+        if (!listed) root->nested.add(child.id);
+    }
     *out = {handle}; return TSUCHI_OK;
 }
 TSUCHI_Result ui_hold_widget(TSUCHI_Mod* mod, TSUCHI_Object widget, int32_t z_order) {

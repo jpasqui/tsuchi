@@ -431,8 +431,20 @@ function showPicture(widget, width, height, pixels) {
 </TabItem>
 </Tabs>
 
+[`ui.decode_texture`](/reference/ui/#decode_texture) makes a texture from a picture file's bytes, such
+as a PNG or JPEG. The game's own decoder reads the file, at the picture's size, up to 4096 pixels on a
+side. Decoding takes the game thread, so decode one picture a frame at most.
+
 The texture stays your mod's until [`ui.release_texture`](/reference/ui/#release_texture) or your mod
 stops. Release it once no image shows it.
+
+### Widgets inside widgets
+
+[`ui.add_child`](/reference/ui/#add_child) also takes another UserWidget your mod created, whole. Use it
+to put one of the game's own widgets, such as a button or a line of text, inside a panel of your page:
+create it with `ui.create_widget`, then add it to the panel. It stays a widget of its own, so
+`ui.find_widget` on it finds its parts, and it comes out of the panel when either widget is destroyed.
+A part of that widget's own tree can't move into yours.
 
 ### Layout by reflection
 

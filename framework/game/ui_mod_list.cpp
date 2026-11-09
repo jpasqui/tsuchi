@@ -71,6 +71,10 @@ List<Chosen> chosen;
 uint32_t shown_entries = 0;      // how many of them the page showing now has
 bool leaving = false;            // the page on its own is to close: the game's own Back goes through
 bool screen_up() { return detail.id || settings.id || cheats.showing(); }
+// A mod's own page over the menus (ui.hold_menu_input): while it holds their input, and after it lets go
+// until every button is up, the list and the title menu act on no press.
+TSUCHI_Mod* input_holder = nullptr;
+bool input_quiet = false;
 // A dialog on the screen, the game's own or any mod's, takes the presses. The list acts on none of them, nor
 // on the Confirm that closed it until that is let go.
 bool confirm_spent = false;
@@ -465,6 +469,7 @@ void ready(uint64_t host) {
 }
 void lost(uint64_t host) { if (current_host == host) sessions.release(frontend_mod, host, 0); }
 bool dispatch(uint64_t host, uint32_t action, bool& handled, bool& result) {
+    if (input_holder || input_quiet) { handled = true; result = true; return true; }   // the mod's page has the presses
     if (!live() || host != current_host || asking != Question::none) return false;
     if (leaving && action == 5) return false;   // the game's own Back, which closes the page
     if (action == 100 || action == 101) {
@@ -479,6 +484,9 @@ void buttons(uint64_t held) {
     namespace t = game::table;
     const uint64_t previous = previous_buttons, edges = held & ~previous;
     previous_buttons = held; ++tab_input_sample;
+    if (input_holder && !mod_usable(input_holder)) { input_holder = nullptr; input_quiet = true; }
+    if (input_quiet && !input_holder && !held) input_quiet = false;
+    if (input_holder || input_quiet) { confirm_spent = true; return; }
     const bool frontend_live = live();
     if (leaving && frontend_live && asking == Question::none && !screen_up() && !dialog_up()) {
         // Sent until the menu takes it in: a message over the page keeps the menu's input for a while.
@@ -568,6 +576,18 @@ void entry_chosen(void*, const TSUCHI_UiEntryChosen* event) {
     if (event->menu != TSUCHI_MENU_TITLE || strcmp(event->entry, kTitleEntry)) return;
     if (ui_mod_page_open() != TSUCHI_OK) mod_note(kFrameworkLogId, "The Mods page did not open from the title menu.");
 }
+// ui.hold_menu_input and its release.
+TSUCHI_Result hold_menu_input(TSUCHI_Mod* mod) {
+    if (!mod) return TSUCHI_INVALID;
+    if (input_holder && input_holder != mod && mod_usable(input_holder)) return TSUCHI_BUSY;
+    input_holder = mod; input_quiet = false;
+    return TSUCHI_OK;
+}
+TSUCHI_Result release_menu_input(TSUCHI_Mod* mod) {
+    if (!mod || input_holder != mod) return TSUCHI_NOT_FOUND;
+    input_holder = nullptr; input_quiet = true;
+    return TSUCHI_OK;
+}
 // ui.open_mods: the page on its own from the title menu, and the Mods tab while Settings takes input.
 TSUCHI_Result open_mods() {
     if (!frontend_mod || !mod_usable(frontend_mod)) return TSUCHI_NOT_READY;
@@ -579,6 +599,7 @@ TSUCHI_Result open_mods() {
     return ui_mod_page_open();
 }
 } // namespace
+bool ui_menu_input_held() { return (input_holder && mod_usable(input_holder)) || input_quiet; }
 void ui_mod_list_start(TSUCHI_Mod* framework) {
     frontend_mod = framework; restart_needed = false; sessions.start();
     const UiModListNativeCallbacks callbacks{count, row, selected_action, ready, lost};
@@ -596,6 +617,7 @@ void ui_mod_list_start(TSUCHI_Mod* framework) {
         backend.hold_menu_entry = hold_entry; backend.release_menu_entry = release_entry;
     }
     backend.open_mods = open_mods;
+    backend.hold_menu_input = hold_menu_input; backend.release_menu_input = release_menu_input;
     ui::set_backend(&backend);
     // The title menu's own adapter takes the entry where this build has one.
     if (next_hold_entry && ui_mod_page_supported() && ui::table.hold_menu_entry(frontend_mod, TSUCHI_MENU_TITLE, kTitleEntry, "Mods",

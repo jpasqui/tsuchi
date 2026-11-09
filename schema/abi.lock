@@ -529,7 +529,10 @@
    "on_text_entered",
    "open_mods",
    "create_texture",
-   "release_texture"
+   "release_texture",
+   "decode_texture",
+   "hold_menu_input",
+   "release_menu_input"
   ],
   "world": [
    "ground",

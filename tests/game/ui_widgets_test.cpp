@@ -288,8 +288,36 @@ void test_construction_and_ownership() {
     const TSUCHI_Object nested_panel = construct(owner, second_root, panel_type);
     assert(ui_add_child(owner, second_panel, nested_panel, &result) == TSUCHI_OK);
     assert(ui_add_child(owner, nested_panel, second_panel, &result) == TSUCHI_INVALID);
+    // Another UserWidget of the same mod goes into a panel whole. It is parented like any child, cannot go in
+    // twice or into the viewport meanwhile, and nothing of this tree can go inside it in turn.
+    const TSUCHI_Object part_root = create(owner), part_panel = construct(owner, part_root, panel_type);
+    assert(ui_set_root_widget(owner, part_root, part_panel) == TSUCHI_OK);
+    TSUCHI_Object part_slot{};
+    assert(ui_add_child(owner, nested_panel, part_root, &part_slot) == TSUCHI_OK && part_slot.id);
+    assert(fake::get<uint64_t>(raw(part_root) + t::ui_mod_list_tab::slot) == raw(part_slot));
+    assert(ui_add_child(owner, second_panel, part_root, &result) == TSUCHI_BUSY);
+    assert(ui_add_child(owner, part_panel, second_root, &result) == TSUCHI_INVALID);
+    assert(ui_hold_widget(owner, part_root, 0) == TSUCHI_BUSY);
+    // Its own parts stay its own: they do not go into the outer tree's panels.
+    const TSUCHI_Object part_button = construct(owner, part_root, button_type);
+    assert(ui_add_child(owner, second_panel, part_button, &result) == TSUCHI_DENIED);
+    assert(ui_add_child(owner, part_panel, part_button, &result) == TSUCHI_OK);
+    // Destroyed, it comes out of the panel; the outer widget stays.
+    assert(ui_destroy_widget(owner, part_root) == TSUCHI_OK);
+    assert(!fake::get<uint64_t>(raw(part_root) + t::ui_mod_list_tab::slot));
+    assert(ui_find_widget(owner, second_root, "Missing", &result) == TSUCHI_OK);
+    // The outer one destroyed first: the inner one comes out and is still the mod's.
+    const TSUCHI_Object outer_root = create(owner), outer_panel = construct(owner, outer_root, panel_type);
+    const TSUCHI_Object inner_root = create(owner);
+    assert(ui_add_child(owner, outer_panel, inner_root, &result) == TSUCHI_OK);
+    assert(ui_destroy_widget(owner, outer_root) == TSUCHI_OK);
+    assert(!fake::get<uint64_t>(raw(inner_root) + t::ui_mod_list_tab::slot));
+    assert(ui_hold_widget(owner, inner_root, 0) == TSUCHI_OK && ui_release_widget(owner, inner_root) == TSUCHI_OK);
+    assert(ui_destroy_widget(owner, inner_root) == TSUCHI_OK);
     const TSUCHI_Object foreign_root = create(other), foreign_button = construct(other, foreign_root, button_type);
     assert(ui_add_child(owner, panel, foreign_button, &result) == TSUCHI_DENIED);
+    // Another mod's UserWidget does not go in.
+    assert(ui_add_child(owner, panel, foreign_root, &result) == TSUCHI_DENIED);
     fake::put(raw(button) + t::object::name, fake::name(u"Apply"));
     assert(ui_find_widget(owner, root, "Apply", &result) == TSUCHI_OK && result.id == button.id);
     assert(ui_find_widget(owner, root, "Missing", &result) == TSUCHI_OK && result.id == 0);

@@ -1346,6 +1346,7 @@ functions:
   bulk_data_size: {address: 0x9A10, returns: u64, args: [pointer]}
   bulk_data_lock: {address: 0x9A20, returns: pointer, args: [pointer, u32]}
   bulk_data_unlock: {address: 0x9A30, args: [pointer]}
+  texture_from_image: {address: 0x9A40, returns: pointer, args: [pointer]}
   ui_scroll_offset: {address: 0x3210, args: [f32, pointer]}
   ui_scroll_reveal: {address: 0x3220, args: [f32, pointer, pointer, bool, u32]}
   ui_size_box_width: {address: 0x3230, args: [f32, pointer]}

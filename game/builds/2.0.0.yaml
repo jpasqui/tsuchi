@@ -1750,6 +1750,7 @@ functions:
   bulk_data_size: absent
   bulk_data_lock: absent
   bulk_data_unlock: absent
+  texture_from_image: absent
   ui_widget_viewport: 80681664
   ui_scroll_offset: 80433136
   ui_scroll_reveal: 80433200

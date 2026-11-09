@@ -1,6 +1,7 @@
 // Textures made from a mod's pixels (ui.create_texture), as UE 4.26's FImageUtils makes them: a transient
-// UTexture2D of one mip, its bulk data filled in place, then UpdateResource. Each is kept from the garbage
-// collector for its mod until released or the mod stops. Game thread only.
+// UTexture2D of one mip, its bulk data filled in place, then UpdateResource. And textures from a picture
+// file's bytes (ui.decode_texture), which FImageUtils makes itself with the game's own decoders. Each is kept
+// from the garbage collector for its mod until released or the mod stops. Game thread only.
 #include "ui_textures.h"
 #include "ui_screens.h"
 #include "ui_service.h"
@@ -14,7 +15,8 @@
 namespace tsuchi {
 namespace {
 namespace t = game::table;
-constexpr uint32_t kMostSide = 2048;
+constexpr uint32_t kMostSide = 2048, kMostDecodedSide = 4096;
+constexpr uint64_t kMostImageBytes = 16ull << 20;
 const Kind kTexture{"ui.texture"};
 
 void forget(void*, uint64_t handle) { release_game_object(handle); }
@@ -66,6 +68,26 @@ TSUCHI_Result create_texture(TSUCHI_Mod* mod, uint32_t width, uint32_t height, c
     return TSUCHI_OK;
 }
 
+TSUCHI_Result decode_texture(TSUCHI_Mod* mod, const void* image, uint64_t bytes, TSUCHI_Object* out) {
+    if (!mod || !out || !image || !bytes || bytes > kMostImageBytes) return TSUCHI_INVALID;
+    if (!on_game_thread()) return TSUCHI_NOT_READY;
+    if (!t::bound(t::fn::texture_from_image)) return TSUCHI_UNSUPPORTED;
+    if (reserve_owned(mod, 1) != TSUCHI_OK) return TSUCHI_NO_MEMORY;
+    // The engine's array of bytes, read and never changed: the file where the mod has it.
+    struct Bytes { const void* data; int32_t count, capacity; } file{image, int32_t(bytes), int32_t(bytes)};
+    const uint64_t texture = reinterpret_cast<uint64_t>(t::fn::texture_from_image(&file));
+    const uint64_t handle = game::live(texture) ? game::to_handle(texture) : 0;
+    if (!handle) return TSUCHI_INVALID;   // no decoder of the game's reads it
+    if (!retain_game_object(handle)) return TSUCHI_NO_MEMORY;
+    const uint64_t platform = game::read_or<uint64_t>(texture + t::texture_2d::platform_data);
+    const uint32_t width = platform ? game::read_or<uint32_t>(platform + t::texture_platform_data::width) : 0;
+    const uint32_t height = platform ? game::read_or<uint32_t>(platform + t::texture_platform_data::height) : 0;
+    if (!width || !height || width > kMostDecodedSide || height > kMostDecodedSide) { release_game_object(handle); return TSUCHI_CAPACITY; }
+    if (own(mod, kTexture, handle, forget, nullptr) != TSUCHI_OK) { release_game_object(handle); return TSUCHI_NO_MEMORY; }
+    out->id = handle;
+    return TSUCHI_OK;
+}
+
 TSUCHI_Result release_texture(TSUCHI_Mod* mod, TSUCHI_Object texture) {
     if (!mod || !texture.id) return TSUCHI_INVALID;
     if (disown(mod, kTexture, texture.id) != TSUCHI_OK) return TSUCHI_NOT_FOUND;
@@ -78,6 +100,7 @@ void ui_textures_start() {
     auto& backend = ui_screen_backend();
     backend.create_texture = create_texture;
     backend.release_texture = release_texture;
+    backend.decode_texture = decode_texture;
     ui::set_backend(&backend);
 }
 } // namespace tsuchi

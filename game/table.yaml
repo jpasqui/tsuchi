@@ -1434,6 +1434,7 @@ functions:
   bulk_data_size: {address: 0x381F120, returns: u64, args: [pointer]}     # FBulkDataBase::GetBulkDataSize
   bulk_data_lock: {address: 0x3821230, returns: pointer, args: [pointer, u32]}  # FBulkDataBase::Lock(bulk, flags): 2 reads and writes
   bulk_data_unlock: {address: 0x3821420, args: [pointer]}                 # FBulkDataBase::Unlock
+  texture_from_image: {address: 0x5524420, returns: pointer, args: [pointer]}  # FImageUtils::ImportBufferAsTexture2D(the file's bytes as an array) -> a transient texture, or null
   ui_scroll_offset: {address: 0x04C581B0, args: [f32, pointer]}
   ui_scroll_reveal: {address: 0x04C581F0, args: [f32, pointer, pointer, bool, u32]}
   ui_size_box_width: {address: 0x04C59100, args: [f32, pointer]}

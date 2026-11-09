@@ -391,7 +391,8 @@ functions:
 
 - name: create_widget
   doc: Creates a UserWidget from a loaded class and keeps it for your mod. The context supplies its world;
-    it may be a world, actor, or widget. This creates an engine widget, independently of generated Settings
+    it may be a world, actor, or widget. Away from play, such as on the title screen, the player controller
+    from actor.list serves. This creates an engine widget, independently of generated Settings
     screens. Destroy it when finished. It ends when its context or loaded world ends, or your mod stops.
   owns: true
   params:
@@ -463,18 +464,20 @@ functions:
     not_ready: The tree cannot be changed or the owner ended.
   completes: construct_widget
 - name: add_child
-  doc: Adds an unparented widget to a PanelWidget in the same owned tree. Returns the engine's PanelSlot;
+  doc: Adds an unparented widget to a PanelWidget of yours. The child is a widget of the same tree, or
+    another UserWidget your mod created, whole, such as one of the game's own button widgets. That one stays
+    its own widget and comes out again when either is destroyed. Returns the engine's PanelSlot;
     use reflection for the slot's layout. It refuses cycles and does not reparent existing children.
   owns: true
   params:
   - {name: panel, type: handle<object>, doc: Your PanelWidget.}
-  - {name: child, type: handle<object>, doc: Your unparented child in the same tree.}
+  - {name: child, type: handle<object>, doc: "Your unparented child in the same tree, or another UserWidget of yours."}
   returns: {type: handle<object>, doc: The created PanelSlot.}
   fails:
     not_found: A widget no longer exists or is not owned.
-    denied: The widgets belong to different mods or trees.
+    denied: "The widgets belong to different mods, or the child is a part of another UserWidget's tree."
     invalid: The parent is not a panel, or the attachment would form a cycle.
-    busy: The child already has a parent or is the tree root.
+    busy: "The child already has a parent, is the tree root, or is a UserWidget shown in the viewport."
     not_ready: The engine could not attach it, or its owner ended during attachment.
     no_memory: The slot retention record could not be allocated.
   completes: construct_widget
@@ -708,6 +711,35 @@ functions:
   fails:
     not_found: Your mod has no such texture.
   completes: create_texture
+- name: decode_texture
+  doc: Creates a texture from the bytes of a picture file, such as a PNG or JPEG downloaded with net.get, and
+    keeps it for your mod. The game's own decoder reads it, at the picture's size. Decoding takes the game
+    thread; a large picture can take a frame or more. Release it with release_texture.
+  owns: true
+  params:
+  - {name: image, type: bytes, doc: "The whole file, at most 16 MiB."}
+  returns: {type: handle<object>, doc: "The texture, which is a Texture2D."}
+  fails:
+    invalid: "The bytes are empty or more than 16 MiB, or the game's decoder doesn't read that kind of picture."
+    capacity: "The picture is larger than 4096 pixels on a side."
+    unsupported: This build of the game has no adapter for textures.
+    no_memory: The texture could not be kept.
+  users: [mod-downloader, custom-mod-menus]
+- name: hold_menu_input
+  doc: |
+    Keeps the game's menus from acting on presses while your mod shows a page of its own over them: the
+    title screen's menu, and Settings with the Mods page. Read the presses yourself with `input`. It ends
+    when released or your mod stops. The menus act again once every button has been let go.
+  owns: true
+  fails:
+    busy: "Another mod holds the menus' input."
+  users: [mod-downloader, custom-mod-menus]
+- name: release_menu_input
+  doc: Gives the game's menus their input back.
+  owns: true
+  fails:
+    not_found: "Your mod does not hold the menus' input."
+  completes: hold_menu_input
 events:
 - name: activated
   doc: Emitted when the player selects a button. Only the screen's owning mod receives this event.

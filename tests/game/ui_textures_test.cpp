@@ -41,6 +41,18 @@ uint64_t bulk_size(void*) { return bulk_bytes.size(); }
 void* bulk_lock(void*, uint32_t how) { assert(how == 2); ++locks; return bulk_bytes.data(); }
 void bulk_unlock(void*) { ++unlocks; }
 bool kept(uint64_t texture) { return game::object_kept(texture); }
+// The engine's picture import: a texture of the size the test names, or none for bytes it does not read.
+uint32_t decoded_width = 0, decoded_height = 0, decodes = 0;
+std::vector<uint8_t> decoded_from;
+void* from_image(void* array) {
+    struct Bytes { const uint8_t* data; int32_t count, capacity; };
+    const auto* bytes = static_cast<const Bytes*>(array);
+    assert(bytes->count == bytes->capacity);
+    decoded_from.assign(bytes->data, bytes->data + bytes->count);
+    ++decodes;
+    if (!decoded_width) return nullptr;
+    return create_transient(int32_t(decoded_width), int32_t(decoded_height), uint32_t(t::constant::texture_format_bgra8), 0);
+}
 }
 
 namespace tsuchi {
@@ -87,6 +99,23 @@ int main() {
     two_mips = false; null_texture = true;
     assert(ui.create_texture(mod, 2, 2, pixels, sizeof pixels, &texture) == TSUCHI_NOT_READY);
     null_texture = false;
+    // A picture file: the game's own import makes the texture from the bytes as they are.
+    const uint8_t file[] = {0x89, 'P', 'N', 'G', 1, 2, 3};
+    assert(ui.decode_texture(mod, file, sizeof file, &texture) == TSUCHI_UNSUPPORTED);
+    t::fn::texture_from_image = from_image;
+    assert(ui.decode_texture(mod, file, 0, &texture) == TSUCHI_INVALID && decodes == 0);
+    assert(ui.decode_texture(mod, file, (16ull << 20) + 1, &texture) == TSUCHI_INVALID && decodes == 0);
+    assert(ui.decode_texture(mod, file, sizeof file, &texture) == TSUCHI_INVALID && decodes == 1);   // nothing reads it
+    decoded_width = 640; decoded_height = 360;
+    assert(ui.decode_texture(mod, file, sizeof file, &texture) == TSUCHI_OK && texture.id && decodes == 2);
+    assert(decoded_from == std::vector<uint8_t>(file, file + sizeof file));
+    const uint64_t picture = game::from_handle(texture.id);
+    assert(picture == last_texture && kept(picture) && owned_count(mod) == 1);
+    assert(ui.release_texture(mod, texture) == TSUCHI_OK && !kept(picture) && owned_count(mod) == 0);
+    // Too large a picture is let go of at once.
+    decoded_width = 4097; decoded_height = 16;
+    assert(ui.decode_texture(mod, file, sizeof file, &texture) == TSUCHI_CAPACITY && !kept(last_texture) && owned_count(mod) == 0);
+    decoded_width = 0;
     // Another mod cannot release it, and the owner stopping lets go of it.
     TSUCHI_Mod* other = mod_create("other.mod");
     assert(ui.create_texture(mod, 2, 2, pixels, sizeof pixels, &texture) == TSUCHI_OK);
