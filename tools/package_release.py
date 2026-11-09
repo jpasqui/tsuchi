@@ -186,6 +186,7 @@ def reject_private_paths(out):
 def members(folder):
     from gen import game_table, stubs
     import build_patch
+    import process_metadata
     folder = Path(folder)
     report = json.loads((folder / 'report.json').read_text(encoding='utf-8'))
     table_bytes = (ROOT / 'game/table.yaml').read_bytes()
@@ -210,7 +211,7 @@ def members(folder):
             patch.get('files') != patch_files or patch.get('hash') != patch_hash:
         raise ValueError('Production module and patch identity disagree')
     module, elf_hash = validate_module(folder, report)
-    out = {'emulator/Tsuchi/' + module_file: module}
+    out = {}
     listed = []
     # Regenerate from the table, without writing into the supplied build folder.
     with tempfile.TemporaryDirectory(prefix='tsuchi-package-patch-') as work:
@@ -223,17 +224,22 @@ def members(folder):
             if pchtxt != build_patch.pchtxt(each, changed).encode('ascii') or ips != build_patch.ips(changed):
                 raise ValueError('Patch bytes differ from the production game table')
             # One module serves every build, and each program ID the builds have is a folder of its own on the console.
-            out['emulator/Tsuchi/' + text_name] = pchtxt
+            program = each['constants']['program_id']
+            emulator_root = process_metadata.profile(program)[0] + '/Tsuchi/'
+            metadata = process_metadata.generate(program)
+            out[emulator_root + module_file] = module
+            out[emulator_root + 'exefs/main.npdm'] = metadata
+            out[emulator_root + text_name] = pchtxt
             out['console/atmosphere/contents/' + title_of(each) + '/' + module_file] = module
+            out['console/atmosphere/contents/' + title_of(each) + '/exefs/main.npdm'] = metadata
             out['console/atmosphere/exefs_patches/Tsuchi/' + binary_name.removeprefix('ips/')] = ips
             listed.append(dict(key=each['key'], version=each['version'], build_id=each['build_id'].upper(),
-                               program_id=title_of(each), patch_hash=f'{stubs.patch_hash(each):016x}'))
+                               program_id=title_of(each), patch_hash=f'{stubs.patch_hash(each):016x}',
+                               emulator_folder=emulator_root.rstrip('/'), metadata_sha256=digest(metadata)))
     docs = ROOT / 'site/src/content/docs/players'
     out['INSTALL-CONSOLE.md'] = install_guide((docs / 'install-console.md').read_text(encoding='utf-8'), module_file)
     out['INSTALL-EMULATOR.md'] = install_guide((docs / 'install-tsuchi.mdx').read_text(encoding='utf-8'), module_file)
     out['THIRD-PARTY-NOTICES.txt'] = (ROOT / 'tools/Tsuchi-ThirdPartyNotices.txt').read_bytes()
-    for helper in ('install.py', 'native_hook_permissions.py'):
-        out[helper] = (ROOT / 'tools' / helper).read_bytes()
     release = schema_identity.release_version(ROOT)
     named = {} if release is None else dict(release_version=release)
     out['release.json'] = (json.dumps(dict(format=1, **named, game_version=version,

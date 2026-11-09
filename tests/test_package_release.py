@@ -65,12 +65,42 @@ def small_elf(extra_symbol=None, payload=b''):
 
 
 class ReleasePackage(unittest.TestCase):
+    def test_all_editions_package_matching_metadata_and_patches(self):
+        import process_metadata
+        tables = game_table.load_builds(ROOT / 'game/table.yaml')
+        self.assembly.side_effect = lambda table, work: self.records
+        names = []
+        for table in tables:
+            text_name, binary_name = build_patch.patch_names(table)
+            (self.built / text_name).write_bytes(build_patch.pchtxt(table, self.records).encode('ascii'))
+            (self.built / binary_name).write_bytes(build_patch.ips(self.records))
+            names.extend((text_name, binary_name))
+        self.report['patch']['files'] = sorted(names)
+        self.save_report()
+        with patch.object(game_table, 'load_builds', return_value=tables):
+            members = package_release.members(self.built)
+        manifest = json.loads(members['release.json'])
+        self.assertNotIn('install.py', members)
+        for table, entry in zip(tables, manifest['builds']):
+            program = table['constants']['program_id']
+            folder = process_metadata.profile(program)[0] + '/Tsuchi/'
+            expected = process_metadata.generate(program)
+            self.assertEqual(members[folder + 'exefs/main.npdm'], expected)
+            self.assertEqual(members[f'console/atmosphere/contents/{program:016X}/exefs/main.npdm'], expected)
+            self.assertEqual(entry['metadata_sha256'], package_release.digest(expected))
+            self.assertEqual(entry['emulator_folder'], folder.rstrip('/'))
+            for candidate in tables:
+                present = folder + build_patch.patch_names(candidate)[0] in members
+                self.assertEqual(present, candidate['constants']['program_id'] == program)
+
     def test_code_access_backend_ships_without_local_process_metadata(self):
         self.set_module(small_elf(extra_symbol='tsuchi_native_code_access'))
         members = package_release.members(self.built)
-        self.assertIn('install.py', members)
-        self.assertIn('native_hook_permissions.py', members)
-        self.assertFalse(any(name.endswith('.npdm') for name in members))
+        import process_metadata
+        self.assertNotIn('install.py', members)
+        self.assertNotIn('native_hook_permissions.py', members)
+        self.assertEqual(members['emulator/Tsuchi/exefs/main.npdm'],
+                         process_metadata.generate(self.table['constants']['program_id']))
         (self.built / 'exefs/main.npdm').write_bytes(b'local metadata')
         with self.assertRaisesRegex(ValueError, 'process metadata'):
             package_release.members(self.built)
@@ -318,7 +348,8 @@ class ReleasePackage(unittest.TestCase):
                         'console/atmosphere/contents/' + package_release.TITLE + '/exefs/subsdk9',
                         'console/atmosphere/exefs_patches/Tsuchi/' + Path(self.patch_files[1]).name,
                         'INSTALL-CONSOLE.md', 'INSTALL-EMULATOR.md', 'THIRD-PARTY-NOTICES.txt', 'release.json',
-                        'install.py', 'native_hook_permissions.py'}
+                        'emulator/Tsuchi/exefs/main.npdm',
+                        'console/atmosphere/contents/' + package_release.TITLE + '/exefs/main.npdm'}
             self.assertEqual(set(archive.namelist()), expected)
             self.assertEqual(a['files'], 10)
             self.assertEqual(archive.namelist(), sorted(expected))

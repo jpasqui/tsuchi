@@ -110,11 +110,18 @@ runtime leaves the target instruction unchanged. If rollback fails, the runtime
 keeps the backing memory and refuses another arena allocation.
 
 The standard module includes the code-write backend; no experimental build flag
-is needed. The release ships `install.py` and its helper. They read a player's
-own matching `main.npdm`, add the required system calls to both ACI0 and ACID,
-allow code reads, and write a local replacement alongside the module. Other
-capabilities and access-control data are preserved. The original dump is unchanged.
-Modified metadata requires a loader that accepts local ExeFS replacements.
+is needed. Release packaging generates `main.npdm` from the authored policy in
+`tools/process_metadata.py` and includes it beside the module. Players copy the
+files together; no dump or Python step is required. Separate descriptors cover
+the Switch game, Switch 2 Edition, and Switch 2 demo, including their process
+IDs, core limits and ACID layouts. Signatures and key slots are zero-filled;
+no game metadata file is read or redistributed.
+
+The descriptor grants the game's system calls plus the backend's required calls
+in both ACI0 and ACID, permits code reads, and allows filesystem and service
+clients for mods. It grants no service-host wildcard. This requires a loader that
+accepts replacement ExeFS descriptors, as Skyline does. Console qualification
+remains outstanding.
 
 For local runtime development, `python tools/build_module.py --native-hooks-npdm
 path/to/prepared/main.npdm` can stage already-prepared metadata with the standard
@@ -123,7 +130,8 @@ its input. Install the module, patch and metadata together, then restart the gam
 A process started with different metadata has different permissions; runtime
 mapping failure handling cannot make an unauthorized system call safe. Release
 packaging accepts the ordinary code-access backend but refuses any local `.npdm`
-file or report recording supplied metadata. It never packages the player's file.
+input file or report recording supplied metadata. Only descriptors freshly
+generated from the authored policy enter the archive.
 
 The SDK hook service layout is unchanged. API 0 remains unfrozen; this change does
 not promise compatibility across every development build.
