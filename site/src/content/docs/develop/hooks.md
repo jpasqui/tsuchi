@@ -125,17 +125,23 @@ The engine runs a reflected function through an entry in its description. Tsuchi
 puts its own function in that entry. The entry is data, so this needs no code
 access.
 
-Only calls that the engine makes through `ProcessEvent` reach your handlers. Those
-are the calls that C++ code makes into reflected functions: events such as
-`ReceiveBeginPlay`, input bindings, timers, delegates, network calls, and
-`reflection.call`.
+These calls reach your handlers:
+
+- Calls that C++ code makes through `ProcessEvent`: events such as
+  `ReceiveBeginPlay`, input bindings, timers, delegates, network calls, and
+  `reflection.call`.
+- A Blueprint's calls of C++ functions. A Blueprint passes the arguments as
+  script code. Tsuchi runs that code first, the way the function's own code
+  would, so your handlers get the values. An argument passed by reference is the
+  Blueprint's own variable, so a change to it changes that variable.
 
 These calls skip your handlers:
 
 - A C++ function that other C++ code calls directly. UE4SS has the same limit.
-- A function that a Blueprint calls. Tsuchi counts these calls when the function
-  is hooked.
 - A Blueprint function that another Blueprint function calls.
+
+Some C++ functions take a value of any type, such as the array functions. They
+read the type from the Blueprint's script code as it runs. Don't hook those.
 
 A Blueprint event without arguments runs as an entry point into its class's event
 graph. Tsuchi hooks the event graph for that event and runs your handlers for its

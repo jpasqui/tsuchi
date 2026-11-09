@@ -10,6 +10,7 @@ identity:
 - offset: 54547984
   hash: 17676423334391457610
 data:
+  script_natives: absent
   wwise_audio_manager: 133386464
   wwise_parameter_manager: 133386520
   ui_select_sound: 133926408
@@ -85,6 +86,7 @@ data:
   gimmick_warp_stage_function: 52913312
   content_icon_size: 134154048
 constants:
+  script_end_parms: 22
   stream_block_load: 128
   stream_source_cdo: 16
   physics_dynamic_kind: 6
@@ -707,8 +709,12 @@ structs:
     fields:
       node: absent
       object: absent
+      code: absent
       locals: absent
+      most_recent_property: absent
+      most_recent_address: absent
       out_parms: absent
+      property_chain: absent
   out_parm:
     size: absent
     fields:

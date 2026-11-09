@@ -44,7 +44,7 @@ Hook hooks[kEngineHooks];
 uint64_t next_id = uint64_t(3) << 61; // dynamic hooks count up from 1 << 62; instruction patches use bit 63
 
 struct Counters {
-    uint32_t calls = 0, off_thread = 0, script_arguments = 0, not_ready = 0, depth = 0, failed = 0;
+    uint32_t calls = 0, off_thread = 0, script_arguments = 0, not_ready = 0, depth = 0, failed = 0, script_calls = 0;
 } counters;
 void count(uint32_t& counter) { __atomic_fetch_add(&counter, 1, __ATOMIC_RELAXED); }
 
@@ -105,8 +105,119 @@ bool may_run(Hook& hook, uint32_t site, int32_t entry) {
     return true;
 }
 
+// A frame's own fields, which the engine hands over as valid memory, read and written directly.
+uint64_t frame_word(uint64_t frame, uint64_t offset) {
+    uint64_t value;
+    __builtin_memcpy(&value, reinterpret_cast<const void*>(frame + offset), sizeof value);
+    return value;
+}
+void set_frame_word(uint64_t frame, uint64_t offset, uint64_t value) {
+    __builtin_memcpy(reinterpret_cast<void*>(frame + offset), &value, sizeof value);
+}
+
+bool script_calls_present() {
+    return t::present(t::data::script_natives) && t::present(t::script_frame::code) && t::present(t::script_frame::most_recent_property) &&
+           t::present(t::script_frame::most_recent_address) && t::present(t::script_frame::property_chain);
+}
+
+// What FFrame::Step does: runs the opcode at the frame's code, which moves the code past its expression, and
+// puts the expression's value at `result` when it isn't null.
+void step(uint64_t frame, uint64_t result) {
+    const uint64_t code = frame_word(frame, t::script_frame::code);
+    const uint8_t opcode = *reinterpret_cast<const uint8_t*>(code);
+    set_frame_word(frame, t::script_frame::code, code + 1);
+    const uint64_t handler = frame_word(game::main_base() + t::data::script_natives, uint64_t(opcode) * sizeof(uint64_t));
+    reinterpret_cast<Native>(handler)(reinterpret_cast<void*>(frame_word(frame, t::script_frame::object)), reinterpret_cast<void*>(frame),
+                                      reinterpret_cast<void*>(result));
+}
+
+// A Blueprint's call of a C++ function: the caller's frame, whose code is at the call's arguments, as script code.
+// They are run here into memory laid out as the function's, the way a C++ function's generated code runs them, so
+// the handlers see them and the function then reads them from there.
+struct ScriptCall {
+    bool active = false;
+    uint64_t memory = 0, records = 0, out_parms = 0;
+    uint64_t property = 0, address = 0; // what the last argument's expression named, which the caller's frame keeps
+};
+
+// Runs the call's arguments, as execCallMulticastDelegate does: an argument with a value into its place, and one the
+// function writes by its reference, which goes in the list of those, the way the engine's own calls list them. Then
+// moves past EX_EndFunctionParms.
+bool evaluate(uint64_t function, uint64_t frame, ScriptCall& script) {
+    if (game::make_arguments(function, script.memory) != TSUCHI_OK) return false;
+    uint32_t writes = 0;
+    for (uint32_t i = 0;; ++i) {
+        const uint64_t property = game::field_at(function, i, false);
+        if (!property || !is_argument(property)) break;
+        writes += !is_result(property) && (flags_of(property) & t::constant::property_out);
+    }
+    if (writes) {
+        script.records = reinterpret_cast<uint64_t>(game::engine_memory(uint64_t(writes) * t::out_parm::size));
+        if (!script.records) {
+            game::destroy_arguments(function, script.memory);
+            return false;
+        }
+    }
+    uint64_t* link = &script.out_parms;
+    uint32_t written = 0;
+    for (uint32_t i = 0;; ++i) {
+        const uint64_t property = game::field_at(function, i, false);
+        if (!property || !is_argument(property)) break;
+        if (is_result(property)) continue;
+        const uint64_t code = frame_word(frame, t::script_frame::code);
+        if (!code || *reinterpret_cast<const uint8_t*>(code) == t::constant::script_end_parms) break;
+        const uint64_t place = script.memory + uint64_t(int64_t(game::read_or<int32_t>(property + t::property::offset)));
+        if (flags_of(property) & t::constant::property_out) {
+            set_frame_word(frame, t::script_frame::most_recent_address, 0);
+            step(frame, 0);
+            const uint64_t address = frame_word(frame, t::script_frame::most_recent_address);
+            const uint64_t record = script.records + uint64_t(written++) * t::out_parm::size;
+            set_frame_word(record, t::out_parm::property, property);
+            set_frame_word(record, t::out_parm::address, address ? address : place);
+            set_frame_word(record, t::out_parm::next, 0);
+            *link = record;
+            link = reinterpret_cast<uint64_t*>(record + t::out_parm::next);
+        } else {
+            step(frame, place);
+        }
+    }
+    // What P_FINISH does: past EX_EndFunctionParms.
+    if (const uint64_t code = frame_word(frame, t::script_frame::code)) set_frame_word(frame, t::script_frame::code, code + 1);
+    script.property = frame_word(frame, t::script_frame::most_recent_property);
+    script.address = frame_word(frame, t::script_frame::most_recent_address);
+    script.active = true;
+    return true;
+}
+
+void finish(uint64_t function, ScriptCall& script) {
+    if (!script.active) return;
+    game::destroy_arguments(function, script.memory);
+    if (script.records) game::release_engine_memory(reinterpret_cast<void*>(script.records));
+}
+
+// Calls the function with the caller's frame laid out as ProcessEvent lays one out: no code left, the arguments in
+// its locals, the list of those it writes, and its own fields to read them by. Puts the caller's frame back after.
+void call_with_arguments(Native original, uint64_t function, void* object, uint64_t frame, void* result, const ScriptCall& script) {
+    const uint64_t code = frame_word(frame, t::script_frame::code), locals = frame_word(frame, t::script_frame::locals),
+                   out_parms = frame_word(frame, t::script_frame::out_parms), chain = frame_word(frame, t::script_frame::property_chain),
+                   node = frame_word(frame, t::script_frame::node);
+    set_frame_word(frame, t::script_frame::code, 0);
+    set_frame_word(frame, t::script_frame::locals, script.memory);
+    set_frame_word(frame, t::script_frame::out_parms, script.out_parms);
+    set_frame_word(frame, t::script_frame::property_chain, game::read_or<uint64_t>(function + t::struct_type::properties));
+    set_frame_word(frame, t::script_frame::node, function);
+    if (original) original(object, reinterpret_cast<void*>(frame), result);
+    set_frame_word(frame, t::script_frame::code, code);
+    set_frame_word(frame, t::script_frame::locals, locals);
+    set_frame_word(frame, t::script_frame::out_parms, out_parms);
+    set_frame_word(frame, t::script_frame::property_chain, chain);
+    set_frame_word(frame, t::script_frame::node, node);
+    set_frame_word(frame, t::script_frame::most_recent_property, script.property);
+    set_frame_word(frame, t::script_frame::most_recent_address, script.address);
+}
+
 // The hooks that run for this call, newest first, or none.
-uint32_t choose(uint32_t site, uint64_t frame, uint32_t* chosen, EngineCall& call) {
+uint32_t choose(uint32_t site, uint64_t frame, void* object, uint32_t* chosen, EngineCall& call, ScriptCall& script) {
     if (!known_game_thread_token()) {
         count(counters.off_thread);
         return 0;
@@ -117,13 +228,17 @@ uint32_t choose(uint32_t site, uint64_t frame, uint32_t* chosen, EngineCall& cal
         return 0;
     }
     const uint64_t target = sites[site].target;
-    if (game::read_or<uint64_t>(frame + t::script_frame::node) != target) {
-        count(counters.script_arguments); // the caller's frame: a Blueprint called a C++ function
+    // The function's own frame comes from ProcessEvent. A Blueprint that calls a C++ function hands over its own,
+    // with the arguments still to be run.
+    const bool from_script = game::read_or<uint64_t>(frame + t::script_frame::node) != target;
+    if (from_script && (!script_calls_present() || !game::read_or<uint64_t>(frame + t::script_frame::code))) {
+        count(counters.script_arguments);
         return 0;
     }
-    const uint64_t locals = game::read_or<uint64_t>(frame + t::script_frame::locals);
-    // A call into an event graph has one argument, the entry point, at the start of its locals.
-    const int32_t entry = game::read_or<int32_t>(locals, -1);
+    const uint64_t locals = from_script ? 0 : game::read_or<uint64_t>(frame + t::script_frame::locals);
+    // A call into an event graph has one argument, the entry point, at the start of its locals. A Blueprint's call
+    // of a C++ function is no event's.
+    const int32_t entry = from_script ? INT32_MIN : game::read_or<int32_t>(locals, -1);
     uint32_t found = 0;
     for (uint32_t i = 0; i < kEngineHooks; ++i) {
         if (!may_run(hooks[i], site, entry)) continue;
@@ -140,6 +255,17 @@ uint32_t choose(uint32_t site, uint64_t frame, uint32_t* chosen, EngineCall& cal
         chosen[at] = i;
     }
     if (!found) return 0;
+    if (from_script) {
+        if (!evaluate(target, frame, script)) {
+            count(counters.not_ready);
+            return 0;
+        }
+        count(counters.script_calls);
+        call.object = game::to_handle(reinterpret_cast<uint64_t>(object));
+        call.locals = script.memory;
+        call.out_parms = script.out_parms;
+        return found;
+    }
     call.object = game::to_handle(game::read_or<uint64_t>(frame + t::script_frame::object));
     call.locals = locals;
     call.out_parms = game::read_or<uint64_t>(frame + t::script_frame::out_parms);
@@ -153,7 +279,8 @@ void dispatch(uint32_t site, void* object, void* frame, void* result) {
     count(counters.calls);
     uint32_t chosen[kEngineRunning];
     EngineCall call;
-    const uint32_t running = choose(site, reinterpret_cast<uint64_t>(frame), chosen, call);
+    ScriptCall script;
+    const uint32_t running = choose(site, reinterpret_cast<uint64_t>(frame), object, chosen, call, script);
     call.result = reinterpret_cast<uint64_t>(result);
     for (uint32_t i = 0; i < running; ++i) ++hooks[chosen[i]].depth;
     for (uint32_t i = 0; i < running; ++i) {
@@ -165,7 +292,8 @@ void dispatch(uint32_t site, void* object, void* frame, void* result) {
         hook_client_leave();
         if (!done) count(counters.failed);
     }
-    if (original) original(object, frame, result);
+    if (script.active) call_with_arguments(original, record.target, object, reinterpret_cast<uint64_t>(frame), result, script);
+    else if (original) original(object, frame, result);
     call.finished = true;
     // After the call, oldest first, so the newest hook's `after` has the last word.
     for (uint32_t i = running; i--;) {
@@ -178,6 +306,7 @@ void dispatch(uint32_t site, void* object, void* frame, void* result) {
         if (!done) count(counters.failed);
     }
     for (uint32_t i = 0; i < running; ++i) --hooks[chosen[i]].depth;
+    finish(record.target, script);
     __atomic_fetch_sub(&record.inside, 1, __ATOMIC_ACQ_REL);
 }
 
@@ -425,6 +554,7 @@ EngineStats engine_stats() {
     stats.not_ready = __atomic_load_n(&counters.not_ready, __ATOMIC_RELAXED);
     stats.depth = __atomic_load_n(&counters.depth, __ATOMIC_RELAXED);
     stats.failed = __atomic_load_n(&counters.failed, __ATOMIC_RELAXED);
+    stats.script_calls = __atomic_load_n(&counters.script_calls, __ATOMIC_RELAXED);
     return stats;
 }
 

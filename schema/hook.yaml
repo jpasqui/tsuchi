@@ -323,12 +323,11 @@ functions:
       arguments the function writes. If a handler raises an error, none of its
       changes apply.
 
-      Only calls that the engine makes through `ProcessEvent` reach your
-      handlers. Those are the calls that C++ code makes into reflected functions:
-      events such as `ReceiveBeginPlay`, input bindings, timers, delegates,
-      network calls, and `reflection.call`. A C++ function that other C++ code
-      calls directly, a function that a Blueprint calls, and a Blueprint
-      function that another Blueprint function calls all skip your handlers.
+      Your handlers see the calls that C++ code makes through `ProcessEvent`,
+      such as events, input bindings, timers, delegates, network calls and
+      `reflection.call`, and a Blueprint's calls of C++ functions. A C++
+      function that other C++ code calls directly, and a Blueprint function that
+      another Blueprint function calls, skip your handlers.
 
       The rules of `wrap` apply: handlers run on the game thread only, every other
       Tsuchi call fails with `invalid` inside them, and calls past 8 levels of

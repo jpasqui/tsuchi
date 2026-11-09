@@ -61,36 +61,89 @@ void script_error(const char* message) {
 
 // ---- The engine's side ----
 
-// What the frame's list says about an argument the function writes: where it is.
-uint64_t out_address(uint64_t frame, uint64_t property) {
-    for (uint64_t record = fake::get<uint64_t>(frame + t::script_frame::out_parms); record; record = fake::get<uint64_t>(record + t::out_parm::next))
-        if (fake::get<uint64_t>(record + t::out_parm::property) == property) return fake::get<uint64_t>(record + t::out_parm::address);
-    return 0;
+// The script interpreter's handlers (GNatives), as many as the checks use, by their opcodes in the engine. Each
+// reads what follows it in the code and moves past it.
+constexpr uint8_t kFloatConst = 0x1E, kTrue = 0x27, kFalse = 0x28, kNameConst = 0x21, kLocalOut = 0x48;
+int bad_opcodes = 0;
+uint64_t take(uint64_t frame, uint64_t bytes) {
+    const uint64_t code = fake::get<uint64_t>(frame + t::script_frame::code);
+    fake::put(frame + t::script_frame::code, code + bytes);
+    return code;
 }
-uint64_t property_named(uint64_t function, const char* name) {
-    for (uint32_t i = 0;; ++i) {
-        const uint64_t property = tsuchi::game::field_at(function, i, false);
-        if (!property || tsuchi::game::name_is(tsuchi::game::field_name(property), name)) return property;
+void float_const(void*, void* frame, void* result) {
+    const float value = fake::get<float>(take(reinterpret_cast<uint64_t>(frame), 4));
+    if (result) fake::put(reinterpret_cast<uint64_t>(result), value);
+}
+void true_const(void*, void*, void* result) { if (result) fake::put<uint8_t>(reinterpret_cast<uint64_t>(result), 1); }
+void false_const(void*, void*, void* result) { if (result) fake::put<uint8_t>(reinterpret_cast<uint64_t>(result), 0); }
+void name_const(void*, void* frame, void* result) {
+    const uint64_t value = fake::get<uint64_t>(take(reinterpret_cast<uint64_t>(frame), 8));
+    if (result) fake::put(reinterpret_cast<uint64_t>(result), value);
+}
+// A variable of the caller's that a call passes by reference: its address, which the frame keeps as the last named.
+void local_out(void*, void* frame, void* result) {
+    const uint64_t address = fake::get<uint64_t>(take(reinterpret_cast<uint64_t>(frame), 8));
+    fake::put(reinterpret_cast<uint64_t>(frame) + t::script_frame::most_recent_address, address);
+    if (result) fake::put(reinterpret_cast<uint64_t>(result), fake::get<uint64_t>(address));
+}
+void bad_opcode(void*, void*, void*) { ++bad_opcodes; }
+void step(uint64_t frame, uint64_t result) {
+    const uint8_t opcode = fake::get<uint8_t>(take(frame, 1));
+    reinterpret_cast<Native>(fake::get<uint64_t>(fake::main_image() + t::data::script_natives + 8 * uint64_t(opcode)))(
+        reinterpret_cast<void*>(fake::get<uint64_t>(frame + t::script_frame::object)), reinterpret_cast<void*>(frame), reinterpret_cast<void*>(result));
+}
+
+// What a C++ function's generated code does for each argument (StepCompiledIn): with script code left, it runs the
+// next expression; without, it takes the next argument of the frame's chain, from its locals or from the list of
+// those the function writes. Gives where the value is.
+uint64_t argument(uint64_t frame, uint64_t temporary) {
+    if (fake::get<uint64_t>(frame + t::script_frame::code)) {
+        fake::put<uint64_t>(frame + t::script_frame::most_recent_address, 0);
+        step(frame, temporary);
+        const uint64_t address = fake::get<uint64_t>(frame + t::script_frame::most_recent_address);
+        return address ? address : temporary;
+    }
+    uint64_t property = fake::get<uint64_t>(frame + t::script_frame::property_chain);
+    // The engine lists a result last, so a function's code never reaches it; the made-up functions list it anywhere.
+    while (fake::get<uint64_t>(property + t::property::flags) & t::constant::property_return) property = fake::get<uint64_t>(property + t::property::next);
+    fake::put(frame + t::script_frame::property_chain, fake::get<uint64_t>(property + t::property::next));
+    if (fake::get<uint64_t>(property + t::property::flags) & t::constant::property_out) {
+        for (uint64_t record = fake::get<uint64_t>(frame + t::script_frame::out_parms); record; record = fake::get<uint64_t>(record + t::out_parm::next))
+            if (fake::get<uint64_t>(record + t::out_parm::property) == property) return fake::get<uint64_t>(record + t::out_parm::address);
+        return 0;
+    }
+    return fake::get<uint64_t>(frame + t::script_frame::locals) + uint64_t(fake::get<int32_t>(property + t::property::offset));
+}
+// P_FINISH: past EX_EndFunctionParms, when there is code.
+void finish_arguments(uint64_t frame) {
+    if (const uint64_t code = fake::get<uint64_t>(frame + t::script_frame::code)) {
+        if (fake::get<uint8_t>(code) != t::constant::script_end_parms) ++bad_opcodes;
+        fake::put(frame + t::script_frame::code, code + 1);
     }
 }
 
 // The functions' native entries, as the engine's generated code reads its frame.
-void heal_native(void* object, void* frame, void* result) {
-    const uint64_t self = reinterpret_cast<uint64_t>(object), locals = fake::get<uint64_t>(reinterpret_cast<uint64_t>(frame) + t::script_frame::locals);
-    const float health = fake::get<uint8_t>(locals + 4) ? 100.0f : fake::get<float>(self + 0x40) + fake::get<float>(locals);
+void heal_native(void* object, void* frame_pointer, void* result) {
+    const uint64_t self = reinterpret_cast<uint64_t>(object), frame = reinterpret_cast<uint64_t>(frame_pointer), temporary = fake::memory(16);
+    const float amount = fake::get<float>(argument(frame, temporary));
+    const bool full = fake::get<uint8_t>(argument(frame, temporary + 8)) != 0;
+    finish_arguments(frame);
+    const float health = full ? 100.0f : fake::get<float>(self + 0x40) + amount;
     fake::put(self + 0x40, health);
     if (result) fake::put(reinterpret_cast<uint64_t>(result), health);
 }
-void where_native(void* object, void* frame, void* result) {
+void where_native(void* object, void* frame_pointer, void* result) {
+    const uint64_t frame = reinterpret_cast<uint64_t>(frame_pointer), found = argument(frame, fake::memory(8));
+    finish_arguments(frame);
     const uint64_t at = reinterpret_cast<uint64_t>(result);
     fake::put(at, 1.0f), fake::put(at + 4, 2.0f), fake::put(at + 8, 3.0f);
-    fake::put(out_address(reinterpret_cast<uint64_t>(frame), property_named(w.where, "Found")), reinterpret_cast<uint64_t>(object));
+    fake::put(found, reinterpret_cast<uint64_t>(object));
 }
-void rename_native(void* object, void* frame, void* result) {
-    (void)result;
-    const uint64_t self = reinterpret_cast<uint64_t>(object), locals = fake::get<uint64_t>(reinterpret_cast<uint64_t>(frame) + t::script_frame::locals);
-    fake::put(self + 0x60, fake::get<uint64_t>(locals));
-    const uint64_t title = out_address(reinterpret_cast<uint64_t>(frame), property_named(w.rename, "Title"));
+void rename_native(void* object, void* frame_pointer, void*) {
+    const uint64_t self = reinterpret_cast<uint64_t>(object), frame = reinterpret_cast<uint64_t>(frame_pointer);
+    const uint64_t name = argument(frame, fake::memory(8)), title = argument(frame, fake::memory(16));
+    finish_arguments(frame);
+    fake::put(self + 0x60, fake::get<uint64_t>(name));
     w.heard.clear();
     const uint64_t data = fake::get<uint64_t>(title + t::array::data);
     for (int32_t i = 0; i + 1 < fake::get<int32_t>(title + t::array::count); ++i) w.heard.push_back(char16_t(fake::get<uint16_t>(data + 2 * uint64_t(i))));
@@ -115,6 +168,7 @@ void process_event(uint64_t object, uint64_t function, uint64_t parms) {
     fake::put(frame + t::script_frame::node, target);
     fake::put(frame + t::script_frame::object, object);
     fake::put(frame + t::script_frame::locals, locals);
+    fake::put(frame + t::script_frame::property_chain, fake::get<uint64_t>(target + t::struct_type::properties));
     uint64_t result = 0, link = frame + t::script_frame::out_parms;
     for (uint32_t i = 0;; ++i) {
         const uint64_t property = tsuchi::game::field_at(target, i, false);
@@ -146,14 +200,78 @@ float heal(float amount, bool full) {
     process_event(w.red, w.heal, parms);
     return fake::get<float>(parms + 8);
 }
-// A Blueprint that calls Heal gives it its own frame, with the arguments still script code.
+// A frame of another function with no script code left: nothing says where Heal's arguments are, so the call goes
+// straight through and is counted.
 void scripted_heal() {
     const uint64_t locals = fake::memory(16), frame = fake::memory(0x100);
     fake::put(locals, 1.0f);
     fake::put(frame + t::script_frame::node, w.describe);
     fake::put(frame + t::script_frame::object, w.red);
     fake::put(frame + t::script_frame::locals, locals);
+    fake::put(frame + t::script_frame::property_chain, fake::get<uint64_t>(w.heal + t::struct_type::properties));
     reinterpret_cast<Native>(fake::get<uint64_t>(w.heal + t::function::func))(reinterpret_cast<void*>(w.red), reinterpret_cast<void*>(frame), nullptr);
+}
+
+// A Blueprint's call of a C++ function, as UObject::CallFunction makes it: the caller's own frame, its code at the
+// call's arguments and EX_EndFunctionParms, and where the caller wants the result. Checks that the frame comes back
+// as the function would leave it: the code past the arguments, and the caller's own fields.
+struct BlueprintCall {
+    uint64_t frame = fake::memory(0x100), code = fake::memory(64), locals = fake::memory(16), out_parms = fake::memory(8), chain = fake::memory(8);
+    size_t used = 0;
+    BlueprintCall() {
+        fake::put(frame + t::script_frame::node, w.describe);
+        fake::put(frame + t::script_frame::object, w.red);
+        fake::put(frame + t::script_frame::code, code);
+        fake::put(frame + t::script_frame::locals, locals);
+        fake::put(frame + t::script_frame::out_parms, out_parms);
+        fake::put(frame + t::script_frame::property_chain, chain);
+    }
+    template <class T>
+    void put(const T& value) {
+        fake::put(code + used, value);
+        used += sizeof value;
+    }
+    void call(uint64_t function, uint64_t result) {
+        put<uint8_t>(uint8_t(t::constant::script_end_parms));
+        put<uint8_t>(0xAA); // the caller's next opcode
+        reinterpret_cast<Native>(fake::get<uint64_t>(function + t::function::func))(reinterpret_cast<void*>(w.red), reinterpret_cast<void*>(frame), reinterpret_cast<void*>(result));
+        CHECK(fake::get<uint64_t>(frame + t::script_frame::code) == code + used - 1);
+        CHECK(fake::get<uint64_t>(frame + t::script_frame::node) == w.describe);
+        CHECK(fake::get<uint64_t>(frame + t::script_frame::locals) == locals);
+        CHECK(fake::get<uint64_t>(frame + t::script_frame::out_parms) == out_parms);
+        CHECK(fake::get<uint64_t>(frame + t::script_frame::property_chain) == chain);
+    }
+};
+float blueprint_heal(float amount, bool full) {
+    BlueprintCall call;
+    call.put(kFloatConst), call.put(amount), call.put(full ? kTrue : kFalse);
+    const uint64_t result = fake::memory(8);
+    call.call(w.heal, result);
+    return fake::get<float>(result);
+}
+uint64_t found_variable = 0; // the caller's variable that Where writes by its reference
+void blueprint_where(float* xyz) {
+    BlueprintCall call;
+    found_variable = fake::memory(8);
+    call.put(kLocalOut), call.put(found_variable);
+    const uint64_t result = fake::memory(16);
+    call.call(w.where, result);
+    for (int i = 0; i < 3; ++i) xyz[i] = fake::get<float>(result + 4 * uint64_t(i));
+}
+void blueprint_rename(const std::string& name, const std::string& title) {
+    BlueprintCall call;
+    const uint64_t variable = fake::memory(16);
+    fake::put_string(variable, std::u16string(title.begin(), title.end()));
+    call.put(kNameConst), call.put(fake::name(std::u16string(name.begin(), name.end())));
+    call.put(kLocalOut), call.put(variable);
+    call.call(w.rename, 0);
+}
+void install_natives() {
+    const uint64_t table = fake::main_image() + t::data::script_natives;
+    for (unsigned opcode = 0; opcode < 256; ++opcode) fake::put(table + 8 * opcode, reinterpret_cast<uint64_t>(&bad_opcode));
+    const std::pair<uint8_t, Native> handlers[] = {{kFloatConst, float_const}, {kTrue, true_const}, {kFalse, false_const},
+                                                   {kNameConst, name_const}, {kLocalOut, local_out}};
+    for (const auto& handler : handlers) fake::put(table + 8 * uint64_t(handler.first), reinterpret_cast<uint64_t>(handler.second));
 }
 std::string tag() {
     char text[256];
@@ -163,6 +281,7 @@ std::string heard() { return std::string(w.heard.begin(), w.heard.end()); }
 
 void build_engine() {
     build_world();
+    install_natives();
     package = fake::engine_object(u"/Script/Test", w.root);
     fake::put<uint64_t>(w.actor + t::object::outer, package);
     fake::put<uint64_t>(w.creature + t::object::outer, package);
@@ -197,6 +316,23 @@ int lua_threaded_heal(lua_State* L) {
 int lua_scripted_heal(lua_State*) {
     scripted_heal();
     return 0;
+}
+int lua_blueprint_heal(lua_State* L) {
+    lua_pushnumber(L, blueprint_heal(float(luaL_checknumber(L, 1)), lua_toboolean(L, 2)));
+    return 1;
+}
+int lua_blueprint_where(lua_State* L) {
+    float xyz[3];
+    blueprint_where(xyz);
+    for (float value : xyz) lua_pushnumber(L, value);
+    lua_pushboolean(L, fake::get<uint64_t>(found_variable) == w.red);
+    return 4;
+}
+int lua_blueprint_rename(lua_State* L) {
+    blueprint_rename(luaL_checkstring(L, 1), luaL_checkstring(L, 2));
+    lua_pushstring(L, tag().c_str());
+    lua_pushstring(L, heard().c_str());
+    return 2;
 }
 int lua_health(lua_State* L) {
     lua_pushnumber(L, fake::get<float>(w.red + 0x40));
@@ -233,7 +369,8 @@ int lua_stats(lua_State* L) {
     const tsuchi::EngineStats stats = tsuchi::engine_stats();
     lua_createtable(L, 0, 6);
     const std::pair<const char*, uint32_t> values[] = {{"calls", stats.calls}, {"off_thread", stats.off_thread}, {"script_arguments", stats.script_arguments},
-                                                       {"hooks", stats.hooks_used}, {"sites", stats.sites_used}, {"failed", stats.failed}};
+                                                       {"hooks", stats.hooks_used}, {"sites", stats.sites_used}, {"failed", stats.failed},
+                                                       {"script_calls", stats.script_calls}, {"bad_opcodes", uint32_t(bad_opcodes)}};
     for (const auto& value : values) {
         lua_pushinteger(L, value.second);
         lua_setfield(L, -2, value.first);
@@ -258,6 +395,17 @@ JSValue js_threaded_heal(JSContext* ctx, JSValueConst, int, JSValueConst*) {
 JSValue js_scripted_heal(JSContext*, JSValueConst, int, JSValueConst*) {
     scripted_heal();
     return JS_UNDEFINED;
+}
+JSValue js_blueprint_heal(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
+    return JS_NewFloat64(ctx, blueprint_heal(float(tsuchi_js::number(ctx, tsuchi_js::arg(argc, argv, 0))), argc > 1 && JS_ToBool(ctx, argv[1])));
+}
+JSValue js_blueprint_where(JSContext* ctx, JSValueConst, int, JSValueConst*) {
+    float xyz[3];
+    blueprint_where(xyz);
+    JSValue out = JS_NewArray(ctx);
+    for (uint32_t i = 0; i < 3; ++i) JS_SetPropertyUint32(ctx, out, i, JS_NewFloat64(ctx, xyz[i]));
+    JS_SetPropertyUint32(ctx, out, 3, JS_NewBool(ctx, fake::get<uint64_t>(found_variable) == w.red));
+    return out;
 }
 JSValue js_health(JSContext* ctx, JSValueConst, int, JSValueConst*) { return JS_NewFloat64(ctx, fake::get<float>(w.red + 0x40)); }
 JSValue js_where(JSContext* ctx, JSValueConst, int, JSValueConst*) {
@@ -292,6 +440,7 @@ JSValue js_stats(JSContext* ctx, JSValueConst, int, JSValueConst*) {
     JS_SetPropertyStr(ctx, out, "off_thread", JS_NewUint32(ctx, stats.off_thread));
     JS_SetPropertyStr(ctx, out, "script_arguments", JS_NewUint32(ctx, stats.script_arguments));
     JS_SetPropertyStr(ctx, out, "hooks", JS_NewUint32(ctx, stats.hooks_used));
+    JS_SetPropertyStr(ctx, out, "script_calls", JS_NewUint32(ctx, stats.script_calls));
     return out;
 }
 JSValue js_errors(JSContext* ctx, JSValueConst, int, JSValueConst*) { return JS_NewUint32(ctx, script_errors); }
@@ -329,6 +478,7 @@ int main(int argc, char** argv) {
     CHECK(tsuchi::find_function_path("Heal") == 0);
     // Nothing is hooked yet: the engine's own entries run.
     CHECK(heal(1, false) == 13.5f);
+    CHECK(blueprint_heal(1, false) == 14.5f); // the function runs its script code itself
     fake::put(w.red + 0x40, 12.5f);
 
     TSUCHI_Host host{};
@@ -350,7 +500,8 @@ int main(int argc, char** argv) {
         lua_setglobal(L, "body");
         const luaL_Reg functions[] = {{"heal", lua_heal},   {"threaded_heal", lua_threaded_heal}, {"scripted_heal", lua_scripted_heal},
                                       {"health", lua_health}, {"where", lua_where}, {"rename", lua_rename}, {"event", lua_event},
-                                      {"frame", lua_frame}, {"stats", lua_stats}, {"errors", lua_errors}};
+                                      {"frame", lua_frame}, {"stats", lua_stats}, {"errors", lua_errors}, {"blueprint_heal", lua_blueprint_heal},
+                                      {"blueprint_where", lua_blueprint_where}, {"blueprint_rename", lua_blueprint_rename}};
         for (const auto& f : functions) {
             lua_pushcfunction(L, f.func);
             lua_setglobal(L, f.name);
@@ -387,7 +538,8 @@ int main(int argc, char** argv) {
             };
             const Function functions[] = {{"heal", js_heal},     {"threaded_heal", js_threaded_heal}, {"scripted_heal", js_scripted_heal},
                                           {"health", js_health}, {"where", js_where}, {"rename", js_rename}, {"event", js_event},
-                                          {"frame", js_frame},   {"stats", js_stats}, {"errors", js_errors}, {"last_error", js_last_error}};
+                                          {"frame", js_frame},   {"stats", js_stats}, {"errors", js_errors}, {"last_error", js_last_error},
+                                          {"blueprint_heal", js_blueprint_heal}, {"blueprint_where", js_blueprint_where}};
             for (const auto& f : functions) JS_SetPropertyStr(ctx, global, f.name, JS_NewCFunction(ctx, f.fn, f.name, 0));
         }
         std::ifstream input(argv[2]);
@@ -408,6 +560,8 @@ int main(int argc, char** argv) {
     // With every hook gone, the entries the engine kept still lead to its own functions.
     fake::put(w.red + 0x40, 12.5f);
     CHECK(heal(1, false) == 13.5f);
+    CHECK(blueprint_heal(1, false) == 14.5f);
+    CHECK(bad_opcodes == 0);
     if (!failures) std::puts("engine function hooks passed");
     return failures ? 1 : 0;
 }

@@ -15,6 +15,7 @@ optional:
   - structs.function.event_graph_entry
   - structs.script_frame
   - structs.out_parm
+  - data.script_natives              # without it a Blueprint's call of a hooked C++ function skips the handlers
   - functions.pikmin_deco_stored
   - functions.pikmin_deco_field
   - structs.spawn_request.decoration

@@ -17,9 +17,11 @@
 // the entry held. Hooks are put on, run and taken off on the game's thread; a call on another thread goes
 // straight through, and touches only the thunk's own record.
 //
-// A Blueprint that calls a C++ function hands that function its own frame, with the arguments still script
-// code to be run. Those calls go straight through and are counted. So are calls that come while the
-// handlers can't run.
+// A Blueprint that calls a C++ function hands that function its own frame, with the arguments still script code
+// to be run. When a hook will run, the thunk runs that code itself, into memory laid out as the function's
+// arguments, the way the function's generated code would. The handlers see that memory, and the function is called
+// with the frame laid out as ProcessEvent lays one out, then the caller's frame is put back. Calls that come while
+// the handlers can't run go straight through and are counted.
 #pragma once
 #include <stdint.h>
 
@@ -88,6 +90,7 @@ TSUCHI_Result engine_hook_remove(TSUCHI_Mod* mod, uint64_t id);
 // Calls, and the calls that went straight through instead of to the handlers, by reason.
 struct EngineStats {
     uint32_t sites_used, hooks_used, calls, off_thread, script_arguments, not_ready, depth, failed;
+    uint32_t script_calls; // Blueprints' calls whose arguments the thunk ran for the handlers
 };
 EngineStats engine_stats();
 // Frees ended hooks whose calls have all returned, and asks each live one to report. The engine frame does this at

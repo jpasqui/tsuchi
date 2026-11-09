@@ -70,6 +70,21 @@ const renameHook = hook.engine_function('/Script/Test.Actor:Rename', {
 check(rename('Captain', 'Sir') === 'Captain Changed|Sir' && seen.title === 'Sir', 'rename');
 hook.remove(renameHook);
 
+// A Blueprint's calls, with their arguments as script code.
+const scriptCalls = stats().script_calls;
+const bpHeal = hook.engine_function('/Script/Test.Actor:Heal', {
+    before(call) { call.args.Amount = call.args.Amount * 2; },
+    after(call) { return call.result + 1; },
+});
+const bpHealth = health();
+check(blueprint_heal(5) === bpHealth + 11 && health() === bpHealth + 10, 'blueprint heal');
+hook.remove(bpHeal);
+const bpWhere = hook.engine_function('/Script/Test.Actor:Where', {after(call) { call.args.Found = null; }});
+const [bx, , , bpFoundRed] = blueprint_where();
+check(bx === 1 && !bpFoundRed, 'blueprint where');
+hook.remove(bpWhere);
+check(stats().script_calls === scriptCalls + 2, 'script calls counted');
+
 // An event that runs as an entry point of its class's event graph.
 let pokes = 0;
 hook.engine_function('/Script/Test.Creature:OnPoke', {after(call) { check(Object.keys(call.args).length === 0 && call.result === null, 'event call'); pokes++; }});

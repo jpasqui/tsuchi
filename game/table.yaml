@@ -28,6 +28,11 @@ identity:
   - {offset: 0x3405610, hash: 0x12E47DB99BCCB5CC}
 
 data:
+  # GNatives: the script interpreter's 256 handlers by opcode, each (object, frame, result). FFrame::Step reads the byte
+  # at the frame's code, moves past it and calls its handler; execCallMulticastDelegate (0x398F790) does the same
+  # inline at 0x398F8D0..0x398F8EC, through this table, and so does the generated code of a C++ function that reads an
+  # argument (0xBB2B04..0xBB2B28; about 10,000 such reads in the code).
+  script_natives: 0x9853D28
   wwise_audio_manager: 0x92DD0E8
   wwise_parameter_manager: 0x92DD120
   ui_select_sound: 0x9335ae0 # native common UI focus FName, initialized as Select
@@ -115,6 +120,7 @@ data:
   gimmick_warp_stage_function: 0x14AB0D0
   content_icon_size: 0x935E568
 constants:
+  script_end_parms: 0x16           # EX_EndFunctionParms, the opcode after a call's arguments
   stream_block_load: 0x80
   stream_source_cdo: 0x10
   physics_dynamic_kind: 6
@@ -793,7 +799,12 @@ structs:
   # (the arguments first, laid out as the function's fields), and its list of the arguments it writes, which are
   # elsewhere, in the caller's memory.
   script_frame:
-    fields: {node: 0x10, object: 0x18, locals: 0x28, out_parms: 0x78}
+    # code +0x20 (the next opcode), and what its last expression named (MostRecentProperty and its address, +0x30 and
+    # +0x38), as execCallMulticastDelegate reads them. With code null, a C++ function's generated code takes its next
+    # argument from +0x80 and moves it on, then reads it from the locals, or for one it writes, from the list at +0x78
+    # (0xBB2BCC..0xBB2C1C).
+    fields: {node: 0x10, object: 0x18, code: 0x20, locals: 0x28, most_recent_property: 0x30, most_recent_address: 0x38,
+             out_parms: 0x78, property_chain: 0x80}
   out_parm:                         # one entry of that list (FOutParmRec)
     size: 0x18
     fields: {property: 0x0, address: 0x8, next: 0x10}

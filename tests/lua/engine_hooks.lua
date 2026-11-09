@@ -122,5 +122,39 @@ assert(pokes == 1 and entry == 42)
 local runs_after, other_entry = event(false)
 assert(pokes == 1 and other_entry == 7 and runs_after == runs + 1)
 
+-- A Blueprint's calls: the arguments are script code, which the hook runs for the handlers before the function.
+local script_calls = _G.stats().script_calls
+local bp = {}
+local bp_heal = assert(hook.engine_function('/Script/Test.Actor:Heal', {
+    before = function(call) bp.amount = call.args.Amount call.args.Amount = call.args.Amount * 2 end,
+    after = function(call) bp.result = call.result return call.result + 1 end,
+}))
+local before_health = health()
+assert(blueprint_heal(5, false) == before_health + 11)
+assert(health() == before_health + 10 and bp.amount == 5 and bp.result == before_health + 10)
+assert(blueprint_heal(1, true) == 101) -- bFull from the script code
+assert(hook.remove(bp_heal))
+assert(blueprint_heal(1, false) == health()) -- unhooked, the function runs its script code itself
+-- An argument passed by reference is the caller's own variable.
+local bp_where = assert(hook.engine_function('/Script/Test.Actor:Where', {
+    after = function(call)
+        bp.found = call.args.Found
+        call.args.Found = nil
+        return {X = 4, Y = 5, Z = 6}
+    end,
+}))
+local bx, by, bz, bp_found_red = blueprint_where()
+assert(bx == 4 and by == 5 and bz == 6 and not bp_found_red and bp.found == red)
+assert(hook.remove(bp_where))
+bx, by, bz, bp_found_red = blueprint_where()
+assert(bx == 1 and bp_found_red)
+local bp_rename = assert(hook.engine_function('/Script/Test.Actor:Rename', {
+    before = function(call) bp.title = call.args.Title call.args.NewName = 'Louie' end,
+}))
+local bp_tag, bp_heard = blueprint_rename('Olimar', 'Captain')
+assert(bp_tag == 'Louie' and bp_heard == 'Captain' and bp.title == 'Captain', bp_tag .. '|' .. bp_heard)
+assert(hook.remove(bp_rename))
+assert(_G.stats().script_calls == script_calls + 4 and _G.stats().bad_opcodes == 0)
+
 -- The last hooks stay on, for the mod's stop to end.
 assert(hook.engine_function('/Script/Test.Actor:Heal', {after = function() end}))

@@ -14,6 +14,7 @@ build_names: [game_container, shader_format]
 
 
 data:
+  script_natives: 0x2400
   wwise_audio_manager: 0x610
   wwise_parameter_manager: 0x618
   ui_select_sound: 0x600 # native common UI focus FName, initialized as Select
@@ -93,6 +94,7 @@ data:
   status_words: 17920
   content_icon_size: 17928
 constants:
+  script_end_parms: 0x16
   stream_block_load: 0x80
   stream_source_cdo: 0x10
   physics_dynamic_kind: 9
@@ -622,7 +624,7 @@ structs:
   function:
     fields: {flags: 0x70, func: 0x80, event_graph: 0x88, event_graph_entry: 0x90}
   script_frame:
-    fields: {node: 0x8, object: 0x10, locals: 0x20, out_parms: 0x30}
+    fields: {node: 0x8, object: 0x10, code: 0x18, locals: 0x20, out_parms: 0x30, most_recent_property: 0x38, most_recent_address: 0x40, property_chain: 0x48}
   out_parm:
     size: 0x20
     fields: {property: 0x8, address: 0x0, next: 0x18}
