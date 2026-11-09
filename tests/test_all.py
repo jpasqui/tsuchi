@@ -856,6 +856,17 @@ class Generated(unittest.TestCase):
              ROOT / 'tests' / 'core' / 'dynamic_hooks_test.cpp', '-o', program])
         self.assertIn('dynamic hooks passed', run([program]).stdout)
 
+    def test_cheats_run_and_toggle_while_the_game_runs(self):
+        """Atmosphère-format cheat files: the parser's rules, the interpreter, and turning cheats on and off."""
+        fixture = self.fixture()
+        program = BUILD / f'cheat_vm_test{EXE}'
+        run([shutil.which('clang++'), *CXX, '-I', GEN / 'include', '-I', fixture / 'framework', '-I', GEN / 'framework',
+             '-I', BASE, '-I', CORE, '-I', ROOT / 'framework' / 'game', '-I', ROOT / 'tests' / 'base',
+             CORE / 'registry.cpp', CORE / 'ids.cpp', CORE / 'hooks.cpp', CORE / 'json.cpp', CORE / 'cheat_vm.cpp',
+             ROOT / 'framework' / 'game' / 'cheat_runtime.cpp', *sorted((GEN / 'framework').glob('*.cpp')),
+             ROOT / 'tests' / 'core' / 'cheat_vm_test.cpp', '-o', program])
+        self.assertIn('cheats passed', run([program]).stdout)
+
     def test_fields_and_functions_are_reached_by_name(self):
         """The reflect service end to end, against a made-up game that describes itself."""
         fixture = self.fixture()

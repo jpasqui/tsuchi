@@ -159,7 +159,7 @@ families:
     files: [game/save_restore.cpp, game/save_session.h, game/saves_backend.cpp]
   storage:
     services: [storage]
-    files: [game/storage_backend.cpp]
+    files: [game/storage_backend.cpp, game/cheat_runtime_game.cpp]  # cheats keep the player's choices in the save
   story:
     services: [story]
     files: [game/story_backend.cpp]

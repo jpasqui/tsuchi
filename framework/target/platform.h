@@ -25,5 +25,7 @@ bool executable(uint64_t address);
 void debug_output(const char* text, uint64_t length);
 // Installs lazy writable aliases for owned native hooks and code patches.
 void code_memory_start();
+// Where this process's heap region, alias region and ASLR region start, as the system says. False when it won't.
+bool process_regions(uint64_t heap_alias_aslr[3]);
 
 } // namespace tsuchi::target

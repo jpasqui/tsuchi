@@ -165,6 +165,12 @@ void carry_start(TSUCHI_Mod* self);
 
 // The input service: controllers read once per world step, buttons pressed and hidden, and the keyboard.
 void input_start(TSUCHI_Mod* self);
+// Every button the system says is held, on every controller read at this step, in the system's bit order. 0 before
+// the first step.
+uint64_t input_keys_held();
+// Cheats while the game runs (cheat_runtime.h), with the game behind them. `regions` gives where the heap, the
+// alias region and the ASLR region start, as the target's own call to the system does.
+void cheats_game_start(bool (*regions)(uint64_t heap_alias_aslr[3]));
 
 } // namespace tsuchi
 
