@@ -18,6 +18,7 @@ struct UiControl {
     uint32_t selected;
     int64_t minimum, maximum, step, integer;
 };
+struct UiRenderer;
 struct UiScreen {
     uint64_t id;
     TSUCHI_Mod* mod;
@@ -25,6 +26,7 @@ struct UiScreen {
     List<UiControl> controls;
     uint32_t selected, revision;
     bool settings_tab, resettable;
+    const UiRenderer* native_renderer=nullptr;
 };
 // The native adapter builds stock widgets. A host loss is reported by live.
 struct UiRenderer {
@@ -42,6 +44,10 @@ struct UiRenderer {
 void ui_start();
 uint32_t ui_events_dropped();
 void ui_set_renderer(const UiRenderer* renderer);
+// Tsuchi's own host over a game menu (ui_title_host.cpp), for screens opened with hold_open_over.
+void ui_set_title_renderer(const UiRenderer* renderer);
+// Whether the open screen is in that host.
+bool ui_active_over_menu();
 const UiScreen* ui_active_screen();
 void* ui_active_view();
 // Update this exact captured view through its retained Showing operation.
@@ -60,4 +66,7 @@ TSUCHI_Result ui_settings_tab_open(uint32_t index);
 void ui_settings_tab_close();
 // Declared settings may include editable text or numbers presented as messages.
 void ui_screen_resettable(TSUCHI_Screen screen);
+bool ui_screen_focus(TSUCHI_Screen screen, const char* control);
 } // namespace tsuchi
+
+namespace tsuchi { bool ui_screen_native_renderer(TSUCHI_Mod*,TSUCHI_Screen,const UiRenderer*); }

@@ -10,6 +10,50 @@ identity:
 - offset: 54633456
   hash: 17676423334391457610
 data:
+  browser_address_21b9940: absent
+  browser_address_3730f00: absent
+  browser_address_381f120: absent
+  browser_address_3821230: absent
+  browser_address_3821420: absent
+  browser_address_4c1d980: absent
+  browser_address_4c353c0: absent
+  browser_address_4c353e0: absent
+  browser_address_4c35c50: absent
+  browser_address_4c35e30: absent
+  browser_address_4c35f60: absent
+  browser_address_4c35f80: absent
+  browser_address_4c360b0: absent
+  browser_address_4c360d0: absent
+  browser_address_4c360f0: absent
+  browser_address_4c39d10: absent
+  browser_address_4c3a2e0: absent
+  browser_address_4c3bb20: absent
+  browser_address_4c58150: absent
+  browser_address_4c61a20: absent
+  browser_address_4c61cb0: absent
+  browser_address_4c61dd0: absent
+  browser_address_4c61ee0: absent
+  browser_address_4c62370: absent
+  browser_address_4c62570: absent
+  browser_address_4c64530: absent
+  browser_address_4c6b5c0: absent
+  browser_address_4c6f4f0: absent
+  browser_address_4c94fb0: absent
+  browser_address_5524420: absent
+  browser_address_5642e40: absent
+  browser_address_5ab0820: absent
+  browser_address_9830740: absent
+  browser_address_9830b10: absent
+  options_direction_delegate_table: absent
+  options_input_delegate_table: absent
+  dialog_answer_yes: absent
+  dialog_answer_no: absent
+  dialog_answer_cancel: absent
+  dialog_answer_return: absent
+  dialog_result_table: absent
+  dialog_result_header: absent
+  title_input_delegate_table: absent
+  title_direction_delegate_table: absent
   wwise_audio_manager: 133583072
   wwise_parameter_manager: 133583128
   ui_select_sound: 134123088
@@ -85,6 +129,16 @@ data:
   gimmick_warp_stage_function: 52996080
   content_icon_size: 134350656
 constants:
+  options_entry_icon: 0
+  options_row_pitch: 117
+  options_up_key: 0
+  options_down_key: 1
+  options_last_stock: 3
+  title_flow_players_wait: 0x24
+  dialog_result_message: 0x45
+  title_confirm_key: 0x16
+  title_back_key: 0x17
+  title_menu_state: 5
   stream_block_load: 128
   stream_source_cdo: 16
   physics_dynamic_kind: 6
@@ -238,6 +292,7 @@ constants:
   mutex_ready: 1
   shader_map_registered: 1
   listed_pikmin_types: 8
+  widget_visible: 0
   widget_collapsed: 1
   widget_hidden: 2
   collision_records_most: 128
@@ -266,6 +321,90 @@ constants:
   effect_spawn_blocked: 2097664
   ui_keyboard_characters: 31
 structs:
+  browser_layout:
+    fields:
+      texture_mips: absent
+      texture_mip_count: absent
+      mip_bulk: absent
+      texture_width: absent
+      texture_height: absent
+      texture_format: absent
+      font_size: absent
+      decoder_set_compressed: absent
+      auto_wrap: absent
+      class_super: absent
+      clipping: absent
+      field_190: absent
+      field_38: absent
+      field_48: absent
+      field_49: absent
+      field_4c: absent
+      field_4d8: absent
+      field_4dc: absent
+      field_4e0: absent
+      field_508: absent
+      field_520: absent
+      field_528: absent
+      field_530: absent
+      field_538: absent
+      field_540: absent
+      field_58: absent
+      field_5b0: absent
+      field_5b8: absent
+      field_5c: absent
+      field_5c8: absent
+      field_5d0: absent
+      field_5d8: absent
+      field_5f0: absent
+      field_5f8: absent
+      field_60: absent
+      field_85: absent
+      font_or_brush_resource: absent
+      gallery_base: absent
+      gallery_caption: absent
+      information_back: absent
+      information_footer: absent
+      information_header: absent
+      information_pager: absent
+      justification: absent
+      object_class: absent
+      object_index: absent
+      object_name: absent
+      object_name_number: absent
+      object_outer: absent
+      opacity: absent
+      picture_image: absent
+      render_angle: absent
+      render_pivot: absent
+      render_transform: absent
+      rich_slate: absent
+      scrollbar_visibility: absent
+      shadow_color: absent
+      shadow_offset: absent
+      text_color: absent
+      text_format: absent
+      text_scale: absent
+      virtual_20: absent
+      virtual_28: absent
+      virtual_288: absent
+      virtual_2e0: absent
+      virtual_30: absent
+      virtual_38: absent
+      virtual_48: absent
+      virtual_50: absent
+      widget_slot: absent
+      widget_tree: absent
+      wrap_width: absent
+  options_button: {fields: {look: absent, look_bytes: absent}}
+  options_presenter: {fields: {input: absent, view: absent}}
+  options_view: {fields: {state: absent, buttons: absent, count: absent, room: absent, selected: absent}}
+  title_flow: {fields: {state: absent, answered: absent, answer: absent}}
+  dialog_result: {size: absent, fields: {self: absent, header: absent, message: absent, dialog_kind: absent, as_flow: absent}}
+  title_presenter: {fields: {cursor: absent, view: absent, input: absent, state: absent}}
+  title_view: {fields: {description: absent, buttons: absent, count: absent, room: absent, hidden_select: absent, hide: absent, hidden: absent, hidden_other: absent}}
+  title_button: {fields: {id: absent, label: absent, mark: absent}}
+  title_input: {fields: {data: absent, count: absent, capacity: absent}}
+  title_handler: {fields: {key: absent, instance: absent, kind: absent, presenter_index: absent, presenter_serial: absent, function: absent, zero: absent}}
   console_manager_table:
     fields:
       find_variable: 176
@@ -587,9 +726,11 @@ structs:
       player: 480
   dialog_widget:
     fields:
+      kind: absent
       text: 1416
   ui_manager:
     fields:
+      open_dialog: absent
       announcer: 840
   announcer:
     fields:
@@ -1668,6 +1809,18 @@ structs:
     fields:
       throw_length_max: 1104
 functions:
+  options_button_icon: absent
+  options_direction: absent
+  options_confirm: absent
+  options_gate: absent
+  options_list_grow: absent
+  options_button_highlight: absent
+  title_confirm: absent
+  ui_set_render_opacity: absent
+  title_direction: absent
+  title_back: absent
+  title_list_grow: absent
+  ui_vertical_slot_sync: absent
   map_add_stream: 10875472
   map_remove_stream: 10864176
   map_duplicate_stream: 9787472
@@ -1922,6 +2075,9 @@ functions:
   squad_icon_count: 6370816
   squad_throw_trajectory: 3848544
 slots:
+  options_presenter_tick: absent
+  title_flow_update: absent
+  title_presenter_tick: absent
   physics_contacts:
     table: 123681040
     offset: 640

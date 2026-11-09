@@ -28,6 +28,51 @@ identity:
   - {offset: 0x3405610, hash: 0x12E47DB99BCCB5CC}
 
 data:
+  # Original Mods frontend native calls, ported from the qualified 1.1.1 adapter.
+  browser_address_21b9940: 0x21B9940
+  browser_address_3730f00: 0x3730F00
+  browser_address_381f120: 0x381F120
+  browser_address_3821230: 0x3821230
+  browser_address_3821420: 0x3821420
+  browser_address_4c1d980: 0x4C1D980
+  browser_address_4c353c0: 0x4C353C0
+  browser_address_4c353e0: 0x4C353E0
+  browser_address_4c35c50: 0x4C35C50
+  browser_address_4c35e30: 0x4C35E30
+  browser_address_4c35f60: 0x4C35F60
+  browser_address_4c35f80: 0x4C35F80
+  browser_address_4c360b0: 0x4C360B0
+  browser_address_4c360d0: 0x4C360D0
+  browser_address_4c360f0: 0x4C360F0
+  browser_address_4c39d10: 0x4C39D10
+  browser_address_4c3a2e0: 0x4C3A2E0
+  browser_address_4c3bb20: 0x4C3BB20
+  browser_address_4c58150: 0x4C58150
+  browser_address_4c61a20: 0x4C61A20
+  browser_address_4c61cb0: 0x4C61CB0
+  browser_address_4c61dd0: 0x4C61DD0
+  browser_address_4c61ee0: 0x4C61EE0
+  browser_address_4c62370: 0x4C62370
+  browser_address_4c62570: 0x4C62570
+  browser_address_4c64530: 0x4C64530
+  browser_address_4c6b5c0: 0x4C6B5C0
+  browser_address_4c6f4f0: 0x4C6F4F0
+  browser_address_4c94fb0: 0x4C94FB0
+  browser_address_5524420: 0x5524420
+  browser_address_5642e40: 0x5642E40
+  browser_address_5ab0820: 0x5AB0820
+  browser_address_9830740: 0x9830740
+  browser_address_9830b10: 0x9830B10
+  options_direction_delegate_table: 0x8AA2518   # the function table of the Options menu's Up and Down handler
+  options_input_delegate_table: 0x8AA2588       # and of its Confirm and Back handlers
+  dialog_answer_yes: 0x93514C0                 # the names the game's dialogs answer with: the first button
+  dialog_answer_no: 0x93514C8                  # the second
+  dialog_answer_cancel: 0x93514D0              # the third
+  dialog_answer_return: 0x93514E0              # Back
+  dialog_result_table: 0x89C07B8               # the function table of the message that ends a dialog
+  dialog_result_header: 0x7F19FE8              # the 8 bytes that message carries, as the game makes it
+  title_direction_delegate_table: 0x8AA75D8      # and of its Up and Down handler
+  title_input_delegate_table: 0x8AA7648          # the function table of the title presenter's Confirm and Back handlers
   wwise_audio_manager: 0x92DD0E8
   wwise_parameter_manager: 0x92DD120
   ui_select_sound: 0x9335ae0 # native common UI focus FName, initialized as Select
@@ -115,6 +160,16 @@ data:
   gimmick_warp_stage_function: 0x14AB0D0
   content_icon_size: 0x935E568
 constants:
+  options_entry_icon: 0                         # the icon a mod entry of the Options menu shows: Play Co-op's
+  options_row_pitch: 117                        # the height of one entry of that menu, with its spacing
+  options_up_key: 0                             # the Options menu's input map: Up and Down
+  options_down_key: 1
+  options_last_stock: 3                         # its last stock entry, where the game wraps Down to the first
+  title_flow_players_wait: 0x24                # the title flow's state while the Number of Players question is up
+  dialog_result_message: 0x45                  # the kind of message that ends a dialog
+  title_confirm_key: 0x16                        # the title presenter's input map: Confirm
+  title_back_key: 0x17                           # and Back
+  title_menu_state: 5                            # title presenter state: the menu takes input
   stream_block_load: 0x80
   stream_source_cdo: 0x10
   physics_dynamic_kind: 6
@@ -272,6 +327,7 @@ constants:
   mutex_ready: 1                    # a system lock's `state` once it is set up
   shader_map_registered: 0x1        # the bit of a shader map's `flags` that says the engine finds it by its hash
   listed_pikmin_types: 8            # the types of Pikmin the list of areas shows beside an area: this many, counted from the first
+  widget_visible: 0                 # a widget is drawn and takes input
   widget_collapsed: 1               # how a widget is shown when it is not drawn and takes no room,
   widget_hidden: 2                  # and when it is not drawn and keeps its room
   collision_records_most: 128       # how many collision parts the game's own rebuild of an actor's tree has room for,
@@ -306,6 +362,30 @@ constants:
 # What the game calls things of its own, where the framework has to spell one: classes, and the stages the game
 # goes through.
 names:
+  options_button_icon_child: IM_Icon             # a menu button's icon
+  options_panel_child: PA_Dialog_Bg              # the Options menu's dark panel, sized for its own entries
+  options_view_class: WBP_ui_Option_Title_C     # the title's Options menu (Plus on the title screen)
+  host_page_article: PA_Content                 # the Information page's parts Tsuchi's host hides
+  host_page_scroll: N_Cvs_Scroll
+  host_page_scrollbar: PA_ScrollBar
+  host_page_pager: N_Hrz_Pager_000
+  host_page_canvas: N_Cvs_eshop                 # and the canvas its rows go on
+  host_page_header: PA_Header
+  host_header_text: F_Text
+  host_page_footer: PA_Footer
+  host_button_text: F_Text                      # a title button's text and new mark
+  host_button_new: PA_New
+  host_button_selected: Focus                    # a title button's selected look, and the animations between the two
+  host_button_focus: Normal2Focus
+  host_button_unfocus: Focus2Normal
+  host_line_text: F_Info_Text_000               # an Information text block's text
+  title_view_class: WBP_ui_Title_C                # the title screen's widget, which holds its menu
+  title_buttons_child: N_Vrt_Button              # the box of the title menu's buttons
+  title_canvas_child: N_Cvs_Title                # the title widget's canvas, where a mod's note goes
+  title_input_class: PlayerInputPresenter        # the title presenter's map of input handlers
+  title_buttons_box_class: VerticalBox
+  title_button_normal: Normal                    # a title button's look when it is not selected
+  title_button_slot_class: VerticalBoxSlot
   content_texture_class: Texture2D
   save_class: CarrotSaveGame        # every save object's class derives from it
   navigation_system_class: NavigationSystemV1
@@ -428,6 +508,10 @@ names:
   gimmick_warp_class: WarpCarryAIComponent
 # Assets of the game's own that the framework loads, by their paths.
 assets:
+  options_button_class: /Game/Carrot4/UI/Common/Button/WBP_ui_PA_Button_Menu.WBP_ui_PA_Button_Menu_C  # an entry of the title's Options menu
+  host_page_class: /Game/Carrot4/UI/OutGame/Information/WBP_ui_Information.WBP_ui_Information_C   # Tsuchi's host: the frame
+  host_line_class: /Game/Carrot4/UI/OutGame/Information/Parts/WBP_ui_Info_PA_Text.WBP_ui_Info_PA_Text_C  # its lines of text
+  title_button_class: /Game/Carrot4/UI/OutGame/Title/Parts/WBP_ui_PA_Title_Button.WBP_ui_PA_Title_Button_C  # one entry of the title menu
   ui_mod_list_tab_class: /Game/Carrot4/UI/InGame/Tablet/Parts/WBP_ui_Tablet_PA_Tab_Item.WBP_ui_Tablet_PA_Tab_Item_C
   pikmin_property_table: /Game/Carrot4/Core/GActor/DT_PikminProperty.DT_PikminProperty
   pikmin_color_enum: /Script/Carrot4.EPikminColor
@@ -461,6 +545,99 @@ rows:
                   AreaSelect_Common_Complete_00]
 
 structs:
+  # Original Mods widget layouts and virtual slots, qualified only on 1.1.1.
+  # Shared numeric fields name byte positions where stock widget classes differ.
+  browser_layout:
+    fields:
+      texture_mips: 0x18
+      texture_mip_count: 0x20
+      mip_bulk: 0x10
+      texture_width: 0x0
+      texture_height: 0x4
+      texture_format: 0xC
+      font_size: 0x48
+      decoder_set_compressed: 0x0
+      auto_wrap: 0x11D
+      class_super: 0x40
+      clipping: 0xC2
+      field_190: 0x190
+      field_38: 0x38
+      field_48: 0x48
+      field_49: 0x49
+      field_4c: 0x4C
+      field_4d8: 0x4D8
+      field_4dc: 0x4DC
+      field_4e0: 0x4E0
+      field_508: 0x508
+      field_520: 0x520
+      field_528: 0x528
+      field_530: 0x530
+      field_538: 0x538
+      field_540: 0x540
+      field_58: 0x58
+      field_5b0: 0x5B0
+      field_5b8: 0x5B8
+      field_5c: 0x5C
+      field_5c8: 0x5C8
+      field_5d0: 0x5D0
+      field_5d8: 0x5D8
+      field_5f0: 0x5F0
+      field_5f8: 0x5F8
+      field_60: 0x60
+      field_85: 0x85
+      font_or_brush_resource: 0x160
+      gallery_base: 0x5E8
+      gallery_caption: 0x5E0
+      information_back: 0x738
+      information_footer: 0x740
+      information_header: 0x748
+      information_pager: 0x758
+      justification: 0x11B
+      object_class: 0x10
+      object_index: 0xC
+      object_name: 0x18
+      object_name_number: 0x1C
+      object_outer: 0x20
+      opacity: 0xC4
+      picture_image: 0x4F0
+      render_angle: 0xA8
+      render_pivot: 0xAC
+      render_transform: 0x90
+      rich_slate: 0x448
+      scrollbar_visibility: 0x839
+      shadow_color: 0x268
+      shadow_offset: 0x260
+      text_color: 0x1B8
+      text_format: 0x4E8
+      text_scale: 0x4E4
+      virtual_20: 0x20
+      virtual_28: 0x28
+      virtual_288: 0x288
+      virtual_2e0: 0x2E0
+      virtual_30: 0x30
+      virtual_38: 0x38
+      virtual_48: 0x48
+      virtual_50: 0x50
+      widget_slot: 0x28
+      widget_tree: 0x1E8
+      wrap_width: 0x120
+  options_button: {fields: {look: 0x4D8, look_bytes: 0x15}}   # a menu button's ButtonSize, text place and PresetType (MenuButtonWidget)
+  options_presenter: {fields: {input: 0x78, view: 0x80}}   # the title's Options menu presenter: its input map and its widget
+  options_view: {fields: {state: 0x4D8, buttons: 0x4F8, count: 0x500, room: 0x504, selected: 0x508}}  # its widget
+  title_flow: {fields: {state: 0xD8, answered: 0xE8, answer: 0xEC}}   # the title's state machine: its state, and the dialog's answer
+  dialog_result: {size: 0x50, fields: {self: 0x18, header: 0x28, message: 0x38, dialog_kind: 0x3C, as_flow: 0x4D}}
+  # The title presenter: the selected entry, its widget, its input map and its state (0 to 3 the opening and
+  # Press Start, 4 the menu coming in, 5 the menu, 9 and 10 a choice being carried out).
+  title_presenter: {fields: {cursor: 0x80, view: 0x88, input: 0xA8, state: 0xB0}}
+  # The title widget: the line under the menu, its list of buttons, the button count without a hidden last
+  # entry (bit 0 of hide), and which entry is hidden (hidden, or hidden_other when hidden_select is set).
+  title_view: {fields: {description: 0x560, buttons: 0x568, count: 0x570, room: 0x574, hidden_select: 0x5AB, hide: 0x5AC, hidden: 0x5B0, hidden_other: 0x5B4}}
+  # A title button: the name its choice goes by, its text and its new-content mark.
+  title_button: {fields: {id: 0x300, label: 0x528, mark: 0x540}}
+  # The title presenter's input map: four entries of 32 bytes, each a key at +0 and a handler instance at +8
+  # whose function sits at +32 and its presenter's weak index and serial at +24 and +28.
+  title_input: {fields: {data: 0xC8, count: 0xD0, capacity: 0xD4}}
+  title_handler: {fields: {key: 0, instance: 8, kind: 0x10, presenter_index: 24, presenter_serial: 28, function: 32, zero: 40}}
   console_manager_table:
     fields: {find_variable: {at: 0xb0, returns: pointer, args: [pointer, const_pointer, bool]}}
   console_variable_table:
@@ -715,9 +892,11 @@ structs:
              shape: 0x130, mode: 0x175,   # one byte each
              player: 0x1E0}           # whose answer counts; below 0 for anyone's
   dialog_widget:
-    fields: {text: 0x588}             # a weak reference to the block its text is shown in
+    fields: {text: 0x588,             # a weak reference to the block its text is shown in
+             kind: 0x5F4}             # which of the game's dialogs it shows
   ui_manager:
-    fields: {announcer: 0x2F0}        # what shows the game's announcements
+    fields: {announcer: 0x2F0,        # what shows the game's announcements
+             open_dialog: 0x980}      # the dialog on the screen
   announcer:
     fields: {banner: 0x2C0}           # the banner's widget, once the game has made it
   banner_widget:
@@ -1323,6 +1502,18 @@ structs:
 
   # carry: original Attach 0x1A71074..0x1A710E4 and DrainAttachmentList3B8.
 functions:
+  options_button_icon: {address: 0x24170A0, returns: void, args: [pointer, i32]}  # a menu button's icon, which also places its label
+  options_direction: {address: 0x28E2E40, returns: bool, args: [pointer, bool]}  # the Options menu's Up and Down (presenter, down)
+  options_confirm: {address: 0x28E2E90, returns: bool, args: [pointer]}          # and its Confirm
+  options_gate: {address: 0x2D38910, returns: bool, args: [pointer]}             # whether its widget takes input now
+  options_list_grow: {address: 0x2489150, returns: void, args: [pointer]}        # grows its button list to fit its count
+  options_button_highlight: {address: 0x2416C30, returns: void, args: [pointer, bool, bool]}  # a menu button selected or not
+  ui_set_render_opacity: {address: 0x4C6CFD0, returns: void, args: [pointer, f32]}  # a widget's opacity, 0 to 1
+  title_direction: {address: 0x29573C0, returns: bool, args: [pointer, i32]}  # the title presenter's Up and Down handler
+  title_confirm: {address: 0x2957420, returns: bool, args: [pointer]}       # the title presenter's Confirm handler
+  title_back: {address: 0x29574B0, returns: bool, args: [pointer]}          # and its Back handler
+  title_list_grow: {address: 0x2D8BA80, returns: void, args: [pointer]}     # grows the title widget's button list to fit its count
+  ui_vertical_slot_sync: {address: 0x4C69000, returns: void, args: [pointer]}  # applies a VerticalBoxSlot's padding
   map_add_stream: {address: 0x05BAB910, args: [pointer, pointer]}
   map_remove_stream: {address: 0x05BABDB0, returns: bool, args: [pointer, pointer]}
   map_duplicate_stream: {address: 0x039BDA20, returns: pointer, args: [const_pointer, pointer, u64, u32, pointer, i32, u32]}
@@ -1728,6 +1919,9 @@ slot_groups:
 
 
 slots:
+  options_presenter_tick: {table: 0x8AA1378, offset: 0x280, stock: 0x28E2660, args: [pointer, f32]}  # the Options menu presenter, each frame
+  title_flow_update: {table: 0x89C0620, offset: 0x28, stock: 0x1F310E0, args: [pointer, f32]}  # the title's state machine
+  title_presenter_tick: {table: 0x8AA49B8, offset: 0x280, stock: 0x2957170, args: [pointer, f32]}  # the title presenter, each frame it runs
   physics_contacts: {table: 0x89DA570, offset: 0x278, stock: 0x2166790, args: [pointer, pointer]} # handler, pending collision array
   ui_mod_list_construct:
     table: 144906144

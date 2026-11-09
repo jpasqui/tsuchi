@@ -239,6 +239,11 @@ def builds_digest(root=ROOT):
     return hashed.hexdigest()
 
 
+def embed_browser_layout(output):
+    layout = (FRAMEWORK / 'game/browser/layout.json').read_text(encoding='utf-8')
+    (Path(output) / 'get_mods_ui.h').write_text('#pragma once\nstatic const char p4m_get_mods_ui_json[] = ' + json.dumps(layout) + ';\nstatic const unsigned p4m_get_mods_ui_json_bytes = sizeof(p4m_get_mods_ui_json)-1;\n', encoding='utf-8')
+
+
 def build(out, name='subsdk9', selfcheck=False, native_npdm=None):
     """`selfcheck` builds in the framework's own checks, which run in the game: never the build people run."""
     if not isinstance(name, str) or not re.fullmatch(r'subsdk[0-9]', name):
@@ -263,14 +268,14 @@ def build(out, name='subsdk9', selfcheck=False, native_npdm=None):
                 FRAMEWORK / 'base', FRAMEWORK / 'game', FRAMEWORK / 'target', LUA_RUNTIME / 'mods', HTTPS / 'include', MBEDTLS / 'include', HTTPS, objects]
     sources = sorted((FRAMEWORK / 'core').glob('*.cpp')) + sorted((FRAMEWORK / 'base').glob('*.cpp'))
     sources += sorted((FRAMEWORK / 'game').glob('*.cpp'))
+    sources += sorted((FRAMEWORK / 'game' / 'browser').glob('*.cpp'))
+    embed_browser_layout(objects)
     roots = (MBEDTLS / 'cacert.pem').read_bytes()
     (objects / 'https_roots.h').write_text('#pragma once\nstatic const unsigned char tsuchi_https_roots[] = {' + ','.join(str(b) for b in roots + b'\0') + '};\n', encoding='utf-8')
     sources += sorted(HTTPS.glob('*.cpp'))
     sources += sorted((FRAMEWORK / 'target').glob('*.cpp')) + sorted((gen / 'framework').glob('*.cpp'))
     built, jobs = [], []  # every object compiles on its own, so they compile at once, and link in this order
     checks = ['-DTSUCHI_SELFCHECK=1'] if selfcheck else []
-    if native_info:
-        checks += ['-DTSUCHI_NATIVE_CODE_ACCESS=1']
     for source in sources:
         target = objects / f'{source.parent.name}_{source.stem}.o'
         jobs.append([clang, *COMPILE, *checks, '-DMBEDTLS_CONFIG_FILE="https_tls_config.h"', *[f'-I{folder}' for folder in includes], '-c', source, '-o', target])
@@ -368,7 +373,7 @@ def main():
     parser.add_argument('--module-slot', type=int, choices=range(10), default=9,
                         help='Tsuchi subsdk slot, 0–9 (default: 9); choose a free slot and keep foreign modules unchanged')
     parser.add_argument('--native-hooks-npdm', type=Path,
-                        help='local experimental build with supplied process metadata that grants native-hook system calls')
+                        help='stage locally prepared process metadata alongside the standard module')
     args = parser.parse_args()
     folder = 'native-module' if args.native_hooks_npdm else 'check-module' if args.selfcheck else 'module'
     try:

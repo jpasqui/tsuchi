@@ -1,0 +1,183 @@
+{
+  "$schema": "../../schemas/get-mods.schema.json",
+  "version": 1,
+  "id": "get-mods",
+  "adapter": "gamebanana",
+  "title": "Mods",
+  "entry": {
+    "label": "Mods",
+    "slot": "after-game-modes"
+  },
+  "header": {
+    "x": 80,
+    "y": 60,
+    "width": 1680,
+    "height": 90
+  },
+  "status": {
+    "x": 80,
+    "y": 948,
+    "width": 1680,
+    "height": 40
+  },
+  "browse": {
+    "title": "Mods",
+    "columns": 3,
+    "viewport": {
+      "x": 480,
+      "y": 180,
+      "width": 1280,
+      "height": 760
+    },
+    "hiddenViewport": {
+      "x": 180,
+      "y": 180,
+      "width": 1560,
+      "height": 760
+    },
+    "card": {
+      "width": 380,
+      "height": 306,
+      "imageHeight": 214,
+      "labelHeight": 92,
+      "gapX": 40,
+      "gapY": 24,
+      "imageFit": "cover"
+    },
+    "sidebar": {
+      "x": 80,
+      "y": 180,
+      "width": 350,
+      "height": 760,
+      "hiddenX": -400,
+      "durationMs": 240,
+      "itemPitch": 88,
+      "items": [
+        {
+          "id": "installed",
+          "label": "Installed",
+          "sort": "latest",
+          "category": 0,
+          "action": "installed"
+        },
+        {
+          "id": "search",
+          "label": "Search",
+          "sort": "latest",
+          "category": 0,
+          "action": "search"
+        },
+        {
+          "id": "popular",
+          "label": "Popular",
+          "sort": "popular",
+          "category": 0
+        },
+        {
+          "id": "downloads",
+          "label": "Top",
+          "sort": "downloads",
+          "category": 0
+        },
+        {
+          "id": "recent",
+          "label": "New",
+          "sort": "latest",
+          "category": 0
+        }
+      ]
+    },
+    "footer": {
+      "text": "[PictureFont:IconData key=\"A_Button\" scale=\"0.76\"/] Details    [PictureFont:IconData key=\"B_Button\" scale=\"0.76\"/] Back    [PictureFont:IconData key=\"X_Button\" scale=\"0.76\"/] Sort    [PictureFont:IconData key=\"Y_Button\" scale=\"0.76\"/] Category    [PictureFont:IconData key=\"ZR_Button\" scale=\"0.76\"/] Refresh",
+      "textMode": "rich"
+    }
+  },
+  "details": {
+    "title": "Mod details",
+    "viewport": {
+      "x": 240,
+      "y": 180,
+      "width": 1440,
+      "height": 760
+    },
+    "gallery": {
+      "x": 240,
+      "y": 180,
+      "width": 920,
+      "height": 520
+    },
+    "previewStrip": {
+      "x": 350,
+      "y": 716,
+      "width": 640,
+      "height": 64,
+      "count": 5,
+      "gap": 20
+    },
+    "description": {
+      "x": 240,
+      "y": 800,
+      "width": 920,
+      "height": 560,
+      "textMode": "rich"
+    },
+    "author": {
+      "x": 1380,
+      "y": 68,
+      "width": 380,
+      "height": 62,
+      "label": "Author"
+    },
+    "metadata": {
+      "x": 1210,
+      "y": 180,
+      "width": 450,
+      "height": 320
+    },
+    "download": {
+      "x": 1210,
+      "y": 858,
+      "width": 450,
+      "height": 82,
+      "label": "Install selected file"
+    },
+    "files": {
+      "x": 1210,
+      "y": 674,
+      "width": 450,
+      "height": 82,
+      "rows": 2,
+      "pitch": 92
+    },
+    "cancel": {
+      "x": 1210,
+      "y": 592,
+      "width": 450,
+      "height": 70,
+      "label": "Cancel transfer"
+    },
+    "footer": {
+      "text": "[PictureFont:IconData key=\"A_Button\" scale=\"0.76\"/] Select    [PictureFont:IconData key=\"B_Button\" scale=\"0.76\"/] Back",
+      "textMode": "rich"
+    }
+  },
+  "profile": {
+    "title": "Author",
+    "avatar": {
+      "x": 80,
+      "y": 180,
+      "width": 300,
+      "height": 300
+    },
+    "info": {
+      "x": 80,
+      "y": 506,
+      "width": 370,
+      "height": 320
+    },
+    "footer": {
+      "text": "[PictureFont:IconData key=\"A_Button\" scale=\"0.76\"/] Select    [PictureFont:IconData key=\"B_Button\" scale=\"0.76\"/] Back",
+      "textMode": "rich"
+    }
+  }
+}

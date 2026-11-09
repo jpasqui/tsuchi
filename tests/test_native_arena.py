@@ -268,7 +268,7 @@ class NativeArena(unittest.TestCase):
                 for folder in (cls.work / 'framework', cls.work / 'gen/include', ROOT / 'sdk/libc',
                                ROOT / 'framework/base', ROOT / 'framework/core', ROOT / 'framework/target'):
                     flags += ['-I', folder]
-                if enabled: flags += ['-DTSUCHI_NATIVE_CODE_ACCESS=1']
+                if not enabled: flags += ['-DTSUCHI_NATIVE_CODE_ACCESS=0']
                 run([shutil.which('clang++'), *flags, '-c', ROOT / source, '-o', output])
                 objects.append(output)
             output = cls.work / f'platform-{enabled}.elf'

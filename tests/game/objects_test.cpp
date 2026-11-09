@@ -9415,6 +9415,9 @@ void conversing() {
     };
     fake::put<uint64_t>(running.context + t::game_context::dialogs, 0);
     CHECK(refused(TSUCHI_NOT_READY, "no line to hand a request in"));
+    const size_t labels_before = blocks_out.size();
+    CHECK(ask.ask(mod, "Ready?", "Install", "Cancel", &id) == TSUCHI_NOT_READY &&
+          blocks_out.size() == labels_before && talk.posted.empty());
     fake::put(running.context + t::game_context::dialogs, queue);
     fake::put<uint64_t>(queue_table + t::request_queue_table::push, 0x1234);
     CHECK(refused(TSUCHI_NOT_READY, "a line without the function for it"));
@@ -9439,9 +9442,10 @@ void conversing() {
     const size_t out = blocks_out.size();
     refused_size = 14; // no memory for the text of either
     CHECK(refused(TSUCHI_NO_MEMORY, "no memory for the text") && blocks_out.size() == out);
-    refused_size = 16 * 40; // nor for the first dialogs
-    CHECK(refused(TSUCHI_NO_MEMORY, "no memory for the list") && blocks_out.size() == out);
     refused_size = 0;
+    watched_fail_after = 1; // allow the text, then refuse the first dialog-list allocation
+    CHECK(refused(TSUCHI_NO_MEMORY, "no memory for the list") && blocks_out.size() == out);
+    watched_fail_after = -1;
     const int freed = fake::engine().freed;
     talk.transfer = Talk::kFails; // the game does not take the function
     CHECK(ask.confirm(mod, "Ready?", &id) == TSUCHI_NOT_READY && log_is("made disposed ") && talk.posted.empty() && tsuchi::dialogs_waiting() == 0 &&

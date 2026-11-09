@@ -47,6 +47,7 @@ def metadata(allowed=permissions.REQUIRED, signatures=0x200):
     struct.pack_into('<II', aci, 0x30, 0x40, len(caps))
     aci[0x40:] = caps
     acid[signatures:signatures + 4] = b'ACID'
+    struct.pack_into('<I', acid, signatures + 4, len(acid) - signatures // 2)
     struct.pack_into('<QQ', acid, signatures + 0x10, permissions.PROGRAM, permissions.PROGRAM)
     struct.pack_into('<II', acid, signatures + 0x30, signatures + 0x40, len(caps))
     acid[signatures + 0x40:] = caps
@@ -161,8 +162,8 @@ class NativeHooks(unittest.TestCase):
         for enabled in (False, True):
             args = [shutil.which('clang++'), '--target=aarch64-none-elf', '-std=c++17', '-O2',
                     '-ffreestanding', '-ffixed-x18', '-Wall', '-Wextra', '-Werror']
-            if enabled:
-                args += ['-DTSUCHI_NATIVE_CODE_ACCESS=1']
+            if not enabled:
+                args += ['-DTSUCHI_NATIVE_CODE_ACCESS=0']
             for path in (ROOT / 'sdk/libc', self.gen / 'include', self.gen / 'framework',
                          ROOT / 'framework/base', ROOT / 'framework/core', ROOT / 'framework/target'):
                 args += ['-I', path]
@@ -326,8 +327,8 @@ class NativeHooks(unittest.TestCase):
                 for path in (self.work / 'framework', self.gen / 'include', ROOT / 'sdk/libc',
                              ROOT / 'framework/base', ROOT / 'framework/core', ROOT / 'framework/target'):
                     args += ['-I', path]
-                if enabled:
-                    args += ['-DTSUCHI_NATIVE_CODE_ACCESS=1']
+                if not enabled:
+                    args += ['-DTSUCHI_NATIVE_CODE_ACCESS=0']
                 run([*args, '-c', ROOT / source, '-o', obj])
                 objects.append(obj)
             elf = self.work / f'platform_{enabled}.elf'

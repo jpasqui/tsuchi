@@ -54,6 +54,7 @@ TSUCHI_Result read_whole_file(const char* path, char*& data, uint64_t& size) {
 }
 
 TSUCHI_Result list_folder(const char* path, Texts& files, Texts& folders) {
+    FileScope scope(path);
     auto* entry = static_cast<uint8_t*>(allocate(t::fs_entry::size));
     if (!entry) return TSUCHI_NO_MEMORY;
     void* folder = nullptr;

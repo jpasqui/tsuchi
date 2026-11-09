@@ -16,6 +16,7 @@ const sidebars = {
     { label: 'Install Tsuchi', slug: 'players/install-tsuchi' },
     { label: 'Install on a console', slug: 'players/install-console', badge: { text: 'WIP', variant: 'caution' } },
     { label: 'Install a mod', slug: 'players/install-a-mod' },
+    { label: 'Download mods in game', slug: 'players/download-mods', badge: { text: 'WIP', variant: 'caution' } },
     { label: 'Manage mods', slug: 'players/mod-list' },
     { label: 'External mods', slug: 'players/external-mods' },
     { label: 'Troubleshooting', slug: 'players/troubleshooting' },

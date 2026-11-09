@@ -17,6 +17,15 @@ can load mods.
 1. Extract the Tsuchi release archive, then open `emulator/Tsuchi`. Its `exefs` folder contains `subsdk9` and a `.pchtxt` file for each version of the game.
 2. In your emulator, right-click Pikmin 4 and open the game's mod folder.
 3. Create a new folder in there named `Tsuchi`, and move the `exefs` folder into it.
+4. Finish the installation with Python 3.9 or newer. From the extracted release folder, run:
+
+   ```sh
+   python install.py --npdm "game-dump/exefs/main.npdm" --exefs "mods/Tsuchi/exefs"
+   ```
+
+   Replace both paths with your own. Use `main.npdm` from your dump of the game version
+   you will play. This creates the launch permissions that Tsuchi's native hooks and
+   code-patching cheats use. Complete this step before starting the game.
 
 </Steps>
 
@@ -26,6 +35,7 @@ Your mod folder should now look like this:
 Tsuchi/
   exefs/
     subsdk9
+    main.npdm
     1.1.1.pchtxt
     2.0.0.pchtxt
     sw2.pchtxt
@@ -35,8 +45,14 @@ Tsuchi/
 The archive holds one `.pchtxt` file for each version of Pikmin 4 that this release supports.
 Keep them all. Each one applies only to its own version.
 
+The installer preserves your dump and refuses to replace a different installed
+`main.npdm`. Keep the generated file local; it contains metadata from your game.
+If another mod supplies `main.npdm`, preserve that file and resolve the combined
+permissions before replacing it. Release downloads contain the installer, not
+anyone's game metadata.
+
 The Nintendo Switch 2 Edition has its own mod folder in the emulator. Install Tsuchi and your
-mods in that folder too, with the same files.
+mods in that folder too. Run the installer there with the Switch 2 Edition's own `main.npdm`.
 
 ## Testing
 
@@ -68,6 +84,7 @@ Your mod folder should now look like this:
 Tsuchi/
   exefs/
     subsdk9
+    main.npdm
     1.1.1.pchtxt
     2.0.0.pchtxt
     sw2.pchtxt
@@ -113,8 +130,14 @@ screen's own refreshes.
 
 ## Update
 
+If upgrading an older installation without `main.npdm`, complete the installer
+step above before launching the new runtime. Code access needs those launch
+permissions as well as the module.
+
 Close the game, then replace the files in `Tsuchi/exefs` with the new archive's
 `emulator/Tsuchi/exefs` files. Replace the module and patch together.
+Keep the generated `main.npdm` when updating Tsuchi. After a game update, prepare it
+again from the matching game dump, preserving the old file separately first.
 Keep the `romfs` folder next to `exefs`, so your `settings.json` stays. Your mods are
 in their own folders and don't change.
 

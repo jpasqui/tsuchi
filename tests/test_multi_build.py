@@ -451,6 +451,8 @@ class MultiBuild(unittest.TestCase):
             includes = [framework / 'target' / 'include', gen / 'include', gen / 'framework', framework / 'core', framework / 'base', framework / 'game',
                         framework / 'target', build_module.LUA_RUNTIME / 'mods', build_module.HTTPS / 'include', build_module.MBEDTLS / 'include', build_module.HTTPS, gen]
             sources = [path for part in ('core', 'base', 'game', 'target') for path in sorted((framework / part).glob('*.cpp'))]
+            sources += sorted((framework / 'game/browser').glob('*.cpp'))
+            build_module.embed_browser_layout(gen)
             def compiled(source):
                 done = subprocess.run([shutil.which('clang'), *build_module.COMPILE, '-DTSUCHI_SELFCHECK=1', '-DMBEDTLS_CONFIG_FILE="https_tls_config.h"',
                                        *[f'-I{folder}' for folder in includes], '-fsyntax-only', str(source)], capture_output=True, text=True, errors='replace')

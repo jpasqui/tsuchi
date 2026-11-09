@@ -208,6 +208,9 @@
   "dialog": [
    "confirm",
    "message",
+   "ask",
+   "set_text",
+   "close",
    "on_answered"
   ],
   "effects": [
@@ -262,6 +265,10 @@
    "admit_preview",
    "prepare_preview",
    "release_preview",
+   "hold_player_choice",
+   "release_player_choice",
+   "answer_player_choice",
+   "on_player_choice",
    "on_mode_changed",
    "on_stage_changed",
    "on_world_loaded",
@@ -502,13 +509,23 @@
    "glyph",
    "set_footer",
    "set_widget_text",
+   "hold_open_over",
+   "hold_menu_entry",
+   "release_menu_entry",
+   "hold_menu_lock",
+   "release_menu_lock",
+   "hold_menu_note",
+   "release_menu_note",
+   "ask_text",
    "on_activated",
    "on_changed",
    "on_closed",
    "on_choice_changed",
    "on_integer_changed",
    "on_reset_requested",
-   "on_button_event"
+   "on_button_event",
+   "on_entry_chosen",
+   "on_text_entered"
   ],
   "world": [
    "ground",

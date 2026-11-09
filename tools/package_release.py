@@ -166,8 +166,6 @@ def validate_module(folder, report):
         loads, sections, symbols = build_module.read_elf(elf)
         if any('selfcheck_start' in name or 'selfcheck_frame' in name for name in symbols):
             raise ValueError('A module with native selfchecks cannot be released')
-        if 'tsuchi_native_code_access' in symbols:
-            raise ValueError('An experimental native-code-access module cannot be released')
         memory = build_module.check(elf, loads, sections, symbols)
         reproduced = build_module.module_file(elf, loads, sections)
     except (SystemExit, KeyError, IndexError, UnicodeError, ValueError, struct.error) as error:
@@ -179,7 +177,7 @@ def validate_module(folder, report):
 
 def reject_private_paths(out):
     roots = {str(ROOT.resolve()).encode('utf-8'), ROOT.resolve().as_posix().encode('utf-8')}
-    local = re.compile(rb'(?:[A-Za-z]:[\\/](?:Users|home)[\\/]|/(?:home|Users)/|(?:^|[\s\x00\"\x27`])(?:private|\.git)[\\/])', re.I)
+    local = re.compile(rb'(?:[A-Za-z]:[\\/](?:Users|home)[\\/]|(?:^|[\s\x00\"\x27`])/(?:home|Users)/|(?:^|[\s\x00\"\x27`])(?:private|\.git)[\\/])', re.I)
     for name, data in out.items():
         if any(root.lower() in data.lower() for root in roots) or local.search(data):
             raise ValueError('Release member contains a private path: ' + name)
@@ -195,8 +193,8 @@ def members(folder):
     table = builds[0]
     if report.get('selfcheck') is not False:
         raise ValueError('A production build report with selfcheck=false is required')
-    if report.get('native_code_access'):
-        raise ValueError('A local native-code-access build with supplied process metadata cannot be released')
+    if report.get('native_code_access') or any(folder.rglob('*.npdm')):
+        raise ValueError('Local process metadata cannot be released')
     import build_module
     if report.get('game_table_sha256') != digest(table_bytes) or report.get('game_builds_sha256') != build_module.builds_digest(ROOT):
         raise ValueError('The production build uses another game table')
@@ -234,6 +232,8 @@ def members(folder):
     out['INSTALL-CONSOLE.md'] = install_guide((docs / 'install-console.md').read_text(encoding='utf-8'), module_file)
     out['INSTALL-EMULATOR.md'] = install_guide((docs / 'install-tsuchi.mdx').read_text(encoding='utf-8'), module_file)
     out['THIRD-PARTY-NOTICES.txt'] = (ROOT / 'tools/Tsuchi-ThirdPartyNotices.txt').read_bytes()
+    for helper in ('install.py', 'native_hook_permissions.py'):
+        out[helper] = (ROOT / 'tools' / helper).read_bytes()
     release = schema_identity.release_version(ROOT)
     named = {} if release is None else dict(release_version=release)
     out['release.json'] = (json.dumps(dict(format=1, **named, game_version=version,

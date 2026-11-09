@@ -9,10 +9,10 @@ version you support. Your mod's source can remain private. The offsets in these 
 your mod reads game memory by, belong to one build of the game, so list the builds it supports
 with `game` in its manifest. The same mod then runs on no other build.
 
-The ordinary runtime offers table hooks and named sites as described in
-[Hook game functions](/develop/hooks/). Runtime code writes need an experimental
-native-code-access build. That build requires process metadata with the needed
-system-call permissions. The SDK alone doesn't grant those permissions.
+The ordinary runtime includes native code access as well as table hooks and named
+sites described in [Hook game functions](/develop/hooks/). Complete the process
+metadata step in the normal installation guide before running native hooks. The
+SDK alone does not grant launch permissions.
 
 ## Function entries
 
@@ -109,24 +109,24 @@ Arena setup logs its state, failure phase and kernel result. If mapping fails, t
 runtime leaves the target instruction unchanged. If rollback fails, the runtime
 keeps the backing memory and refuses another arena allocation.
 
-For local runtime development, supply process metadata that already grants the
-required system calls:
+The standard module includes the code-write backend; no experimental build flag
+is needed. The release ships `install.py` and its helper. They read a player's
+own matching `main.npdm`, add the required system calls to both ACI0 and ACID,
+allow code reads, and write a local replacement alongside the module. Other
+capabilities and access-control data are preserved. The original dump is unchanged.
+Modified metadata requires a loader that accepts local ExeFS replacements.
 
-```sh
-python tools/build_module.py --native-hooks-npdm path/to/main.npdm
-```
+For local runtime development, `python tools/build_module.py --native-hooks-npdm
+path/to/prepared/main.npdm` can stage already-prepared metadata with the standard
+module in `build/native-module/exefs`. This option validates rather than modifies
+its input. Install the module, patch and metadata together, then restart the game.
+A process started with different metadata has different permissions; runtime
+mapping failure handling cannot make an unauthorized system call safe. Release
+packaging accepts the ordinary code-access backend but refuses any local `.npdm`
+file or report recording supplied metadata. It never packages the player's file.
 
-The tool validates the program identity and both capability sections before it
-enables the code-write backend. It stages that exact metadata with the module in
-`build/native-module/exefs`. Install them together and restart the game. A process
-started with different metadata has different permissions. The tool doesn't
-modify metadata or grant permissions. Native builds containing supplied metadata
-are excluded from the public release packager.
-
-The arena build needs additional mapping and rollback permissions. Replace the
-runtime and its validated process metadata together, then restart the game. The
-SDK's hook service layout is unchanged by the larger pool. API 0 remains unfrozen;
-this change does not promise compatibility across every development build.
+The SDK hook service layout is unchanged. API 0 remains unfrozen; this change does
+not promise compatibility across every development build.
 
 The host checks exercise ownership, chaining, and continuation reclamation after
 failed startups. ARM64 emulator checks exercise register capture, replay, and
@@ -134,9 +134,10 @@ absent-framework fallback. The external-arena build also passed 17 inline-hook
 checks at two math import veneers in an isolated Pikmin 4 1.1.1 game-emulator run
 with private development metadata. The fixture checked that both installed
 branches use adjacent slots in one 16 KiB RX mapping outside main text. The
-256-target capacity check is separate host/ARM64 evidence. Console support,
-function-entry hooks, instruction patches, and other
-replay forms still need their own game qualification.
+256-target capacity check is separate host/ARM64 evidence. The standard code-access build and local metadata installer also passed a live
+Eden 1.1.1 cheat toggle check: an authored patch changed an unused code word and
+turning it off restored the exact original bytes. Console support, function-entry
+hooks, and other replay forms still need their own game qualification.
 
 Three SDK fixture binaries built for the earlier static-gateway runtime also
 passed the same 17 game checks unchanged on the arena runtime. Their installed

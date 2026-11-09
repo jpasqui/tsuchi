@@ -65,16 +65,26 @@ def small_elf(extra_symbol=None, payload=b''):
 
 
 class ReleasePackage(unittest.TestCase):
-    def test_native_code_access_builds_are_excluded_by_report_and_elf(self):
-        report_path = self.built / 'report.json'
-        report = json.loads(report_path.read_text(encoding='utf-8'))
-        report['native_code_access'] = {'sha256': '0' * 64}
-        report_path.write_text(json.dumps(report), encoding='utf-8')
-        with self.assertRaisesRegex(ValueError, 'native-code-access'):
-            package_release.members(self.built)
+    def test_code_access_backend_ships_without_local_process_metadata(self):
         self.set_module(small_elf(extra_symbol='tsuchi_native_code_access'))
-        with self.assertRaisesRegex(ValueError, 'native-code-access'):
+        members = package_release.members(self.built)
+        self.assertIn('install.py', members)
+        self.assertIn('native_hook_permissions.py', members)
+        self.assertFalse(any(name.endswith('.npdm') for name in members))
+        (self.built / 'exefs/main.npdm').write_bytes(b'local metadata')
+        with self.assertRaisesRegex(ValueError, 'process metadata'):
             package_release.members(self.built)
+        (self.built / 'exefs/main.npdm').unlink()
+        self.report['native_code_access'] = {'sha256': '0' * 64}
+        self.save_report()
+        with self.assertRaisesRegex(ValueError, 'process metadata'):
+            package_release.members(self.built)
+
+    def test_github_user_endpoint_is_not_a_local_user_directory(self):
+        package_release.reject_private_paths({'module': b'https://api.github.com/users/'})
+        for path in (b'/Users/name/repo', b'/home/name/repo', b'prefix\0/Users/name/repo'):
+            with self.assertRaisesRegex(ValueError, 'private path'):
+                package_release.reject_private_paths({'module': path})
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -85,7 +95,12 @@ class ReleasePackage(unittest.TestCase):
         (self.root / 'schema/core.yaml').write_text('api_version: 0\n', encoding='utf-8')
         (self.root / 'schema/actor.yaml').write_text('service: actor\n', encoding='utf-8')
         (self.root / 'schema/abi.lock').write_text('{"released": true}\n', encoding='utf-8')
+        browser = self.root / 'framework/game/browser'
+        browser.mkdir(parents=True)
+        (browser / 'layout.json').write_bytes((ROOT / 'framework/game/browser/layout.json').read_bytes())
         (self.root / 'tools').mkdir()
+        for helper in ('install.py', 'native_hook_permissions.py'):
+            (self.root / 'tools' / helper).write_bytes((ROOT / 'tools' / helper).read_bytes())
         (self.root / 'tools/Tsuchi-ThirdPartyNotices.txt').write_bytes((ROOT / 'tools/Tsuchi-ThirdPartyNotices.txt').read_bytes())
         (self.root / 'game').mkdir()
         self.table_bytes = (ROOT / 'game/table.yaml').read_bytes()
@@ -302,9 +317,10 @@ class ReleasePackage(unittest.TestCase):
             expected = {'emulator/Tsuchi/exefs/subsdk9', 'emulator/Tsuchi/' + self.patch_files[0],
                         'console/atmosphere/contents/' + package_release.TITLE + '/exefs/subsdk9',
                         'console/atmosphere/exefs_patches/Tsuchi/' + Path(self.patch_files[1]).name,
-                        'INSTALL-CONSOLE.md', 'INSTALL-EMULATOR.md', 'THIRD-PARTY-NOTICES.txt', 'release.json'}
+                        'INSTALL-CONSOLE.md', 'INSTALL-EMULATOR.md', 'THIRD-PARTY-NOTICES.txt', 'release.json',
+                        'install.py', 'native_hook_permissions.py'}
             self.assertEqual(set(archive.namelist()), expected)
-            self.assertEqual(a['files'], 8)
+            self.assertEqual(a['files'], 10)
             self.assertEqual(archive.namelist(), sorted(expected))
             manifest = json.loads(archive.read('release.json'))
             self.assertEqual(set(manifest['files']), expected - {'release.json'})

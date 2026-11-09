@@ -57,6 +57,33 @@ out of the player archive. Include only assets you made and files your mod needs
 Keep references to the game's package and object names, and ship supported edits
 through your manifest or map changes file.
 
+## In-game discovery
+
+To appear in the GitHub browser, make the repository public, add the **`tsuchi-mod`**
+topic in its About settings, and attach your ZIP to a GitHub release. The browser
+uses release attachments; GitHub's generated source archives are not installable
+packages. Draft releases are excluded, and players must opt into prereleases.
+See [GitHub's topic settings](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/classifying-your-repository-with-topics)
+and [release documentation](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases).
+
+Use the folder layout above, with one or more mod ID folders under
+`romfs/tsuchi/mods/`. A single outer release folder is accepted. Outside that tree,
+only `README.md`, `README.txt`, `LICENSE`, and `LICENSE.txt` files are ignored.
+Other files are refused. Do not include links, hidden paths, or parent-directory
+components. GameBanana downloads use the same package rules.
+
+Limits are 512 MiB for the ZIP, 1 GiB expanded, 256 archive entries, 16 bundled mods,
+and 511 bytes per path. Stored and DEFLATE compression are supported; encrypted,
+ZIP64, and split archives are refused. Keep manifests below 1 MiB. Every bundled
+mod must declare a compatible game/framework requirement and a unique ID. Required
+mods must already be installed or included in the package. Repository names and
+release tags do not substitute for manifest IDs or versions.
+
+The downloader checks each extracted file's CRC and a release's SHA-256 digest when
+the provider supplies one. A valid package is published only after manifest and
+dependency checks. A topic identifies a source for discovery; it does not endorse
+its contents.
+
 ## Identity
 
 Choose a unique [ID](/develop/ids-and-kinds/) and keep it for updates. The mod's

@@ -892,6 +892,26 @@ Made bundle_with_bulk(uint64_t id, uint64_t package, uint64_t bulk_owner, const 
     return made;
 }
 
+void late_downloaded_assets() {
+    files.clear();install("app.owner",manifest("app.owner"));
+    const auto stock=make_container(0xC0,{});
+    files["rom:/StandIn/Content/Paks/StandIn-Main.pak"]="pak";
+    files["rom:/StandIn/Content/Paks/StandIn-Main.utoc"]=stock.toc;
+    files["rom:/StandIn/Content/Paks/StandIn-Main.ucas"]=stock.cas;
+    begin();
+    const auto made=make_container(0xD123,{{0xA321,"Carrot4/Content/Maps/CaveTest.umap"}});
+    const std::string folder="tsuchisd:/tsuchi/downloads/test/mods/external.test";
+    files[folder+"/Map_P.pak"]="pak";files[folder+"/Map_P.utoc"]=made.toc;files[folder+"/Map_P.ucas"]=made.cas;
+    tsuchi::Text problem;
+    CHECK(tsuchi::validate_downloaded_assets("external.test",folder.c_str(),problem)==TSUCHI_OK);
+    CHECK(tsuchi::mount_downloaded_assets("external.test",folder.c_str(),problem)==TSUCHI_OK);
+    CHECK(mounts.size()==1&&mounts.back().path==folder+"/Map_P.pak");
+    CHECK(tsuchi::container_mounted_for("external.test"));
+    CHECK(tsuchi::mount_downloaded_assets("external.test",folder.c_str(),problem)==TSUCHI_OK&&mounts.size()==1);
+    CHECK(tsuchi::mount_downloaded_assets("external.test","tsuchisd:/another/version",problem)==TSUCHI_BUSY);
+    problem.clear();
+}
+
 void new_asset_bundles() {
     files.clear();
     const Made game = mixed_header(0xC0, kGameTexture, "Carrot4/Content/Carrot4/T_Icon.uasset");
@@ -1221,6 +1241,7 @@ int main(int argc, char** argv) {
     names_are_told_apart();
     common_packages_are_told();
     replacement_store_follows_mount_order();
+    late_downloaded_assets();
     new_asset_bundles();
     libraries_are_opened();
     blocked_as_it_starts(); // last, as the kind of mod it adds stays

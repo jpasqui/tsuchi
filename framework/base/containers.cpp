@@ -360,6 +360,7 @@ bool asset_mounting = false;
 const List<uint64_t>* mounting_packages = nullptr;
 struct Holder {
     char id[kModIdBytes];
+    char folder[384]{};
 };
 List<Holder> holders; // every mod whose container is mounted, for as long as the game runs
 List<Holder> asset_holders;
@@ -407,13 +408,16 @@ bool engine_mount_path(const char* pak, uint32_t order, const List<uint64_t>* re
 
 // The engine's layer of containers mounts one, with the .utoc and .ucas beside it. The game names its own by
 // a path from the top of its files, as `../../../Carrot4/Content/Paks/`, and a mod's is named the same way.
-bool engine_mount(const char* id, const char* pak, uint32_t order, const List<uint64_t>& replacement_packages) {
+bool container_path(Texts& out,const ModRecord& record,const char* within){
+    if(record.folder[0])return out.add(record.folder,*within?"/":"",within);
+    return mod_folder_path(out,record.id,within);
+}
+bool engine_mount(const ModRecord& record, const char* pak, uint32_t order, const List<uint64_t>& replacement_packages) {
     Texts path;
-    bool fine = path.add("../../../", kModsFolder + 5, "/", id);
-    if (fine) --path.used, fine = path.add("/", pak);
+    bool fine = record.folder[0] ? container_path(path,record,pak) : path.add("../../../", kModsFolder + 5, "/", record.id);
+    if (fine && !record.folder[0]) --path.used, fine = path.add("/", pak);
     fine = fine && engine_mount_path(path.data, order, &replacement_packages);
-    path.clear();
-    return fine;
+    path.clear();return fine;
 }
 
 // ---- Shader libraries -------------------------------------------------------------------------
@@ -659,7 +663,7 @@ bool pak_text(Reader& read, const char*& text) {
 bool find_library(ModRecord& record, const char* pak, char* name, Texts& folder) {
     *name = 0;
     Texts path;
-    if (!path.add(kModsFolder, "/", record.id, "/") || (--path.used, !path.add(pak))) return path.clear(), true;
+    if (!container_path(path, record, pak)) return path.clear(), true;
     char first[256] = {}, second[256] = {}; // the files found, for the log
     bool odd = false;
     uint32_t old_files = 0; // files in a pak of a version without an index of folders
@@ -1009,8 +1013,7 @@ bool mount_one(ModRecord& record, const char* pak, uint32_t order) {
     memcpy(name, pak, stem), memcpy(name + stem, ".utoc", 6);
     Texts where;
     uint64_t size = 0;
-    TSUCHI_Result read = where.add(kModsFolder, "/", record.id, "/") ? TSUCHI_OK : TSUCHI_NO_MEMORY;
-    if (read == TSUCHI_OK) --where.used, read = where.add(name) ? TSUCHI_OK : TSUCHI_NO_MEMORY;
+    TSUCHI_Result read = container_path(where, record, name) ? TSUCHI_OK : TSUCHI_NO_MEMORY;
     if (read == TSUCHI_OK) read = game::file_size(where.data, size);
     if (read == TSUCHI_OK && size > kMostTocBytes) read = TSUCHI_CAPACITY;
     if (read == TSUCHI_OK) read = game::read_whole_file(where.data, entry.toc_bytes, size);
@@ -1037,8 +1040,7 @@ bool mount_one(ModRecord& record, const char* pak, uint32_t order) {
         Texts data;
         auto* header = static_cast<uint8_t*>(allocate(size_t(entry.toc.header_bytes)));
         uint64_t got = 0;
-        bool fine = header && data.add(kModsFolder, "/", record.id, "/");
-        if (fine) --data.used, fine = data.add(name);
+        bool fine = header && container_path(data, record, name);
         fine = fine && game::read_file_part(data.data, entry.toc.header_at, header, entry.toc.header_bytes, got) == TSUCHI_OK && got == entry.toc.header_bytes;
         fine = fine && read_container_redirects(header, size_t(got), entry.redirects);
         data.clear();
@@ -1050,13 +1052,12 @@ bool mount_one(ModRecord& record, const char* pak, uint32_t order) {
     List<uint64_t> claims;
     memcpy(name + stem, ".ucas", 6);
     Texts cas;
-    bool known = cas.add(kModsFolder, "/", record.id, "/");
-    if (known) --cas.used, known = cas.add(name);
+    bool known = container_path(cas, record, name);
     known = known && remember_packages(entry.toc, cas.data, kMostHeaderBytes, claims, false) == TSUCHI_OK;
     cas.clear();
     known = known && taken.count < UINT32_MAX && taken.reserve(taken.count + 1) &&
         claims.count <= UINT32_MAX - packages.count && packages.reserve(packages.count + claims.count);
-    if (raise >= order || !engine_mount(record.id, pak, order - raise, entry.toc.packages)) {
+    if (raise >= order || !engine_mount(record, pak, order - raise, entry.toc.packages)) {
         claims.clear();
         return drop(), block_mod(record, "the game could not mount its container ", pak), false;
     }
@@ -1067,6 +1068,7 @@ bool mount_one(ModRecord& record, const char* pak, uint32_t order) {
     claims.clear();
     Holder holder{};
     memcpy(holder.id, record.id, strlen(record.id) + 1);
+    memcpy(holder.folder,record.folder,sizeof holder.folder);
     holders.add(holder); // with no memory for it, only the line of a mod blocked as it starts is lost
     if (!mounted.add(entry)) drop(); // mounted all the same: only what it has in common with others goes untold
     Texts line;
@@ -1163,7 +1165,7 @@ void mount_mod_containers() {
             ModRecord& record = *mod_at(i);
             if (record.state != ModState::ready || record.order != place) continue; // blocked, or blocked since: nothing of it is mounted
             Texts where, files, folders;
-            TSUCHI_Result listed = where.add(kModsFolder, "/", record.id) ? game::list_folder(where.data, files, folders) : TSUCHI_NO_MEMORY;
+            TSUCHI_Result listed = mod_folder_path(where, record.id, "") ? game::list_folder(where.data, files, folders) : TSUCHI_NO_MEMORY;
             where.clear(), folders.clear();
             const char* pak = nullptr;
             if (listed != TSUCHI_OK) block_mod(record, "its folder could not be read");
@@ -1188,6 +1190,47 @@ void mount_mod_containers() {
     mounted.clear();
     sort_ids(taken), sort_ids(packages);
     next_mount_order = next_order;
+}
+
+TSUCHI_Result validate_downloaded_assets(const char* id,const char* folder,Text& problem){
+    if(!id||!folder||!valid_mod_id(id)||strlen(folder)>=sizeof(ModRecord{}.folder))return TSUCHI_INVALID;
+    ModRecord record{};memcpy(record.id,id,strlen(id)+1);memcpy(record.folder,folder,strlen(folder)+1);
+    Texts files,dirs,where;auto result=game::list_folder(folder,files,dirs);dirs.clear();const char* pak=nullptr;
+    if(result==TSUCHI_OK){for(const char* name=files.first();name;name=files.after(name))if(ends_with(name,".pak")){if(pak||!plain_name(name)||strlen(name)>250){result=TSUCHI_INVALID;break;}pak=name;}if(!pak)result=TSUCHI_INVALID;}
+    char* data=nullptr;uint64_t size=0;ContainerToc toc{};
+    if(result==TSUCHI_OK){char name[256];const size_t stem=strlen(pak)-4;memcpy(name,pak,stem);memcpy(name+stem,".utoc",6);
+        if(!container_path(where,record,name))result=TSUCHI_NO_MEMORY;
+        else result=read_bounded(where.data,kMostTocBytes,data,size);where.clear();
+        const char* wrong=nullptr;
+        if(result==TSUCHI_OK&&!read_container_toc(reinterpret_cast<const uint8_t*>(data),size_t(size),toc,wrong)){result=TSUCHI_INVALID;problem.set(wrong);}
+        if(result==TSUCHI_OK){memcpy(name+stem,".ucas",6);List<uint64_t> claims;
+            result=container_path(where,record,name)?read_startup_container_claims(toc,where.data,claims):TSUCHI_NO_MEMORY;
+            claims.clear();where.clear();}
+    }
+    if(result!=TSUCHI_OK&&!problem.get()[0])problem.set(record.problem.get()[0]?record.problem.get():"The cooked container is incomplete or incompatible.");
+    forget_container_toc(toc);release(data);record.problem.clear();files.clear();return result;
+}
+
+TSUCHI_Result mount_downloaded_assets(const char* id,const char* folder,Text& problem){
+    if(!id||!folder||!valid_mod_id(id)||strlen(folder)>=sizeof(ModRecord{}.folder))return TSUCHI_INVALID;
+    if(census!=TSUCHI_OK||asset_mounting)return TSUCHI_NOT_READY;
+    for(uint32_t i=0;i<holders.count;++i)if(!strcmp(holders[i].id,id)&&!strcmp(holders[i].folder,folder))return TSUCHI_OK;
+    if(container_mounted_for(id)){problem.set("An earlier container for this mod is still mounted. Restart to change versions.");return TSUCHI_BUSY;}
+    ModRecord record{};memcpy(record.id,id,strlen(id)+1);memcpy(record.folder,folder,strlen(folder)+1);record.state=ModState::ready;
+    Texts files,dirs;auto result=game::list_folder(folder,files,dirs);dirs.clear();
+    const char* pak=nullptr;
+    if(result==TSUCHI_OK&&(!find_container(record,files,pak)||!pak))result=TSUCHI_INVALID;
+    if(result==TSUCHI_OK){
+        char library[kLibraryNameBytes];Texts library_folder;
+        if(!find_library(record,pak,library,library_folder))result=TSUCHI_INVALID;
+        else if(!mount_one(record,pak,next_mount_order++))result=TSUCHI_INVALID;
+        else if(*library)open_library(record,pak,library,library_folder.data);
+        library_folder.clear();
+    }
+    if(result!=TSUCHI_OK)problem.set(record.problem.get());
+    record.problem.clear();files.clear();
+    for(uint32_t i=0;i<mounted.count;++i){forget_container_toc(mounted[i].toc);mounted[i].redirects.clear();release(mounted[i].toc_bytes);}mounted.clear();
+    sort_ids(taken);sort_ids(packages);return result;
 }
 
 namespace {

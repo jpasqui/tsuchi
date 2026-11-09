@@ -94,12 +94,12 @@ JSValue test_emit(JSContext* c, JSValueConst, int n, JSValueConst* a) {
     tsuchi::entity::emit_spawned({{3}, "Creature", 0, id, {1,2,3}}); return JS_TRUE;
 }
 TSUCHI_Result question(TSUCHI_Mod*, const char*, TSUCHI_Dialog* out) { static uint64_t id = 1; out->id = id++; return TSUCHI_OK; }
-const tsuchi::dialog::Backend dialog_backend{question, question};
+const tsuchi::dialog::Backend dialog_backend{question, question, nullptr, nullptr, nullptr};
 JSValue test_answer(JSContext* c, JSValueConst, int n, JSValueConst* a) {
     auto id = tsuchi_js::handle(c, tsuchi_js::arg(n, a, 0), "dialog", false);
     bool yes = tsuchi_js::boolean(c, tsuchi_js::arg(n, a, 1));
     if (JS_HasException(c)) return JS_EXCEPTION;
-    tsuchi::dialog::emit_answered({{id}, yes}); return JS_TRUE;
+    tsuchi::dialog::emit_answered({{id}, yes, yes ? 0u : 1u}); return JS_TRUE;
 }
 // One file a mod can read, with a zero byte, a byte past 127 and a line break in it.
 const unsigned char known_file[] = {'T', 's', 'u', 0, 0xFF, 0x80, '\n', 'j', 's'};
