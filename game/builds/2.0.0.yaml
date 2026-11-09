@@ -105,6 +105,8 @@ constants:
   title_confirm_key: 0x16
   title_back_key: 0x17
   title_menu_state: 5
+  game_menu_presenter: 91
+  game_menu_settings_page: 2
   stream_block_load: 128
   stream_source_cdo: 16
   physics_dynamic_kind: 6
@@ -289,6 +291,8 @@ constants:
 structs:
   options_button: {fields: {look: absent, look_bytes: absent}}
   options_presenter: {fields: {input: absent, view: absent}}
+  game_menu_presenter: {fields: {view: absent}}
+  presenter_table: {fields: {reset: absent}}
   options_view: {fields: {state: absent, buttons: absent, count: absent, room: absent, selected: absent}}
   title_flow: {fields: {state: absent, answered: absent, answer: absent}}
   dialog_result: {size: absent, fields: {self: absent, header: absent, message: absent, dialog_kind: absent, as_flow: absent}}
@@ -1704,6 +1708,9 @@ functions:
   options_button_icon: absent
   options_direction: absent
   options_confirm: absent
+  ui_presenter_find: absent
+  presenter_begin: absent
+  game_menu_open_page: absent
   options_gate: absent
   options_list_grow: absent
   options_button_highlight: absent

@@ -33,6 +33,7 @@ void (*destruct_hook)(void*) = nullptr;
 void (*refresh_hook)(void*) = nullptr;
 void (*reopen_hook)(void*) = nullptr;
 unsigned refreshed = 0, focused = 0, constructed = 0, destructed = 0, ready_calls = 0, lost_calls = 0, action_calls = 0;
+bool page_alone = false, entry_row = false;   // the page on its own; the last row is a mod's entry
 unsigned reopened = 0, world_frames = 0;
 unsigned fail_create = 0, creates = 0;
 bool requested[8]{};
@@ -291,7 +292,7 @@ uint32_t count() { return 8; }
 bool row(uint32_t index, UiModListRow& out) {
     static const char* ids[] = {"mod.a", "mod.b", "mod.c", "mod.d", "mod.e", "mod.f", "mod.g", "mod.h"};
     if (row_callback) { const auto callback = row_callback; row_callback = nullptr; callback(); }
-    out = {ids[index], fit_mode && !index ? "A very long installed mod caption crossing the native clipping boundary" : ids[index], requested[index], pending_status ? "Restart pending" : "", index == 0}; return true;
+    out = {ids[index], fit_mode && !index ? "A very long installed mod caption crossing the native clipping boundary" : ids[index], requested[index], pending_status ? "Restart pending" : "", index == 0, entry_row && index == 7}; return true;
 }
 bool action(uint64_t handle, uint32_t index, uint32_t which, bool choice) { assert(handle == host_handle); ++action_calls; if (which == 2 || which == 3) requested[index] = choice; return true; }
 void host_ready(uint64_t handle) { assert(handle == host_handle); ++ready_calls; }
@@ -877,6 +878,7 @@ void engine_only_tab_revisions() {
 }
 }
 namespace tsuchi {
+bool ui_mod_page_alone() { return page_alone; }
 void ui_native_host_detach(uint64_t) {}
 void mod_note(const char*, const char* text) {
     if (!strncmp(text, "Settings tab cycle ", sizeof("Settings tab cycle ") - 1)) {
@@ -1287,5 +1289,59 @@ int main(int argc, char** argv) {
     assert(cycle_traces.size() == 48 && !custom_open && !ui_mod_list_native_active(host_handle));
     custom_tabs=0;++tab_revision;frame();
     assert(panel_slots[root_panel].size()==2);
+    // A mod's entry: its label is the row's one choice, in the box, with nothing beside it. Arrows turn
+    // nothing, Confirm reaches the parent, and the guide offers Confirm where a mod's row offers Edit and Details.
+    {
+        entry_row = true;
+        requested[7] = true;   // what its row would say as a mod: an entry is never turned
+        assert(ui_mod_list_native_show(host_handle) == TSUCHI_OK && ui_mod_list_native_active(host_handle));
+        assert(ui_mod_list_native_show(host_handle) == TSUCHI_OK);   // it shows already
+        const Array source = fake::get<Array>(host + t::ui_mod_list_menu::source);
+        const Array rows = fake::get<Array>(fake::get<uint64_t>(source.data) + t::ui_mod_list_category::rows);
+        const uint64_t entry = fake::get<uint64_t>(rows.data + 7 * 8), selector = child(entry, t::ui_mod_list_row::selector);
+        const uint64_t mod_row = fake::get<uint64_t>(rows.data + 6 * 8);
+        assert(choices[selector].size() == 1 && choices[selector][0] == u"mod.h" && labels[child(entry, t::ui_mod_list_row::title)].empty());
+        assert(choices[child(mod_row, t::ui_mod_list_row::selector)].size() == 2 && labels[child(mod_row, t::ui_mod_list_row::title)] == u"mod.g");
+        assert(fake::get<uint8_t>(selector + t::ui_mod_list_selector::enabled) == 1);
+        fake::put<int32_t>(host + t::ui_mod_list_menu::selected, 7); frame();
+        assert(labels[footer_label].find(u"localized A_Decide") != std::u16string::npos &&
+            labels[footer_label].find(u"Details") == std::u16string::npos && labels[footer_label].find(u"LstLR_Edit") == std::u16string::npos);
+        const unsigned calls_before = action_calls;
+        bool handled = false, result = true;
+        assert(ui_mod_list_native_dispatch(host_handle, 3, handled, result) && handled && action_calls == calls_before);
+        assert(ui_mod_list_native_dispatch(host_handle, 4, handled, result) && handled && result && action_calls == calls_before + 1);
+        pending_status = true; assert(ui_mod_list_native_sync(host_handle) == TSUCHI_OK); pending_status = false;
+        assert(labels[child(entry, t::ui_mod_list_row::title)].empty() && labels[child(mod_row, t::ui_mod_list_row::title)] == u"mod.g - Restart pending");
+        entry_row = false;
+        assert(ui_mod_list_native_release(host_handle) == TSUCHI_OK);
+    }
+    // The page on its own, made as the game opens it: its tabs are made and never shown, the list keeps the
+    // whole page, its host is announced while it still opens, and the list can go in before it takes input.
+    {
+        const Margin under_tabs = fake::get<Margin>(scroll_slot + t::ui_mod_list_tab::offsets);
+        page_alone = true;
+        const unsigned ready_before = ready_calls;
+        fake::put<uint8_t>(host + t::ui_host::state, 0);
+        construct_hook(reinterpret_cast<void*>(host));
+        assert(ready_calls == ready_before + 1 && panel_slots[root_panel].size() == 2);
+        for (uint64_t slot : panel_slots[root_panel])
+            assert(visibility[fake::get<uint64_t>(slot + t::ui_panel_slot::content)] == uint32_t(t::constant::widget_collapsed));
+        const Margin whole = fake::get<Margin>(scroll_slot + t::ui_mod_list_tab::offsets);
+        assert(whole.top == under_tabs.top - 80 && whole.height == under_tabs.height + 80);
+        assert(ui_mod_list_native_hold(host_handle) == TSUCHI_OK && ui_mod_list_native_active(host_handle));
+        fake::put<uint8_t>(host + t::ui_host::state, 1); fake::put<int32_t>(host + t::ui_mod_list_menu::selected, 1); frame();
+        assert(labels[footer_label].find(u"ZLZR_MovePages") == std::u16string::npos && labels[footer_label].find(u"Details") != std::u16string::npos);
+        assert(ui_mod_list_native_release(host_handle) == TSUCHI_OK);
+        page_alone = false;
+        // In Settings again, the same host has its tabs and its place under them.
+        construct_hook(reinterpret_cast<void*>(host));
+        assert(panel_slots[root_panel].size() == 2 && fake::get<Margin>(scroll_slot + t::ui_mod_list_tab::offsets).top == under_tabs.top);
+        for (uint64_t slot : panel_slots[root_panel])
+            assert(visibility[fake::get<uint64_t>(slot + t::ui_panel_slot::content)] == uint32_t(t::constant::widget_shown));
+        // Away from the page on its own, the list still waits for the menu to take input.
+        fake::put<uint8_t>(host + t::ui_host::state, 0);
+        assert(ui_mod_list_native_hold(host_handle) == TSUCHI_NOT_READY);
+        fake::put<uint8_t>(host + t::ui_host::state, 1);
+    }
     mod_stop(framework);assert(panel_slots[root_panel].empty());video_screen.title.clear();
 }

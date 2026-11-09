@@ -53,6 +53,7 @@ extern "C" unsigned long long tsuchi_libc_ticks(); // script_library.cpp
 #include "ui_widgets.h"
 #include "ui_settings.h"
 #include "ui_mod_list.h"
+#include "ui_mod_page.h"
 #include "packages.h"
 #include "https_platform.h"
 #include "ui_mod_list_native.h"
@@ -372,6 +373,7 @@ extern "C" void tsuchi_initialize() {
     if (serves(t::family::dialog)) dialogs_start(self, reinterpret_cast<void*>(reinterpret_cast<uint64_t>(&tsuchi_dialog_setup_entries) + 8 * t::route_frame::dialog_setup_call::request));
     if (serves(t::family::ui)) ui_widgets_start(self);
     if (serves(t::family::title_menu)) ui_title_start(self);
+    if (serves(t::family::title_menu) && serves(t::family::mods_page)) ui_mod_page_start(self);
     if (serves(t::family::keyboard)) ui_keyboard_start();
     if (serves(t::family::player_choice)) player_choice_start(self);
     if (serves(t::family::ui) && ui_native_start(self)) {

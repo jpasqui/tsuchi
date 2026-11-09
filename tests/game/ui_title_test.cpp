@@ -204,6 +204,26 @@ void title_menu() {
     assert(actions.size() == 1 && actions[0] == 2);
     hosted_screen = false;
     assert(back(reinterpret_cast<void*>(presenter)) && stock_backs == 1);
+
+    // A page of the game's own over the menu: the menu acts on no press, its own entries' and a mod's alike,
+    // and nothing is routed to a screen. The presses are the menu's again once the page is gone.
+    static bool page_over = false;
+    const auto direction = as<bool (*)(void*, int32_t)>(handler_function(instances[2]));
+    ui_title_cover([] { return page_over; });
+    page_over = true;
+    const size_t routed_before = routed.size(), chosen_before = chosen.size();
+    const int ways_before = stock_ways;
+    fake::put<int32_t>(presenter + t::title_presenter::cursor, 0);
+    assert(!confirm(reinterpret_cast<void*>(presenter)) && stock_confirms == 1);
+    assert(!back(reinterpret_cast<void*>(presenter)) && stock_backs == 1);
+    assert(!direction(reinterpret_cast<void*>(presenter), 1) && stock_ways == ways_before);
+    frame();
+    assert(routed.size() == routed_before && chosen.size() == chosen_before);
+    page_over = false;
+    assert(confirm(reinterpret_cast<void*>(presenter)) && stock_confirms == 2);
+    assert(back(reinterpret_cast<void*>(presenter)) && stock_backs == 2);
+    assert(direction(reinterpret_cast<void*>(presenter), 1) && stock_ways == ways_before + 1);
+    ui_title_cover(nullptr);
     tsuchi::cancel(mod, subscription);
     mod_stop(mod);
     frame();

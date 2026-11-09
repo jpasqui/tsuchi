@@ -183,6 +183,9 @@ families:
   keyboard:
     calls: [ui.ask_text]
     files: [game/ui_keyboard.cpp]
+  mods_page:
+    calls: [ui.open_mods]
+    files: [game/ui_mod_page.cpp]
   world:
     services: [world]
     files: [game/world_backend.cpp]

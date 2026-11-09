@@ -227,11 +227,16 @@ bool patch(uint64_t object, bool ours) {
 
 // While a screen is open in Tsuchi's host over this menu, the menu's presses are the host's.
 bool hosted(void* object) { return reinterpret_cast<uint64_t>(object) == live(presenter) && ui_active_over_menu(); }
+// While a page of the game's own covers this menu, its presses go nowhere: that page reads the pad itself.
+bool (*cover)() = nullptr;
+bool covered(void* object) { return cover && reinterpret_cast<uint64_t>(object) == live(presenter) && cover(); }
 bool direction(void* object, int32_t delta) {
+    if (covered(object)) return false;
     if (hosted(object)) { ui_route_action(0, delta < 0 ? 0u : 1u); return false; }
     return t::fn::title_direction(object, delta);
 }
 bool confirm(void* object) {
+    if (covered(object)) return false;
     if (hosted(object)) { ui_route_action(0, 4); return false; }
     const uint64_t at = reinterpret_cast<uint64_t>(object), widget = live(view);
     if (at == live(presenter) && widget && game::read_or<int32_t>(at + t::title_presenter::state) == int32_t(t::constant::title_menu_state)) {
@@ -250,6 +255,7 @@ bool confirm(void* object) {
     return t::fn::title_confirm(object);
 }
 bool back(void* object) {
+    if (covered(object)) return false;
     if (hosted(object)) { ui_route_action(0, 5); return false; }
     return t::fn::title_back(object);
 }
@@ -521,6 +527,7 @@ TSUCHI_Result release_note(TSUCHI_Mod* mod, TSUCHI_Menu menu) {
 }
 } // namespace
 
+void ui_title_cover(bool (*covered)()) { cover = covered; }
 uint64_t ui_title_view() { return ready && patched ? live(view) : 0; }
 bool ui_title_menu_ready() {
     const uint64_t object = live(presenter);

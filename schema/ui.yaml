@@ -14,6 +14,8 @@ description: Load a concrete UserWidget class through asset, create an instance 
 tutorials:
 - title: Create a screen
   path: /develop/screens/
+- title: Add menu entries
+  path: /develop/menu-entries/
 enums:
   Control:
     open: true
@@ -56,7 +58,8 @@ enums:
     doc: A menu of the game's own that takes mod entries.
     values:
     - {name: title, value: 1, doc: "The title screen's menu, under Press Start."}
-    - {name: title_options, value: 2, doc: "The menu that Plus opens on the title screen, with Play Co-op and Settings."}
+    - {name: title_options, value: 2, doc: "The menu that Plus opens on the title screen, with Co-op Mode and Controls."}
+    - {name: mods, value: 3, doc: "The Mods page, Tsuchi's list of the installed mods. A mod has one entry there, as a row after the mods."}
   TextKind:
     open: false
     doc: Which keys the software keyboard offers.
@@ -594,6 +597,8 @@ functions:
     Adds an entry to one of the game's menus, after the game's own entries and in their style. Its
     description shows in the line under the menu while it is selected. Choosing it emits `entry_chosen`.
     It ends when released or your mod stops. Holding the same entry again changes its label and description.
+    On the Mods page the entry is a row under the list of mods, such as one that opens your mod's own page.
+    It shows no description there, and it appears the next time the page opens.
   owns: true
   params:
     - {name: menu, type: enum<Menu>, doc: The menu.}
@@ -602,7 +607,7 @@ functions:
     - {name: description, type: text, doc: "The line under the menu while the entry is selected. Empty for none."}
   fails:
     invalid: "A text isn't valid UTF-8, the ID is empty or longer than 63 bytes, or the label is empty or longer than 80 bytes, or the description longer than 300."
-    capacity: "Four mod entries are already in that menu."
+    capacity: "That menu has no room for another mod entry, or your mod already has its one entry on the Mods page."
     unsupported: "This build of the game has no adapter for that menu."
   users: [online-coop, custom-mod-menus]
 - name: release_menu_entry
@@ -670,6 +675,15 @@ functions:
     busy: "A keyboard is already waiting to open."
     unsupported: "This build of the game has no software keyboard call."
   users: [online-coop, custom-mod-menus]
+- name: open_mods
+  doc: |
+    Opens the Mods page, Tsuchi's list of the installed mods. From the title screen's menu it opens on
+    its own, and Back returns to the title. While Settings is open, it shows the Mods tab.
+  fails:
+    not_ready: "Neither the title screen's menu nor Settings is taking input."
+    busy: "A screen is open over the menu."
+    unsupported: "This build of the game has no adapter for the Mods page."
+  users: [mod-downloader, custom-mod-menus]
 events:
 - name: activated
   doc: Emitted when the player selects a button. Only the screen's owning mod receives this event.

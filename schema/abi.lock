@@ -526,7 +526,8 @@
    "release_menu_note",
    "ask_text",
    "on_entry_chosen",
-   "on_text_entered"
+   "on_text_entered",
+   "open_mods"
   ],
   "world": [
    "ground",

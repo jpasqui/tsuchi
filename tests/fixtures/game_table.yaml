@@ -113,6 +113,8 @@ constants:
   title_confirm_key: 0x16
   title_back_key: 0x17
   title_menu_state: 5
+  game_menu_presenter: 0x5B
+  game_menu_settings_page: 2
   stream_block_load: 0x80
   stream_source_cdo: 0x10
   physics_dynamic_kind: 9
@@ -307,6 +309,7 @@ names:
   options_panel_child: Panel
   options_view_class: OptionsView
   title_view_class: TitleView
+  game_menu_presenter_class: GameMenuPresenter
   title_buttons_child: Buttons
   title_canvas_child: TitleCanvas
   title_input_class: InputMap
@@ -480,6 +483,9 @@ structs:
   title_flow: {fields: {state: 0xD8, answered: 0xE8, answer: 0xEC}}
   dialog_result: {size: 0x50, fields: {self: 0x18, header: 0x28, message: 0x38, dialog_kind: 0x3C, as_flow: 0x4D}}
   title_presenter: {fields: {cursor: 0x80, view: 0x88, input: 0xA8, state: 0xB0}}
+  game_menu_presenter: {fields: {view: 0x90}}
+  presenter_table:
+    fields: {reset: {at: 0x38, args: [pointer, u32]}}
   title_view: {fields: {description: 0x560, buttons: 0x568, count: 0x570, room: 0x574, hidden_select: 0x5AB, hide: 0x5AC, hidden: 0x5B0, hidden_other: 0x5B4}}
   title_button: {fields: {id: 0x300, label: 0x528, mark: 0x540}}
   title_input: {fields: {data: 0xC8, count: 0xD0, capacity: 0xD4}}
@@ -1314,6 +1320,9 @@ functions:
   title_back: {address: 0x9210, returns: bool, args: [pointer]}
   title_direction: {address: 0x9220, returns: bool, args: [pointer, i32]}
   title_list_grow: {address: 0x9230, returns: void, args: [pointer]}
+  ui_presenter_find: {address: 0x9760, returns: pointer, args: [pointer, u32]}
+  presenter_begin: {address: 0x9770, returns: void, args: [pointer, bool]}
+  game_menu_open_page: {address: 0x9780, returns: void, args: [pointer, pointer, u32]}
   ui_vertical_slot_sync: {address: 0x9240, returns: void, args: [pointer]}
   ui_set_render_opacity: {address: 0x9250, returns: void, args: [pointer, f32]}
   map_add_stream: {address: 0x3D30, args: [pointer, pointer]}

@@ -135,6 +135,8 @@ constants:
   title_confirm_key: 0x16                        # the title presenter's input map: Confirm
   title_back_key: 0x17                           # and Back
   title_menu_state: 5                            # title presenter state: the menu takes input
+  game_menu_presenter: 0x5B                      # the number the game's screens keep the pause menu's presenter under
+  game_menu_settings_page: 2                     # that menu's Settings page, as the title's Options menu names its pages
   stream_block_load: 0x80
   stream_source_cdo: 0x10
   physics_dynamic_kind: 6
@@ -345,6 +347,7 @@ names:
   host_button_unfocus: Focus2Normal
   host_line_text: F_Info_Text_000               # an Information text block's text
   title_view_class: WBP_ui_Title_C                # the title screen's widget, which holds its menu
+  game_menu_presenter_class: GameMenuPresenter    # the presenter of the pause menu, which also shows its pages over the title
   title_buttons_child: N_Vrt_Button              # the box of the title menu's buttons
   title_canvas_child: N_Cvs_Title                # the title widget's canvas, where a mod's note goes
   title_input_class: PlayerInputPresenter        # the title presenter's map of input handlers
@@ -518,6 +521,10 @@ structs:
   # The title presenter: the selected entry, its widget, its input map and its state (0 to 3 the opening and
   # Press Start, 4 the menu coming in, 5 the menu, 9 and 10 a choice being carried out).
   title_presenter: {fields: {cursor: 0x80, view: 0x88, input: 0xA8, state: 0xB0}}
+  # The pause menu's presenter: its widget. The title's Options menu opens Controls and the guide through it.
+  game_menu_presenter: {fields: {view: 0x90}}
+  presenter_table:                  # entries in a presenter's function table
+    fields: {reset: {at: 0x310, args: [pointer, u32]}}   # (presenter, 0): closes it and clears what an earlier page left
   # The title widget: the line under the menu, its list of buttons, the button count without a hidden last
   # entry (bit 0 of hide), and which entry is hidden (hidden, or hidden_other when hidden_select is set).
   title_view: {fields: {description: 0x560, buttons: 0x568, count: 0x570, room: 0x574, hidden_select: 0x5AB, hide: 0x5AC, hidden: 0x5B0, hidden_other: 0x5B4}}
@@ -1402,6 +1409,9 @@ functions:
   title_confirm: {address: 0x2957420, returns: bool, args: [pointer]}       # the title presenter's Confirm handler
   title_back: {address: 0x29574B0, returns: bool, args: [pointer]}          # and its Back handler
   title_list_grow: {address: 0x2D8BA80, returns: void, args: [pointer]}     # grows the title widget's button list to fit its count
+  ui_presenter_find: {address: 0x1DD5E20, returns: pointer, args: [pointer, u32]}  # (the game's screens, number) -> that presenter
+  presenter_begin: {address: 0x286E180, returns: void, args: [pointer, bool]}      # starts a presenter: the pause menu's finds its widget here
+  game_menu_open_page: {address: 0x28CA540, returns: void, args: [pointer, pointer, u32]}  # (presenter, what to call once it closed, page): a page of the pause menu on its own
   ui_vertical_slot_sync: {address: 0x4C69000, returns: void, args: [pointer]}  # applies a VerticalBoxSlot's padding
   map_add_stream: {address: 0x05BAB910, args: [pointer, pointer]}
   map_remove_stream: {address: 0x05BABDB0, returns: bool, args: [pointer, pointer]}

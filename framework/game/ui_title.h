@@ -7,6 +7,8 @@ void ui_title_start(TSUCHI_Mod* framework);
 // The title widget the menu is in, while its menu takes input; 0 otherwise.
 uint64_t ui_title_view();
 bool ui_title_menu_ready();
+// While `covered` says so, the title menu acts on no press: a page of the game's own is over it.
+void ui_title_cover(bool (*covered)());
 void ui_title_host_start();
 // The title's Options menu (ui_title_options.cpp).
 void ui_title_options_start(TSUCHI_Mod* framework);

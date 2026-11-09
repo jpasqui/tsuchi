@@ -1,5 +1,6 @@
 #include "ui_mod_list.h"
 #include "ui_mod_list_native.h"
+#include "ui_mod_page.h"
 #include "ui_settings.h"
 #include "ui_screens.h"
 #include "ui_service.h"
@@ -42,6 +43,20 @@ const uint64_t diagnostic_host = reinterpret_cast<uint64_t>(diagnostic_host_memo
 void (*note_callback)() = nullptr;
 unsigned expected_note_menu_calls = 0;
 bool note_ended_session = false;
+// The page on its own, the Mods tab shown directly, and the title menu's adapter for entries.
+bool page_alone = false;
+unsigned page_opens = 0, tab_shows = 0, stock_backs = 0;
+TSUCHI_Result page_open_result = TSUCHI_OK;
+uint64_t settings_host = 0;
+std::vector<std::string> title_entries;
+TSUCHI_Result title_hold(TSUCHI_Mod*, TSUCHI_Menu menu, const char* id, const char* text, const char*) {
+    if (menu != TSUCHI_MENU_TITLE) return TSUCHI_UNSUPPORTED;
+    title_entries.push_back(std::string(id) + "=" + text); return TSUCHI_OK;
+}
+TSUCHI_Result title_release(TSUCHI_Mod*, TSUCHI_Menu menu, const char*) {
+    if (menu != TSUCHI_MENU_TITLE || title_entries.empty()) return TSUCHI_NOT_FOUND;
+    title_entries.pop_back(); return TSUCHI_OK;
+}
 void reenter_held_sample() {listener(uint64_t(1)<<7);}
 uint64_t number(const std::string& line, const char* field) {
  const std::string key=std::string(" ")+field+"=";const size_t at=line.find(key);assert(at!=std::string::npos);
@@ -121,7 +136,17 @@ void ui_mod_list_native_callbacks(const UiModListNativeCallbacks* value) { callb
 void ui_mod_list_native_start(TSUCHI_Mod*) {}
 void ui_menu_dispatcher(bool(*fn)(uint64_t,uint32_t,bool&,bool&)) { dispatcher=fn; }
 void ui_button_listener(void(*fn)(uint64_t)) { listener=fn; }
-bool ui_menu_action(uint64_t host,uint32_t action) { ++menu_calls;if(reject_menu_action)return false;bool handled=false,result=false; return dispatcher(host,action,handled,result)&&handled&&result; }
+bool ui_menu_action(uint64_t host,uint32_t action) {
+ ++menu_calls;if(reject_menu_action)return false;bool handled=false,result=false;
+ const bool known=dispatcher(host,action,handled,result);
+ if(!handled&&action==5){++stock_backs;return true;}
+ return known&&handled&&result;
+}
+bool ui_mod_page_alone() { return page_alone; }
+bool ui_mod_page_supported() { return true; }
+TSUCHI_Result ui_mod_page_open() { ++page_opens; return page_open_result; }
+uint64_t ui_mod_list_native_host() { return settings_host; }
+TSUCHI_Result ui_mod_list_native_show(uint64_t host) { ++tab_shows; active=host; return TSUCHI_OK; }
 TSUCHI_Result ui_mod_list_native_hold(uint64_t host) { active=host; return TSUCHI_OK; }
 TSUCHI_Result ui_mod_list_native_release(uint64_t) { active=0;return TSUCHI_OK; }
 TSUCHI_Result ui_mod_list_native_cycle(uint64_t host,bool previous) { return previous ? ui_mod_list_native_release(host) : ui_mod_list_native_hold(host); }
@@ -131,6 +156,7 @@ TSUCHI_Result ui_mod_list_native_focus(uint64_t,uint32_t index) { focus=index; r
 bool ui_mod_list_native_dispatch(uint64_t host,uint32_t action,bool& handled,bool& result) { if(!active)return false;handled=true;result=callbacks.action(host,focus,action,request(focus));return true; }
 }
 namespace tsuchi::game {
+uint64_t game_framework() { return 0; }   // no dialog is ever on the screen here
 bool readable(uint64_t address,uint64_t bytes) {return state_readable&&address==diagnostic_host+table::ui_host::state&&bytes==1;}
 uint64_t from_handle(uint64_t id) { return id; }
 uint64_t to_handle(uint64_t id) { return id; }
@@ -231,13 +257,16 @@ void diagnostic_samples() {
 }
 }
 #include "cheat_menu_checks.h"
+#include "mods_page_checks.h"
 int main(int argc,char** argv) {
  note_game_thread(); framework=mod_create("tsuchi.self"); assert(framework);
  const char* ids[]={"base","leaf","other"};
  for(uint32_t i=0;i<3;++i) { memcpy(records[i].id,ids[i],strlen(ids[i])+1); assert(records[i].name.set(ids[i])); records[i].manifest_valid=true; records[i].state=ModState::running;
  const char* text=i==1? "{\"requires\":{\"base\":\"*\"}}":"{}";
  records[i].manifest=read_json(text,strlen(text)); assert(records[i].manifest); }
- ui_start();ui_set_renderer(&renderer);dialog::set_backend(&dialog_backend);ui_mod_list_start(framework);
+ ui_start();ui_set_renderer(&renderer);dialog::set_backend(&dialog_backend);
+ ui_screen_backend().hold_menu_entry=title_hold;ui_screen_backend().release_menu_entry=title_release;
+ ui_mod_list_start(framework);
  // The Python companion test can drive the same menu controller against a
  // disposable catalog, then apply the emitted requests to its install tree.
  if(argc>=3&&argc<=5) {
@@ -448,6 +477,7 @@ int main(int argc,char** argv) {
  callbacks.host_ready(107);assert(message.find("Load failed")!=std::string::npos&&message.find("menu full")!=std::string::npos&&message.find("manager")!=std::string::npos);
  cheat_menu_checks();
  callbacks.host_lost(107);installed_page_checks(150);
+ mods_page_checks(160);
  mod_stop(framework);assert(!callbacks.row(0,row));external.clear();external_load_result=TSUCHI_OK;
  diagnostic_samples();
  for(auto& record:records) { record.name.clear();record.settings.list.clear();release_json(record.manifest); }
