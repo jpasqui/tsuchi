@@ -269,8 +269,6 @@ def build(out, name='subsdk9', selfcheck=False, native_npdm=None):
     sources += sorted((FRAMEWORK / 'target').glob('*.cpp')) + sorted((gen / 'framework').glob('*.cpp'))
     built, jobs = [], []  # every object compiles on its own, so they compile at once, and link in this order
     checks = ['-DTSUCHI_SELFCHECK=1'] if selfcheck else []
-    if native_info:
-        checks += ['-DTSUCHI_NATIVE_CODE_ACCESS=1']
     for source in sources:
         target = objects / f'{source.parent.name}_{source.stem}.o'
         jobs.append([clang, *COMPILE, *checks, '-DMBEDTLS_CONFIG_FILE="https_tls_config.h"', *[f'-I{folder}' for folder in includes], '-c', source, '-o', target])
@@ -368,7 +366,7 @@ def main():
     parser.add_argument('--module-slot', type=int, choices=range(10), default=9,
                         help='Tsuchi subsdk slot, 0–9 (default: 9); choose a free slot and keep foreign modules unchanged')
     parser.add_argument('--native-hooks-npdm', type=Path,
-                        help='local experimental build with supplied process metadata that grants native-hook system calls')
+                        help='stage locally prepared process metadata alongside the standard module')
     args = parser.parse_args()
     folder = 'native-module' if args.native_hooks_npdm else 'check-module' if args.selfcheck else 'module'
     try:

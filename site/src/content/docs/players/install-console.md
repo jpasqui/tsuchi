@@ -14,7 +14,8 @@ version 1.1.1 or 2.0.0, or Pikmin 4 Nintendo Switch 2 Edition, installed. Close 
 
 1. Extract the Tsuchi release archive.
 2. Copy the contents of `console` to the SD card's root, merging the `atmosphere`
-   folder. Keep both the module and its patch from the same archive.
+   folder. Keep the module, `main.npdm`, and patches from the same archive.
+   The included `main.npdm` supplies code access automatically; no Python or game dump is needed.
 3. Start Pikmin 4 through Atmosphere, then close it. Export Pikmin 4's save
    with your console's save manager. Open `tsuchi/tsuchi.log` in the exported
    save folder. See [Troubleshooting](/players/troubleshooting/) if Tsuchi
@@ -28,6 +29,7 @@ atmosphere/
     0100B7C00933A000/
       exefs/
         subsdk9
+        main.npdm
   exefs_patches/
     Tsuchi/
       060F827BD2B38703E9EA11E3210D89BC.ips
@@ -40,6 +42,9 @@ The archive holds one `.ips` file for each version of Pikmin 4 that this release
 `contents` folder for each program ID those versions have. Copy them all. Mods in a `romfs` folder
 apply to the program ID whose folder holds them, so a version with its own program ID needs its
 own copy of each mod.
+
+If another mod supplies `main.npdm`, use a combined package provided by its author
+instead of choosing one file arbitrarily.
 
 ## Mods
 
@@ -61,8 +66,9 @@ for load failures and save-dependent content.
 
 ## Update
 
-Close the game, then replace both `subsdk9` and the Tsuchi IPS patch with the
-new archive's copies. Keep one Tsuchi patch set installed. If another mod uses
+Close the game, then replace `subsdk9`, `main.npdm`, and the Tsuchi IPS patches
+with the new archive's copies. This also upgrades older installations that do not
+have `main.npdm` yet. Keep one Tsuchi patch set installed. If another mod uses
 `subsdk9` or changes a Tsuchi hook site, use versions that the authors have
 made compatible before installing them together.
 
@@ -75,7 +81,7 @@ Then close the game.
 To remove one mod, delete its ID folder. Some older mods also put `.pak`, `.ucas`, and
 `.utoc` files in `romfs/Carrot4/Content/Paks`. The game loads those by itself, so
 delete them too when you remove the mod they came with.
-To remove Tsuchi, delete its `subsdk9` file and the `exefs_patches/Tsuchi`
+To remove Tsuchi, delete its supplied `main.npdm` and `subsdk9` files and the `exefs_patches/Tsuchi`
 folder. Leave other files in the game's `exefs` folder in place.
 
 Saved content IDs and Piklopedia progress remain after removal and don't prevent

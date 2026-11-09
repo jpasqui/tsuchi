@@ -64,7 +64,7 @@ def validate(raw):
     missing = REQUIRED - (granted & admitted)
     if missing:
         raise ValueError('Native code access needs system calls: ' + ', '.join(f'{number:#04x}' for number in sorted(missing)))
-    return {'sha256': hashlib.sha256(raw).hexdigest(), 'bytes': len(raw), 'system_calls': sorted(REQUIRED)}
+    return {'program_id': f'{program:016X}', 'sha256': hashlib.sha256(raw).hexdigest(), 'bytes': len(raw), 'system_calls': sorted(REQUIRED)}
 
 
 def read(path):
