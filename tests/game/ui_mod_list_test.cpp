@@ -52,15 +52,16 @@ void end_session_from_note() {
  assert(menu_calls==expected_note_menu_calls&&active==diagnostic_host);
  callbacks.host_lost(diagnostic_host);note_ended_session=true;
 }
-TSUCHI_Result open_view(const UiScreen&,void** out) { *out = reinterpret_cast<void*>(1); return TSUCHI_OK; }
+int fail_opens = 0; // opens the game refuses
+TSUCHI_Result open_view(const UiScreen&,void** out) { if(fail_opens){--fail_opens;return TSUCHI_NOT_READY;} *out = reinterpret_cast<void*>(1); return TSUCHI_OK; }
 bool update_view(void*,const UiScreen&) { return true; }
 bool live_view(void*) { return true; }
 void close_view(void*) { ++destroyed_views; }
 UiRenderer renderer{open_view,update_view,live_view,close_view};
 TSUCHI_Result confirm(TSUCHI_Mod*,const char* text,TSUCHI_Dialog* out) { prompt=text; *out={++asked.id}; return TSUCHI_OK; }
 TSUCHI_Result show(TSUCHI_Mod*,const char* text,TSUCHI_Dialog* out) { message=text; *out={999}; return TSUCHI_OK; }
-const dialog::Backend dialog_backend{confirm,show};
-void answer(bool yes) { dialog::emit_answered_to(framework,{asked,yes}); }
+const dialog::Backend dialog_backend{confirm,show,nullptr,nullptr,nullptr};
+void answer(bool yes) { dialog::emit_answered_to(framework,{asked,yes,yes?0u:1u}); }
 bool request(uint32_t index) { UiModListRow row{}; assert(callbacks.row(index,row)); return row.requested; }
 void select(const char* control) { const auto* screen=ui_active_screen(); assert(screen); ui::emit_activated_to(framework,{{screen->id},control}); }
 void step() { for(auto fn:steps) fn(); }
@@ -229,6 +230,7 @@ void diagnostic_samples() {
  mod_stop(framework);ui_mod_list_native_release(diagnostic_host);cost_clock=nullptr;state_readable=false;
 }
 }
+#include "cheat_menu_checks.h"
 int main(int argc,char** argv) {
  note_game_thread(); framework=mod_create("tsuchi.self"); assert(framework);
  const char* ids[]={"base","leaf","other"};
@@ -444,6 +446,7 @@ int main(int argc,char** argv) {
  // A load warning and an overflow notice both remain visible when combined.
  callbacks.host_lost(106);external_load_result=TSUCHI_INVALID;message.clear();
  callbacks.host_ready(107);assert(message.find("Load failed")!=std::string::npos&&message.find("menu full")!=std::string::npos&&message.find("manager")!=std::string::npos);
+ cheat_menu_checks();
  mod_stop(framework);assert(!callbacks.row(0,row));external.clear();external_load_result=TSUCHI_OK;
  diagnostic_samples();
  for(auto& record:records) { record.name.clear();record.settings.list.clear();release_json(record.manifest); }

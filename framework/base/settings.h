@@ -8,7 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "json.h"
+#include "../core/json.h"
 #include "list.h"
 #include "tsuchi/core.h"
 #include "text.h"

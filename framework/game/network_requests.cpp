@@ -11,6 +11,7 @@ struct JobSlot {https::HttpsJob job;uint64_t id;bool abandoned;};
 JobSlot jobs[kJobs]{};
 const https::WorkerBackend* backend=nullptr;
 uint64_t next_request=1;
+https::HttpsJob* file_job=nullptr;
 struct RequestKept {JobSlot* slot;bool notified;};
 struct RequestWanted {const char* url;uint64_t max_bytes;uint32_t timeout_ms;};
 TSUCHI_Result request_apply(const Hold& hold,RequestKept& kept,const RequestWanted& wanted,bool fresh){
@@ -55,7 +56,17 @@ bool valid_url(const char* url){
 }
 namespace https {
 void set_worker_backend(const WorkerBackend* next){backend=next;}
-HttpsJob* https_take_job(){for(auto& slot:jobs)if(slot.job.state.exchange(HTTPS_QUEUED,HTTPS_RUNNING))return &slot.job;return nullptr;}
+bool https_queue_file(HttpsJob* job){
+    if(!job||!job->sink||!backend||!backend->start())return false;
+    HttpsJob* empty=nullptr;
+    job->state.store(HTTPS_QUEUED);
+    if(!__atomic_compare_exchange_n(&file_job,&empty,job,false,__ATOMIC_RELEASE,__ATOMIC_RELAXED)){job->state.store(0);return false;}
+    if(backend->wake)backend->wake();return true;
+}
+HttpsJob* https_take_job(){
+    if(auto* file=__atomic_exchange_n(&file_job,static_cast<HttpsJob*>(nullptr),__ATOMIC_ACQ_REL)){file->state.store(HTTPS_RUNNING);return file;}
+    for(auto& slot:jobs)if(slot.job.state.exchange(HTTPS_QUEUED,HTTPS_RUNNING))return &slot.job;return nullptr;
+}
 }
 TSUCHI_Result network_request_get(TSUCHI_Mod* mod,const char* url,uint64_t max_bytes,uint32_t timeout_ms,TSUCHI_Request* out){
     if(!valid_url(url)||!max_bytes||max_bytes>4194304||!timeout_ms||timeout_ms>300000)return TSUCHI_INVALID;

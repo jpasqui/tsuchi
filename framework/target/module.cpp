@@ -47,9 +47,14 @@ extern "C" unsigned long long tsuchi_libc_ticks(); // script_library.cpp
 #include "mod_choices_game.h"
 #include "ui_screens.h"
 #include "ui_native.h"
+#include "ui_title.h"
+#include "ui_keyboard.h"
+#include "player_choice.h"
 #include "ui_widgets.h"
 #include "ui_settings.h"
 #include "ui_mod_list.h"
+#include "packages.h"
+#include "https_platform.h"
 #include "ui_mod_list_native.h"
 #include "suspend.h"
 #include "switched.h"
@@ -266,6 +271,7 @@ extern "C" void tsuchi_initialize() {
     session_set_clock([] { return double(tsuchi_libc_ticks()) / 1000000.0; });
     session_start();
     mods_start();
+    if (serves(t::family::packages)) { packages_set_clock(https_platform::unix_seconds); packages_start(); }
     if (serves(t::family::mod_choices)) mod_choices_start();
     ui_start();
     declared_start();
@@ -365,6 +371,9 @@ extern "C" void tsuchi_initialize() {
     // One entry for each register the request can be in, two instructions each.
     if (serves(t::family::dialog)) dialogs_start(self, reinterpret_cast<void*>(reinterpret_cast<uint64_t>(&tsuchi_dialog_setup_entries) + 8 * t::route_frame::dialog_setup_call::request));
     if (serves(t::family::ui)) ui_widgets_start(self);
+    if (serves(t::family::title_menu)) ui_title_start(self);
+    if (serves(t::family::keyboard)) ui_keyboard_start();
+    if (serves(t::family::player_choice)) player_choice_start(self);
     if (serves(t::family::ui) && ui_native_start(self)) {
         ui_settings_start(self);
         ui_mod_list_start(self);

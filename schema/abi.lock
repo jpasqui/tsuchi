@@ -41,7 +41,8 @@
   "text",
   "time",
   "ui",
-  "world"
+  "world",
+  "packages"
  ],
  "tables": {
   "actor": [
@@ -208,7 +209,10 @@
   "dialog": [
    "confirm",
    "message",
-   "on_answered"
+   "on_answered",
+   "ask",
+   "set_text",
+   "close"
   ],
   "effects": [
    "list",
@@ -267,7 +271,11 @@
    "on_world_loaded",
    "on_world_unloaded",
    "on_pause_changed",
-   "on_control_changed"
+   "on_control_changed",
+   "hold_player_choice",
+   "release_player_choice",
+   "answer_player_choice",
+   "on_player_choice"
   ],
   "gimmicks": [
    "list",
@@ -508,11 +516,31 @@
    "on_choice_changed",
    "on_integer_changed",
    "on_reset_requested",
-   "on_button_event"
+   "on_button_event",
+   "hold_open_over",
+   "hold_menu_entry",
+   "release_menu_entry",
+   "hold_menu_lock",
+   "release_menu_lock",
+   "hold_menu_note",
+   "release_menu_note",
+   "ask_text",
+   "on_entry_chosen",
+   "on_text_entered"
   ],
   "world": [
    "ground",
    "path"
+  ],
+  "packages": [
+   "install",
+   "status",
+   "cancel",
+   "count",
+   "at",
+   "remove",
+   "on_progress",
+   "on_finished"
   ]
  }
 }

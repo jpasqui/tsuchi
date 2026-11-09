@@ -755,6 +755,17 @@ int main() {
     ui_host_lost(second_host); assert(!ui_active_view() && first_closes == before_reuse_close + 2 && first_detaches == before_reuse_detach + 1);
     first_bound_host = first_host;
     assert(first_opens == first_closes && second_opens == second_closes);
+    // Internal custom screens select their renderer without changing any other screen.
+    ui_set_renderer(&second_renderer);
+    assert(!ui_screen_native_renderer(nullptr, routing_screen, &first_renderer));
+    thread = 2; assert(!ui_screen_native_renderer(routing_owner, routing_screen, &first_renderer)); thread = 1;
+    assert(ui_screen_native_renderer(routing_owner, routing_screen, &first_renderer));
+    assert(ui.hold_open(routing_owner, routing_screen) == TSUCHI_OK && ui_active_view() == &first_view);
+    assert(!ui_screen_native_renderer(routing_owner, routing_screen, &second_renderer));
+    assert(ui.release_open(routing_owner, routing_screen) == TSUCHI_OK);
+    assert(ui_screen_native_renderer(routing_owner, routing_screen, nullptr));
+    assert(ui.hold_open(routing_owner, routing_screen) == TSUCHI_OK && ui_active_view() == &second_view);
+    assert(ui.release_open(routing_owner, routing_screen) == TSUCHI_OK);
     mod_stop(routing_owner);
     ui_set_renderer(&renderer);
     frame(); glyph_and_footer_tests();

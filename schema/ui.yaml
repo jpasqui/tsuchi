@@ -51,6 +51,18 @@ enums:
     - {name: l, value: 4, doc: The L button.}
     - {name: r, value: 5, doc: The R button.}
     - {name: zr, value: 6, doc: The ZR button.}
+  Menu:
+    open: false
+    doc: A menu of the game's own that takes mod entries.
+    values:
+    - {name: title, value: 1, doc: "The title screen's menu, under Press Start."}
+    - {name: title_options, value: 2, doc: "The menu that Plus opens on the title screen, with Play Co-op and Settings."}
+  TextKind:
+    open: false
+    doc: Which keys the software keyboard offers.
+    values:
+    - {name: text, value: 1, doc: "The full keyboard, with letters and symbols."}
+    - {name: number, value: 2, doc: "A number pad with only digits."}
 functions:
 - name: create
   doc: Creates an empty screen. Add controls before you open it. The framework destroys the screen when
@@ -561,6 +573,103 @@ functions:
     no_memory: The widget could not be retained for the call.
   completes: create_widget
 
+- name: hold_open_over
+  doc: |
+    Opens a screen in Tsuchi's own host over one of the game's menus, as after its entry was chosen. Buttons,
+    choices, integer selectors and text show. Back closes it and returns to that menu.
+  owns: true
+  params:
+    - {name: screen, type: handle<screen>, doc: The populated screen.}
+    - {name: menu, type: enum<Menu>, doc: The menu it opens over.}
+  fails:
+    not_found: "The screen no longer exists."
+    denied: "Another mod owns the screen."
+    invalid: "The screen has no controls."
+    busy: "A screen is already open."
+    not_ready: "That menu is not on the screen and taking input."
+    unsupported: "This build of the game has no adapter for that menu."
+  users: [online-coop, custom-mod-menus]
+- name: hold_menu_entry
+  doc: |
+    Adds an entry to one of the game's menus, after the game's own entries and in their style. Its
+    description shows in the line under the menu while it is selected. Choosing it emits `entry_chosen`.
+    It ends when released or your mod stops. Holding the same entry again changes its label and description.
+  owns: true
+  params:
+    - {name: menu, type: enum<Menu>, doc: The menu.}
+    - {name: entry, type: text, doc: "Your ID for the entry, such as `online_play`, unique in your mod."}
+    - {name: label, type: text, doc: The entry's text.}
+    - {name: description, type: text, doc: "The line under the menu while the entry is selected. Empty for none."}
+  fails:
+    invalid: "A text isn't valid UTF-8, the ID is empty or longer than 63 bytes, or the label is empty or longer than 80 bytes, or the description longer than 300."
+    capacity: "Four mod entries are already in that menu."
+    unsupported: "This build of the game has no adapter for that menu."
+  users: [online-coop, custom-mod-menus]
+- name: release_menu_entry
+  doc: Removes your entry from the menu. The game's own entries are left as they were.
+  owns: true
+  params:
+    - {name: menu, type: enum<Menu>, doc: The menu.}
+    - {name: entry, type: text, doc: Your entry's ID.}
+  fails:
+    not_found: "Your mod holds no entry with that ID in that menu."
+  completes: hold_menu_entry
+
+- name: hold_menu_lock
+  doc: |
+    Keeps the game's own entries of one of its menus from being chosen, and shows them dimmed. Your
+    mod's entries stay usable. It ends when released or your mod stops.
+  owns: true
+  params:
+    - {name: menu, type: enum<Menu>, doc: The menu.}
+  fails:
+    unsupported: "This build of the game has no adapter for that menu."
+  users: [online-coop, custom-mod-menus]
+- name: release_menu_lock
+  doc: Lets the game's own entries of the menu be chosen again.
+  owns: true
+  params:
+    - {name: menu, type: enum<Menu>, doc: The menu.}
+  fails:
+    not_found: "Your mod does not lock that menu."
+  completes: hold_menu_lock
+- name: hold_menu_note
+  doc: |
+    Shows a short text beside one of the game's menus, in the game's own text style, such as an online
+    session's code. Holding it again changes the text. It ends when released or your mod stops.
+  owns: true
+  params:
+    - {name: menu, type: enum<Menu>, doc: The menu.}
+    - {name: note, type: text, doc: "The text, at most 300 bytes. A new line starts a second line."}
+  fails:
+    invalid: "The text isn't valid UTF-8, or it is empty or longer than 300 bytes."
+    busy: "Another mod's note is beside that menu."
+    unsupported: "This build of the game has no adapter for that menu."
+  users: [online-coop, custom-mod-menus]
+- name: release_menu_note
+  doc: Removes your note from beside the menu.
+  owns: true
+  params:
+    - {name: menu, type: enum<Menu>, doc: The menu.}
+  fails:
+    not_found: "Your mod has no note beside that menu."
+  completes: hold_menu_note
+- name: ask_text
+  doc: |
+    Shows the system's software keyboard and emits `text_entered` with what the player typed. It opens
+    at the start of the next frame, and the game waits while it is open, as it does for its own name
+    entry. One keyboard can wait at a time.
+  owns: true
+  params:
+    - {name: prompt, type: text, doc: "The line above the text field, at most 256 bytes."}
+    - {name: initial, type: text, doc: "The text the field starts with. Empty for none."}
+    - {name: most, type: u32, doc: "The most characters the player can type, from 1 to 256."}
+    - {name: kind, type: enum<TextKind>, doc: The keys the keyboard offers.}
+  fails:
+    invalid: "A text isn't valid UTF-8 or is too long, or the limit or kind is invalid."
+    busy: "A keyboard is already waiting to open."
+    unsupported: "This build of the game has no software keyboard call."
+  users: [online-coop, custom-mod-menus]
 events:
 - name: activated
   doc: Emitted when the player selects a button. Only the screen's owning mod receives this event.
@@ -649,3 +758,15 @@ events:
   - {name: widget, type: handle<object>, doc: The owned Button.}
   - {name: signal, type: enum<ButtonSignal>, doc: The native event.}
   users: [custom-mod-menus, kadan]
+- name: entry_chosen
+  doc: Emitted when the player chooses one of your menu entries. Only the entry's mod receives it.
+  fields:
+  - {name: menu, type: enum<Menu>, doc: The menu.}
+  - {name: entry, type: text, doc: Your entry's ID.}
+  users: [online-coop, custom-mod-menus]
+- name: text_entered
+  doc: Emitted when the player closes the keyboard that your mod opened with `ask_text`.
+  fields:
+  - {name: accepted, type: bool, doc: "`true` if the player confirmed the text, `false` if they cancelled."}
+  - {name: text, type: text, doc: "What the player typed. Empty when they cancelled."}
+  users: [online-coop, custom-mod-menus]

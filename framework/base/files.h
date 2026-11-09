@@ -13,6 +13,15 @@
 
 namespace tsuchi::game {
 
+// Optional context for framework-owned mounts; ordinary RomFS/save calls keep their context.
+inline const void* (*file_context_enter)(const char*) = nullptr;
+inline void (*file_context_leave)(const char*, const void*) = nullptr;
+struct FileScope {
+    const char* path; const void* previous;
+    explicit FileScope(const char* p) : path(p), previous(file_context_enter ? file_context_enter(p) : nullptr) {}
+    ~FileScope() { if (file_context_leave) file_context_leave(path, previous); }
+};
+
 // True when the game's calls to the file functions are known.
 bool files_known();
 
@@ -24,6 +33,7 @@ bool path_stays_within(const char* path);
 // TSUCHI_NOT_FOUND when nothing is at the path, TSUCHI_IO when it could not be opened or measured.
 template <typename Use>
 TSUCHI_Result with_file(const char* path, Use&& use) {
+    FileScope scope(path);
     void* file = nullptr;
     const uint32_t opened = table::fn::fs_open_file(&file, const_cast<char*>(path), int32_t(table::constant::fs_read));
     if (opened) return opened == table::constant::fs_no_such_path ? TSUCHI_NOT_FOUND : TSUCHI_IO;

@@ -1,0 +1,149 @@
+service: packages
+tutorials:
+  - {title: Install packages, path: /develop/packages/}
+layer: core
+acts_on: package_install
+lifetime: process
+brief: "Downloads mod packages to the SD card, installs them, and removes them."
+description: |
+  A package is a ZIP file of Tsuchi mods, one cooked asset container, or cheat files. Tsuchi
+  downloads it over HTTPS to the SD card, checks its size and SHA-256 digest, extracts it, and checks
+  every mod's manifest and requirements before it publishes it. A package that fails a check leaves
+  nothing installed. Installed mods load at the next start; a cooked container can also load at once.
+
+  Your mod names where a package comes from with two texts of its own choosing, `source` and `key`.
+  Tsuchi stores them and compares them, and never reads anything into them. An install with the same
+  source and key as an installed package, and at least one of the same mod IDs, replaces it.
+
+  Only a mod whose `mod.json` lists `packages` in `capabilities` can use this service. One install
+  runs at a time across all mods.
+enums:
+  InstallPhase:
+    open: false
+    doc: Where an install is.
+    values:
+    - {name: downloading, value: 0, doc: The file is being downloaded to the SD card.}
+    - {name: extracting, value: 1, doc: The ZIP file is being extracted.}
+    - {name: validating, value: 2, doc: The manifests and requirements are being checked.}
+    - {name: installed, value: 3, doc: The package is installed.}
+    - {name: failed, value: 4, doc: The install failed and nothing was installed.}
+    - {name: cancelled, value: 5, doc: The install was cancelled and nothing was installed.}
+  PackageKind:
+    open: false
+    doc: What a package holds.
+    values:
+    - {name: mods, value: 0, doc: "Tsuchi mods, each in its own folder under `romfs/tsuchi/mods/`."}
+    - {name: assets, value: 1, doc: "One cooked asset container: a `.pak`, `.utoc` and `.ucas` of the same name."}
+    - {name: cheats, value: 2, doc: "Cheat files named by the game's build ID."}
+structs:
+  InstallStatus:
+    doc: An install's progress.
+    fields:
+    - {name: phase, type: enum<InstallPhase>, doc: Where the install is.}
+    - {name: done, type: u64, doc: "Bytes downloaded, or bytes extracted while extracting."}
+    - {name: total, type: u64, doc: "The bytes expected in the current phase, or 0 if unknown."}
+    - {name: failure, type: text, doc: "A fixed name for why it failed, such as `http` or `digest`. Empty unless the phase is failed."}
+    - {name: message, type: text, doc: "A sentence for the player about the result. Empty while the install runs."}
+  Package:
+    doc: An installed package.
+    fields:
+    - {name: source, type: text, doc: The source your mod gave at install.}
+    - {name: key, type: text, doc: The key your mod gave at install.}
+    - {name: title, type: text, doc: The title your mod gave at install.}
+    - {name: release, type: text, doc: The release your mod gave at install.}
+    - {name: filename, type: text, doc: "The last part of the download URL's path."}
+    - {name: updated, type: u64, doc: "When it was installed, in seconds since 1970 UTC, or 0 if the clock was unavailable."}
+    - {name: kind, type: enum<PackageKind>, doc: What the package holds.}
+    - {name: mods, type: text, doc: "The IDs of the mods it installed, separated by single spaces."}
+functions:
+- name: install
+  doc: |
+    Starts to download and install a package. `finished` reports the result. The handle can be read
+    until another install starts or your mod stops. If your mod stops first, the install is cancelled.
+  owns: true
+  params:
+  - {name: url, type: text, doc: "An ASCII HTTPS URL without credentials or a fragment, at most 1023 bytes."}
+  - {name: bytes, type: u64, doc: "The file's exact size, from 1 to 536870912 bytes."}
+  - {name: source, type: text, doc: "Where the package comes from, in your mod's own terms: 1 to 63 bytes of printable ASCII."}
+  - {name: key, type: text, doc: "Which package of that source it is: 1 to 127 bytes of UTF-8 without control characters."}
+  - {name: title, type: text, doc: "The name the player sees: 1 to 160 bytes of UTF-8 without control characters."}
+  - {name: release, type: text, doc: "The release or version the player sees: at most 127 bytes of UTF-8 without control characters."}
+  - {name: sha256, type: text, default: "", doc: "The file's SHA-256 digest as 64 lowercase hexadecimal digits, or empty to skip the check."}
+  - {name: replacing, type: text, default: "", doc: "Empty, or the ID of a mod in an installed package with the same source and key. The new package must then contain that mod and replace that package."}
+  returns: {type: handle<package_install>, doc: The install.}
+  waits: finished
+  fails:
+    invalid: An argument is outside its documented range.
+    denied: "Your mod's manifest does not list the `packages` capability."
+    busy: An install is already running.
+    capacity: 256 packages are already installed.
+    unsupported: This build of the game has no SD card or HTTPS support.
+    io: The SD card refused the new package folder.
+    no_memory: The install could not be allocated.
+  users: [mod-downloader, mod-updater]
+- name: status
+  doc: Returns an install's progress without waiting.
+  owns: true
+  params:
+  - {name: install, type: handle<package_install>, doc: Your install.}
+  returns: {type: struct<InstallStatus>, doc: The progress.}
+  fails:
+    denied: "Your mod's manifest does not list the `packages` capability."
+    not_found: The install is not your mod's latest one.
+  users: [mod-downloader, mod-updater]
+- name: cancel
+  doc: Asks a running install to stop. `finished` follows. An install that has finished is not changed.
+  owns: true
+  params:
+  - {name: install, type: handle<package_install>, doc: Your install.}
+  fails:
+    denied: "Your mod's manifest does not list the `packages` capability."
+    not_found: The install is not your mod's latest one.
+  users: [mod-downloader, mod-updater]
+- name: count
+  doc: Returns how many packages are installed. Removed packages are not counted.
+  owns: true
+  returns: {type: u32, doc: The number of installed packages.}
+  fails:
+    denied: "Your mod's manifest does not list the `packages` capability."
+    unsupported: This build of the game has no SD card support.
+  users: [mod-downloader, mod-updater]
+- name: at
+  doc: Returns an installed package by its place, from 0. The order changes when packages are installed or removed.
+  owns: true
+  params:
+  - {name: index, type: u32, doc: "The package's place, from 0 to `count() - 1`."}
+  returns: {type: struct<Package>, doc: The package.}
+  fails:
+    denied: "Your mod's manifest does not list the `packages` capability."
+    not_found: No package is at that place.
+  users: [mod-downloader, mod-updater]
+- name: remove
+  doc: |
+    Removes an installed package. Its mods stop loading at the next start. Tsuchi deletes its files once
+    nothing loaded uses them, which is at once for a package that was not loaded.
+  owns: true
+  params:
+  - {name: index, type: u32, doc: "The package's place, from 0 to `count() - 1`."}
+  fails:
+    denied: "Your mod's manifest does not list the `packages` capability."
+    not_found: No package is at that place.
+    busy: An install is running.
+    io: The SD card refused the change.
+  users: [mod-downloader, mod-updater]
+events:
+- name: progress
+  doc: Emitted to the mod that started an install at most once a frame while its progress changes.
+  fields:
+  - {name: install, type: handle<package_install>, doc: The install.}
+  - {name: phase, type: enum<InstallPhase>, doc: Where it is.}
+  - {name: done, type: u64, doc: Bytes done in this phase.}
+  - {name: total, type: u64, doc: "Bytes expected in this phase, or 0 if unknown."}
+  users: [mod-downloader, mod-updater]
+- name: finished
+  doc: Emitted to the mod that started an install once it is installed, has failed, or was cancelled.
+  fields:
+  - {name: install, type: handle<package_install>, doc: The install.}
+  - {name: phase, type: enum<InstallPhase>, doc: "installed, failed, or cancelled."}
+  - {name: failure, type: text, doc: "A fixed name for why it failed. Empty unless it failed."}
+  users: [mod-downloader, mod-updater]

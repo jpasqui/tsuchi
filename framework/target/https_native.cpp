@@ -5,7 +5,17 @@
 namespace tsuchi::https {
 namespace {
 namespace platform=https_platform;
-const HttpsPlatform transport{platform::allocate,platform::free,platform::response_allocate,platform::response_free,platform::random,platform::unix_seconds,platform::milliseconds,platform::sleep_ms,platform::tcp_open,platform::tcp_read,platform::tcp_write,platform::tcp_close,nullptr,nullptr,nullptr,nullptr,tsuchi_https_roots,sizeof(tsuchi_https_roots)};
+struct File {const FileSink* sink;void* value;};
+bool file_open(const HttpsJob& job,void** out){
+    if(!job.sink)return false;
+    auto* file=static_cast<File*>(platform::allocate(sizeof(File)));if(!file)return false;
+    file->sink=job.sink;file->value=nullptr;
+    if(!file->sink->open(job,&file->value)){platform::free(file);return false;}*out=file;return true;
+}
+bool file_write(void* p,uint64_t offset,const void* data,uint64_t size){auto* f=static_cast<File*>(p);return f->sink->write(f->value,offset,data,size);}
+bool file_commit(void* p){auto* f=static_cast<File*>(p);if(!f->sink->commit(f->value))return false;platform::free(f);return true;}
+void file_abort(void* p){auto* f=static_cast<File*>(p);f->sink->abort(f->value);platform::free(f);}
+const HttpsPlatform transport{platform::allocate,platform::free,platform::response_allocate,platform::response_free,platform::random,platform::unix_seconds,platform::milliseconds,platform::sleep_ms,platform::tcp_open,platform::tcp_read,platform::tcp_write,platform::tcp_close,file_open,file_write,file_commit,file_abort,tsuchi_https_roots,sizeof(tsuchi_https_roots)};
 WorkSignal work;
 void worker(void*){for(;;){const auto observed=work.sample();if(auto* job=https_take_job())https_tls_run(*job);else work.wait(observed,platform::wait_for_work);}}
 bool start(){

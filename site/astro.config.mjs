@@ -33,6 +33,7 @@ const sidebars = {
         { label: 'Logs and debugging', slug: 'develop/logs' },
         { label: 'Measure game time', slug: 'develop/time' },
         { label: 'Send network messages', slug: 'develop/network' },
+        { label: 'Install packages', slug: 'develop/packages' },
         { label: 'Use IDs and kinds', slug: 'develop/ids-and-kinds' },
         { label: 'Add settings', slug: 'develop/settings' },
         { label: 'Create a screen', slug: 'develop/screens' },
