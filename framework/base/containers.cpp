@@ -765,7 +765,11 @@ bool open_library(ModRecord& record, const char* pak, const char* name, const ch
 TSUCHI_Result header_claims(const uint8_t* header, size_t size, const ContainerToc& toc,
                             List<uint64_t>& claims, bool no_redirects) {
     Reader read{header, size};
-    if (read.u64() != toc.id || read.u32() != toc.packages.count) return TSUCHI_INVALID;
+    const uint64_t header_id = read.u64();
+    // Older patch tools retain the source container's header ID while giving
+    // the TOC its own ID. Startup patches are identified by their TOC and the
+    // exact package set below. Uploaded bundles still require matching IDs.
+    if ((no_redirects && header_id != toc.id) || read.u32() != toc.packages.count) return TSUCHI_INVALID;
     read.skip(read.u32()), read.skip(read.u32());
     const uint32_t count = read.u32();
     if (count != toc.packages.count || !read.has(8ull * count)) return TSUCHI_INVALID;

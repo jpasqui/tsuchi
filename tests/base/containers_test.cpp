@@ -552,6 +552,26 @@ void single_partition_version_three() {
     tsuchi::forget_container_toc(toc);
 }
 
+void source_header_id_in_startup_patch() {
+    const auto made = make_container(0xBAC, {{0xAA, "Carrot4/Content/Mods/leaf/T_A.uasset"}});
+    auto data = made.cas;
+    const uint64_t source_id = 0x123456;
+    std::memcpy(&data[0], &source_id, 8);
+    files["sd:/header-id.ucas"] = data;
+    tsuchi::ContainerToc toc{}; const char* wrong = nullptr;
+    CHECK(tsuchi::read_container_toc(reinterpret_cast<const uint8_t*>(made.toc.data()), made.toc.size(), toc, wrong));
+    tsuchi::List<uint64_t> claims;
+    CHECK(tsuchi::read_startup_container_claims(toc, "sd:/header-id.ucas", claims) == TSUCHI_OK && claims.count >= 1);
+    claims.clear();
+    // A source ID never excuses a header whose package set differs from its TOC.
+    const uint32_t wrong_count = 2;
+    std::memcpy(&data[8], &wrong_count, 4);
+    files["sd:/header-id.ucas"] = data;
+    CHECK(tsuchi::read_startup_container_claims(toc, "sd:/header-id.ucas", claims) == TSUCHI_INVALID);
+    claims.clear(); tsuchi::forget_container_toc(toc);
+    files.erase("sd:/header-id.ucas");
+}
+
 void blocked_mods_mount_nothing() {
     files.clear();
     install("app.lost", manifest("app.lost", ", \"requires\": {\"app.gone\": \"*\"}"), "Lost", make_container(0xB3, {{0xA4, "Carrot4/Content/Mods/lost/T_A.uasset"}}));
@@ -1258,6 +1278,7 @@ int main(int argc, char** argv) {
     if (argc == 6 && !std::strcmp(argv[1], "--admit")) return admit_real(argv);
     reads_a_table_of_contents();
     single_partition_version_three();
+    source_header_id_in_startup_patch();
     startup_compressed_claims();
     orders_names_raise();
     mounts_in_order();
