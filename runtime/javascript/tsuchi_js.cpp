@@ -23,6 +23,10 @@ struct State {
     Handle** handles = nullptr; uint32_t handle_buckets = 0, handle_count = 0;
     Listener* listeners = nullptr; Pending* pending = nullptr; Subscribed* waiters = nullptr;
     JSValue told = JS_UNDEFINED; Rejection* rejections = nullptr;
+    uint64_t limit = kTurn;
+    tsuchi_script::Allowance hooks;
+    uint32_t hook_pins = 0;
+    bool closing = false;
     bool exhausted = false;
 };
 namespace {
@@ -30,9 +34,14 @@ JSClassID handle_class = 0;
 uint32_t live_runtimes = 0;
 void (*error_handler)(const char*) = nullptr;
 State* state(JSContext* ctx) { return static_cast<State*>(JS_GetContextOpaque(ctx)); }
+struct AllocationBarrier {
+    AllocationBarrier() { tsuchi::hook_client_enter(); }
+    ~AllocationBarrier() { tsuchi::hook_client_leave(); }
+};
 struct Block { size_t size; uint64_t pad; };
 size_t usable(const void* p) { return p ? (static_cast<const Block*>(p) - 1)->size : 0; }
 void* alloc(JSMallocState* a, size_t n) {
+    const AllocationBarrier barrier;
     auto* s = static_cast<State*>(a->opaque);
     if (n > kMemory - s->held || sizeof(Block) > kMemory - s->held - n) return nullptr;
     auto* p = static_cast<Block*>(tsuchi::allocate(n + sizeof(Block)));
@@ -41,12 +50,14 @@ void* alloc(JSMallocState* a, size_t n) {
     return p + 1;
 }
 void dealloc(JSMallocState* a, void* p) {
+    const AllocationBarrier barrier;
     if (!p) return;
     auto* s = static_cast<State*>(a->opaque);
     s->held -= usable(p) + sizeof(Block); --a->malloc_count; a->malloc_size = s->held;
     tsuchi::release(static_cast<Block*>(p) - 1);
 }
 void* realloc_block(JSMallocState* a, void* p, size_t n) {
+    const AllocationBarrier barrier;
     if (!n) { dealloc(a, p); return nullptr; }
     if (!p) return alloc(a, n);
     const size_t old = usable(p);
@@ -63,16 +74,12 @@ void* realloc_block(JSMallocState* a, void* p, size_t n) {
 int interrupt(JSRuntime*, void* opaque) {
     auto* s = static_cast<State*>(opaque);
     s->run += 10000; // QuickJS's JS_INTERRUPT_COUNTER_INIT, in the vendored release.
-    s->exhausted = s->exhausted || s->run > kTurn;
+    s->exhausted = s->exhausted || s->run > s->limit;
     return s->exhausted;
 }
 // The stack QuickJS may use is measured from where the framework first calls in, so a call that comes back
 // into the same runtime does not get a fresh allowance.
-struct Turn {
-    State* s;
-    explicit Turn(JSContext* ctx) : s(state(ctx)) { if (!s->depth++) { begin_turn(ctx); JS_UpdateStackTop(s->rt); } }
-    ~Turn() { --s->depth; }
-};
+// Turn is shared with the hook adapters below.
 uint32_t bucket_of(const State* s, uint64_t id) { return uint32_t((id * 0x9E3779B97F4A7C15ull) >> 32) & (s->handle_buckets - 1); }
 // Room for one more handle in the table, which doubles when it holds as many handles as it has buckets.
 bool handle_room(State* s) {
@@ -201,6 +208,7 @@ State* create(TSUCHI_Mod* owner, const TSUCHI_Host* api) {
     return s;
 }
 void destroy(State* s) {
+    if (s->hook_pins || s->depth) { s->closing = true; return; }
     --live_runtimes;
     JSContext* ctx = s->ctx;
     while (s->listeners) { auto* l = s->listeners; s->listeners = l->next; JS_FreeValue(ctx, l->function); js_free(ctx, l); }
@@ -213,13 +221,32 @@ void destroy(State* s) {
     if (s->handles) tsuchi::release(s->handles);
     tsuchi::release(s);
 }
+Turn::Turn(JSContext* ctx, uint64_t limit) : s(state(ctx)) {
+    if (!s->depth++) { begin_turn(ctx); s->limit = limit; JS_UpdateStackTop(s->rt); }
+}
+Turn::~Turn() { if (!--s->depth) { s->limit = kTurn; if (s->closing && !s->hook_pins) destroy(s); } }
+void pin_hook(JSContext* ctx) { ++state(ctx)->hook_pins; }
+void unpin_hook(JSContext* ctx) {
+    State* s = state(ctx);
+    if (s->hook_pins && !--s->hook_pins && s->closing && !s->depth) destroy(s);
+}
+tsuchi_script::Allowance& hook_allowance(JSContext* ctx) { return state(ctx)->hooks; }
+bool turn_active(JSContext* ctx) { return state(ctx)->depth != 0; }
+uint64_t turn_used(JSContext* ctx) { return state(ctx)->run; }
+uint64_t turn_limit(JSContext* ctx) { return state(ctx)->limit; }
+void set_turn_limit(JSContext* ctx, uint64_t limit) { State* s = state(ctx); s->limit = limit; s->exhausted = s->run > limit; }
+void report_hook_error(JSContext* ctx, const char* message) {
+    if (error_handler) error_handler(message);
+    else if (host(ctx)->mod && host(ctx)->mod->log) host(ctx)->mod->log(mod(ctx), message);
+}
 void begin_turn(JSContext* ctx) { state(ctx)->run = 0; state(ctx)->exhausted = false; }
 bool turn_over(JSContext* ctx) { return state(ctx)->exhausted; }
 bool drain(JSContext* ctx) {
     State* s = state(ctx);
+    if (tsuchi::in_hook_client()) return true; // synchronous hooks never execute queued jobs
     while (JS_IsJobPending(s->rt)) {
         // Even a chain of native promise jobs must give the game its turn back.
-        if (++s->run > kTurn || s->exhausted) { s->exhausted = true; JS_ThrowInternalError(ctx, "it ran too long without giving the game its turn back"); return false; }
+        if (++s->run > s->limit || s->exhausted) { s->exhausted = true; JS_ThrowInternalError(ctx, "it ran too long without giving the game its turn back"); return false; }
         JSContext* job = nullptr;
         if (JS_ExecutePendingJob(s->rt, &job) < 0) return false;
     }

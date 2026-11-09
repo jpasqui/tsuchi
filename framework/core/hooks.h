@@ -89,6 +89,9 @@ TSUCHI_Result hook_site(TSUCHI_Mod* mod, game::table::SiteOf<F> site, F function
 }
 // Ends one of the mod's own hooks. Calls already running it may continue until they return.
 TSUCHI_Result hook_remove(TSUCHI_Mod* mod, uint64_t id);
+// True once no hook has this id: it was removed and every call that selected it has returned, so nothing will
+// call its function again. Any thread.
+bool hook_retired(uint64_t id);
 // How many hooks are live on an entry.
 uint32_t hook_count(uint64_t entry);
 // What the entry held before anything here wrapped it, or what it holds now when nothing has. 0 when it cannot be read.
@@ -121,6 +124,11 @@ struct NativeHooks {
     TSUCHI_Result (*check)(uint64_t, const void*, uint64_t);
 };
 void set_native_hooks(const NativeHooks* backend);
+// The backend set_native_hooks installed, or null.
+const NativeHooks* native_hooks_backend();
+// How the service's `remove` reaches script hooks (dynamic_hooks.h), which have ids of their own. It's tried
+// first; TSUCHI_NOT_FOUND from it goes on to the other kinds.
+void set_dynamic_remove(TSUCHI_Result (*remove)(TSUCHI_Mod*, uint64_t));
 
 struct HookStats {
     uint32_t thunks_limit, thunks_used, live_records, retired_records, frames_active, frames_peak;

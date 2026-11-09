@@ -6,7 +6,8 @@ from .c_header import out_params, param
 from .schema import pascal, waited_field
 
 WORDS = {'f32': 'number', 'i32': 'integer', 'u32': 'integer', 'i64': 'integer', 'u64': 'integer', 'bool': 'boolean',
-         'vec3': 'vector', 'rotation': 'rotation', 'text': 'text', 'bytes': 'bytes', 'pointer': 'pointer', 'value': 'value'}
+         'vec3': 'vector', 'rotation': 'rotation', 'text': 'text', 'bytes': 'bytes', 'pointer': 'pointer', 'value': 'value',
+         'callback': 'function'}
 NOTE = '{/* Generated from schema/%s.yaml. Do not edit: change the schema and run tools/generate.py. */}\n'
 
 

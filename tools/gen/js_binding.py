@@ -70,11 +70,12 @@ def service_binding(service):
     for item in [e for e in service.enums if not e.open] + service.flags:
         out += [f'const char* const {item.name}_names[] = {{' + ', '.join(json.dumps(v) for v, _, _ in item.values) + ', nullptr};\n',
                 f'const uint32_t {item.name}_values[] = {{' + ', '.join(str(v) + 'u' for _, v, _ in item.values) + '};\n']
-    for struct in service.structs:
+    scripted_structs = [struct for struct in service.structs if struct.only != 'native']
+    for struct in scripted_structs:
         out.append(f'[[maybe_unused]] JSValue push_{struct.name}(JSContext* ctx, const TSUCHI_{struct.name}& value) {{\n'
                    f'    tsuchi_js::Value out(ctx, JS_NewObject(ctx));\n{fields(struct.fields, "value.")}\n    return out.take();\n}}\n')
-    taken = {p.type.name for fn in service.functions for p in fn.params if p.type.kind == 'struct'}
-    for struct in service.structs:
+    taken = {p.type.name for fn in service.functions if service.scripted(fn) for p in fn.params if p.type.kind == 'struct'}
+    for struct in scripted_structs:
         if struct.name not in taken: continue
         out.append(f'[[maybe_unused]] TSUCHI_{struct.name} read_{struct.name}(JSContext* ctx, JSValueConst record) {{\n'
                    f'    TSUCHI_{struct.name} out{{}};\n')

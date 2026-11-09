@@ -24,8 +24,16 @@ namespace {
 const tsuchi::Kind kScript{"lua.state"};
 const char kLoaded = 0; // the registry key of the table of modules `require` has run
 
+// While Lua allocates, a script hook on the game's allocator must not run a script: Lua can't be entered again
+// from inside its own allocation (DESIGN.md, "Script hooks").
+struct AllocationBarrier {
+    AllocationBarrier() { tsuchi::hook_client_enter(); }
+    ~AllocationBarrier() { tsuchi::hook_client_leave(); }
+};
+
 // Lua's memory is the framework's, up to what one mod's scripts may hold.
 void* allocate(void* user, void* block, size_t old_size, size_t new_size) {
+    const AllocationBarrier barrier;
     auto* const used = static_cast<Budget*>(user);
     if (!block) old_size = 0; // for a new block Lua says what kind of thing it is for, not a size
     if (!new_size) {
@@ -124,13 +132,14 @@ int run_main(lua_State* L) {
     return 0;
 }
 
-void close(void* context, uint64_t) {
-    auto* const L = static_cast<lua_State*>(context);
+void close_state(lua_State* L) {
     void* used = nullptr;
     lua_getallocf(L, &used);
     lua_close(L);
     tsuchi::release(used);
 }
+
+void close(void* context, uint64_t) { close_when_unused(static_cast<lua_State*>(context), close_state); }
 
 // Looks in every so many instructions, and stops a script that has used up its turn. A script can catch the
 // error, so once the turn is over every instruction is looked at: the error is raised again at the very next
@@ -141,7 +150,7 @@ void look(lua_State* L, lua_Debug*) {
     if (!used) return;
     const int every = lua_gethookcount(L);
     used->run += uint64_t(every);
-    if (used->run > kTurn) {
+    if (used->run > used->limit) {
         if (every != 1) lua_sethook(L, look, LUA_MASKCOUNT, 1);
         luaL_error(L, "it ran too long without giving the game its turn back");
     }
@@ -209,7 +218,7 @@ TSUCHI_Result start(TSUCHI_Mod* mod, tsuchi::Text& problem) {
     lua_pushlightuserdata(L, mod);
     int status = lua_pcall(L, 1, 0, 0);
     if (status == LUA_OK) {
-        begin_turn(L);
+        Turn turn(L);
         lua_pushcfunction(L, run_main);
         status = lua_pcall(L, 0, 0, 0);
     }

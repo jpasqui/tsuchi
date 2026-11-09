@@ -14,6 +14,7 @@
 #include "containers.h"
 #include "cost_clock.h"
 #include "angles.h"
+#include "dynamic_hooks.h"
 #include "families.h"
 #include "flow.h"
 #include "frame.h"
@@ -235,6 +236,7 @@ extern "C" void tsuchi_initialize() {
         refresh_mounted_package_entry(frame.x[r::slot], frame.x[r::entry]);
     });
     hooks_start();
+    dynamic_hooks_start();
     target::code_memory_start();
     reflect_start();
     actors_start();

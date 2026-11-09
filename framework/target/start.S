@@ -123,6 +123,79 @@ tsuchi_site_jump:
     orr w17, w17, #0x80000000
     b tsuchi_hook_jump
 
+// The supply of script hook gateways (framework/core/dynamic_hooks.h). The hook
+// engine calls one in place of the game's function. Each is two instructions:
+// its number, then the shared part, which keeps every register a call can use
+// in a CallFrame: x0 to x7, x8 for a result the caller gives memory for, and q0
+// to q7 whole. After tsuchi_dynamic_dispatch, the result registers come back
+// from the frame: x0 and x1, x8, and q0 to q3, as AAPCS64 returns them.
+// CallFrame: x[8] at 0, x8 at 64, q[8] at 80, 208 bytes.
+.equ TSUCHI_DYNAMIC_GATEWAYS, 256
+.balign 4
+.global tsuchi_dynamic_gateways
+.hidden tsuchi_dynamic_gateways
+tsuchi_dynamic_gateways:
+.set gateway_number, 0
+.rept TSUCHI_DYNAMIC_GATEWAYS
+    mov w17, #gateway_number
+    b tsuchi_dynamic_gateway
+.set gateway_number, gateway_number + 1
+.endr
+.global tsuchi_dynamic_gateways_end
+.hidden tsuchi_dynamic_gateways_end
+tsuchi_dynamic_gateways_end:
+
+tsuchi_dynamic_gateway:
+    sub sp, sp, #224
+    stp x29, x30, [sp, #208]
+    add x29, sp, #208
+    stp x0, x1, [sp, #0]
+    stp x2, x3, [sp, #16]
+    stp x4, x5, [sp, #32]
+    stp x6, x7, [sp, #48]
+    str x8, [sp, #64]
+    stp q0, q1, [sp, #80]
+    stp q2, q3, [sp, #112]
+    stp q4, q5, [sp, #144]
+    stp q6, q7, [sp, #176]
+    mov w0, w17
+    mov x1, sp
+    bl tsuchi_dynamic_dispatch
+    ldp q2, q3, [sp, #112]
+    ldp q0, q1, [sp, #80]
+    ldr x8, [sp, #64]
+    ldp x0, x1, [sp, #0]
+    ldp x29, x30, [sp, #208]
+    add sp, sp, #224
+    ret
+
+// Calls `target` (x0) with the registers in a CallFrame (x1), x8 and q0 to q7
+// included, and stores the result registers back: x0 and x1, and q0 to q3.
+.global tsuchi_dynamic_call
+.hidden tsuchi_dynamic_call
+tsuchi_dynamic_call:
+    stp x29, x30, [sp, #-32]!
+    mov x29, sp
+    str x19, [sp, #16]
+    mov x19, x1
+    mov x16, x0
+    ldp q0, q1, [x19, #80]
+    ldp q2, q3, [x19, #112]
+    ldp q4, q5, [x19, #144]
+    ldp q6, q7, [x19, #176]
+    ldr x8, [x19, #64]
+    ldp x0, x1, [x19, #0]
+    ldp x2, x3, [x19, #16]
+    ldp x4, x5, [x19, #32]
+    ldp x6, x7, [x19, #48]
+    blr x16
+    stp x0, x1, [x19, #0]
+    stp q0, q1, [x19, #80]
+    stp q2, q3, [x19, #112]
+    ldr x19, [sp, #16]
+    ldp x29, x30, [sp], #32
+    ret
+
 // Where the patch's native routes enter the framework (tools/gen/stubs.py, native_shared). The route's own code
 // pushed x30 and x16, then the shared code pushed x17 and x0, x1 and the flags: sp+0 x0, +8 x1, +16 the flags,
 // +32 x17, +48 x30, +56 x16. x30 is the route's `returned`, which says which route this is. Every register is
