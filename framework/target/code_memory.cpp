@@ -7,12 +7,16 @@
 #include "reflect.h"
 #include <string.h>
 
-#if defined(TSUCHI_NATIVE_CODE_ACCESS)
+#ifndef TSUCHI_NATIVE_CODE_ACCESS
+#define TSUCHI_NATIVE_CODE_ACCESS 1
+#endif
+
+#if TSUCHI_NATIVE_CODE_ACCESS
 extern "C" __attribute__((used)) const uint32_t tsuchi_native_code_access = 1;
 #endif
 
 namespace tsuchi::target {
-#if defined(TSUCHI_NATIVE_CODE_ACCESS)
+#if TSUCHI_NATIVE_CODE_ACCESS
 namespace {
 constexpr uint64_t kPage = 4096;
 constexpr uint32_t kSelf = 0xffff8001u;

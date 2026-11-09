@@ -23,7 +23,7 @@ the first hook if the second installation fails. Tsuchi also releases installed
 hooks when startup fails or the mod stops. This is not an atomic installation
 across game threads; choose hook locations whose callbacks tolerate startup.
 
-The runtime must offer native code access. The ordinary build refuses code
-writes. Experimental local builds require process metadata with the native-hook
-system calls granted. Read **Port native hooks** in the matching documentation.
+The runtime must offer native code access. A release installation includes it:
+its `main.npdm` grants the native-hook system calls. Read **Port native hooks**
+in the matching documentation.
 Passing the SDK and emulator checks does not qualify a mod in the game.
