@@ -72,8 +72,8 @@ type information. Your mod cannot link against a system library.
 `examples/native-hooks` provides two inline callbacks and checks both target
 locations before installation. Copy `targets.example.h` to `targets.h` and supply
 your mod's offsets and stock instructions. The example contains no game targets.
-Runtime code writes require an experimental native-code-access runtime; the
-ordinary build refuses them. Read **Port native hooks** in the matching docs.
+Runtime code writes need code access, which a release installation includes
+through its `main.npdm`. Read **Port native hooks** in the matching docs.
 
 `inventory.json` records the API version, source input hashes and the size and
 SHA-256 hash of every other archive member. It excludes its own hash.

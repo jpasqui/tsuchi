@@ -91,7 +91,7 @@ the stock instruction. Instruction patches have 256 ownership records and need
 no gateway. Framework sites and the patch region are excluded from dynamic targets.
 A target also retains its hook kind. Switching it between function and inline
 hooks, or replacing it with an instruction patch, requires a new process.
-The experimental write backend caches aliases for up to 512 distinct main-code
+The write backend caches aliases for up to 512 distinct main-code
 pages until the process closes. Removing a patch frees its ownership record but
 keeps that page mapping. A later write can therefore run out of alias space even
 when fewer than 256 instruction patches remain active.

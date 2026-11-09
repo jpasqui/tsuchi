@@ -1,9 +1,9 @@
 # Native inline hook qualification
 
 Select `native-hooks` explicitly when staging the test mods. This group requires
-the experimental native-code-access runtime, its matching game patch, and process
-metadata with the validated code-alias permissions. The ordinary runtime cannot
-write these instructions.
+the runtime's code access, its matching game patch, and process metadata with the
+code-alias permissions, such as the release's `main.npdm`. Without that metadata
+the runtime cannot write these instructions.
 
 The base, chain and observer are independent SDK-built modules. Both import-veneer
 targets and all original words are generated from the game table and check-only
