@@ -64,6 +64,7 @@ bool declare_settings(Settings& out, const Json* declared, Text& problem);
 // Gives back what the values take. The declarations are the manifest's own.
 void forget_settings(Settings& settings);
 Setting* find_setting(Settings& settings, const char* key);
+const Setting* find_setting(const Settings& settings, const char* key);
 void setting_integer_range(const Setting& setting, int64_t& minimum, int64_t& maximum);
 TSUCHI_Result set_setting_integer_range(Setting& setting, int64_t minimum, int64_t maximum, bool& changed);
 void setting_number_text(float value, char out[48]);

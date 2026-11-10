@@ -24,6 +24,7 @@ namespace {
 std::vector<void(*)()> steps;
 ModRecord records[3]{};
 UiModListNativeCallbacks callbacks{};
+bool (*parent_action)(uint64_t,uint32_t,uint32_t,bool) = nullptr;
 bool (*dispatcher)(uint64_t,uint32_t,bool&,bool&) = nullptr;
 void (*listener)(uint64_t) = nullptr;
 uint64_t active = 0;
@@ -82,7 +83,11 @@ UiRenderer renderer{open_view,update_view,live_view,close_view};
 TSUCHI_Result confirm(TSUCHI_Mod*,const char* text,TSUCHI_Dialog* out) { prompt=text; *out={++asked.id}; return TSUCHI_OK; }
 TSUCHI_Result show(TSUCHI_Mod*,const char* text,TSUCHI_Dialog* out) { message=text; *out={999}; return TSUCHI_OK; }
 const dialog::Backend dialog_backend{confirm,show,nullptr,nullptr,nullptr};
-void answer(bool yes) { dialog::emit_answered_to(framework,{asked,yes,yes?0u:1u}); }
+void answer(bool yes) {
+ const bool saving=prompt.rfind("Save ",0)==0;
+ dialog::emit_answered_to(framework,{asked,yes,yes?0u:1u});
+ if(saving&&!page_alone&&listener)listener(0);
+}
 bool request(uint32_t index) { UiModListRow row{}; assert(callbacks.row(index,row)); return row.requested; }
 void select(const char* control) { const auto* screen=ui_active_screen(); assert(screen); ui::emit_activated_to(framework,{{screen->id},control}); }
 void step() { for(auto fn:steps) fn(); }
@@ -138,14 +143,23 @@ TSUCHI_Result save_mod_choices(const ModChoices& choices) {
  assert(next.load(a.get(),o.get())==TSUCHI_OK); swap_mod_choices(next); next.clear(); a.clear();o.clear();return TSUCHI_OK;
 }
 TSUCHI_Result ui_mod_settings(ModRecord& record,TSUCHI_Screen* out) { ++settings_calls; auto result=ui::table.create(framework,record.id,out); if(result==TSUCHI_OK) result=ui::table.add_text(framework,*out,"test","Test","value");return result; }
-void ui_mod_list_native_callbacks(const UiModListNativeCallbacks* value) { callbacks=*value; }
+void ui_mod_list_native_callbacks(const UiModListNativeCallbacks* value) {
+ callbacks=*value; parent_action=callbacks.action;
+ callbacks.action=[](uint64_t host,uint32_t index,uint32_t action,bool requested) {
+  const bool result=parent_action(host,index,action,requested);
+  // Model the following engine input tick after a regular Options Back.
+  // The standalone-page checks drive their own explicit ticks and retries.
+  if(action==5&&!page_alone&&listener)listener(0);
+  return result;
+ };
+}
 void ui_mod_list_native_start(TSUCHI_Mod*) {}
 void ui_menu_dispatcher(bool(*fn)(uint64_t,uint32_t,bool&,bool&)) { dispatcher=fn; }
 void ui_button_listener(void(*fn)(uint64_t)) { listener=fn; }
 bool ui_menu_action(uint64_t host,uint32_t action) {
  ++menu_calls;if(reject_menu_action)return false;bool handled=false,result=false;
  const bool known=dispatcher(host,action,handled,result);
- if(!handled&&action==5){++stock_backs;return true;}
+ if(!handled&&action==5){++stock_backs;if(!page_alone)active=0;return true;}
  return known&&handled&&result;
 }
 bool ui_mod_page_alone() { return page_alone; }
@@ -314,13 +328,18 @@ int main(int argc,char** argv) {
  callbacks.action(100,0,5,false);assert(prompt=="Save changes for the next restart?");answer(false);assert(!active&&saves==0);
  assert(ui_mod_list_native_hold(100)==TSUCHI_OK);assert(request(0)&&request(1));
  callbacks.action(100,0,2,false);answer(true);assert(!request(0)&&!request(1));
- UiModListRow row{};assert(callbacks.row(0,row)&&!strcmp(row.status,"Restart"));
+ UiModListRow row{};assert(callbacks.row(0,row)&&!strcmp(row.status,"Restart")&&!strcmp(row.state_label,"Restart"));
  // A failed save keeps the draft open; a saved one leaves.
  callbacks.action(100,0,5,false);save_result=TSUCHI_NOT_READY;answer(true);assert(saves==1&&mod_choices().enabled("base")&&active);
  callbacks.action(100,0,5,false);save_result=TSUCHI_OK;answer(true);assert(saves==2&&!mod_choices().enabled("base")&&!mod_choices().enabled("leaf")&&!active);
  assert(ui_mod_list_native_hold(100)==TSUCHI_OK);assert(callbacks.row(0,row)&&!strcmp(row.status,"Restart"));assert(!callbacks.row(3,row));
  // B without a draft just leaves.
  assert(callbacks.action(100,0,5,false)&&!active); assert(ui_mod_list_native_hold(100)==TSUCHI_OK);
+ // A mod draft must still be reviewed when Back comes from Video or Game.
+ callbacks.action(100,2,2,false);answer(true);assert(!request(2));active=0;
+ bool back_handled=false,back_result=false;
+ assert(dispatcher(100,5,back_handled,back_result)&&back_handled&&back_result&&prompt=="Save changes for the next restart?");
+ answer(false);assert(!active&&saves==2);assert(ui_mod_list_native_hold(100)==TSUCHI_OK&&request(2));
  callbacks.action(100,2,102,true);assert(ui_active_screen());
  const auto* details=ui_active_screen();for(uint32_t i=0;i<details->controls.count;++i)assert(strcmp(details->controls[i].id,"settings")&&strcmp(details->controls[i].id,"back"));
  select("earlier");assert(!ui_active_screen()&&focus==1);
@@ -489,6 +508,7 @@ int main(int argc,char** argv) {
  callbacks.host_ready(107);assert(message.find("Load failed")!=std::string::npos&&message.find("menu full")!=std::string::npos&&message.find("manager")!=std::string::npos);
  cheat_menu_checks();
  callbacks.host_lost(107);installed_page_checks(150);
+ downloaded_catalogue_checks(155);
  mods_page_checks(160);
  mod_stop(framework);assert(!callbacks.row(0,row));external.clear();external_load_result=TSUCHI_OK;
  diagnostic_samples();

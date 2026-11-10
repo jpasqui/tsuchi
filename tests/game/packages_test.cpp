@@ -21,6 +21,8 @@ bool fail_receipt = false, refuse_queue = false;
 TSUCHI_Result install_result = TSUCHI_OK; // what the manifest check says
 std::vector<std::string> checked_incoming, checked_existing, checked_replaced;
 std::vector<std::string> mounted, mounted_folders;
+std::set<std::string> retained_mounts;
+std::string described_id, described_manifest;
 tsuchi::https::HttpsJob* queued = nullptr;
 TSUCHI_Result (*listing)(tsuchi::Texts&) = nullptr;
 std::vector<void (*)()> steps;
@@ -66,7 +68,11 @@ int64_t fixed_clock() { return 1700000000; }
 } // namespace
 
 namespace tsuchi {
-bool container_mounted_for(const char*) { return false; }
+TSUCHI_Result describe_mod_manifest(ModRecord& record, const char* id, const char* text, uint64_t bytes) {
+    described_id = id; described_manifest.assign(text, size_t(bytes));
+    memcpy(record.id, id, strlen(id) + 1); return TSUCHI_OK;
+}
+bool container_mounted_for(const char* id) { return retained_mounts.count(id) != 0; }
 bool container_mounted_from(const char* prefix) {
     for (const auto& folder : mounted_folders) if (folder.rfind(prefix, 0) == 0) return true;
     return false;
@@ -102,6 +108,13 @@ uint64_t module_containing(uint64_t) { return 0; }
 uint64_t module_symbol(uint64_t, const char*) { return 0; }
 bool files_known() { return true; }
 TSUCHI_Result file_size(const char* p, uint64_t& n) { auto it = disk.find(p); if (it == disk.end()) return TSUCHI_NOT_FOUND; n = it->second.size(); return TSUCHI_OK; }
+TSUCHI_Result read_whole_file(const char* p, char*& out, uint64_t& bytes) {
+    assert(depth);
+    if (file_size(p, bytes) != TSUCHI_OK) return TSUCHI_NOT_FOUND;
+    out = static_cast<char*>(allocate(bytes ? size_t(bytes) : 1));
+    if (!out) return TSUCHI_NO_MEMORY;
+    memcpy(out, disk[p].data(), size_t(bytes)); return TSUCHI_OK;
+}
 TSUCHI_Result read_file_part(const char* p, uint64_t off, void* out, uint64_t cap, uint64_t& n) {
     uint64_t size = 0;
     if (file_size(p, size) != TSUCHI_OK) return TSUCHI_NOT_FOUND;
@@ -349,6 +362,34 @@ void removes() {
     assert(start_listing().empty() && !package_files(b.c_str()) && package_folders() == 0);
     // A reinstall after a removal is a fresh package.
     assert(run(zip("mods")) == TSUCHI_OK && count() == 1 && installed_package(0)->revision == 0);
+    // A live mounted asset has no startup ModRecord yet. Mark it removed, but
+    // retain the container files until the game exits and releases its mount.
+    reset(); add_capable("the.downloader");
+    assert(run(zip("cooked"), {.source = "gamebanana", .key = "live"}) == TSUCHI_OK && count() == 1);
+    const std::string live_folder = installed_package(0)->folder, live_id = installed_package(0)->mods[0];
+    retained_mounts.insert(live_id);
+    assert(service.remove(downloader, 0) == TSUCHI_OK && count() == 0 && package_files(live_folder.c_str()));
+    assert(disk.count(root_of(live_folder.c_str()) + "/removed"));
+    retained_mounts.clear(); cleaned = false;
+    assert(start_listing().empty() && !package_files(live_folder.c_str()));
+}
+
+void descriptions_follow_publication() {
+    reset(); add_capable("the.downloader");
+    const uint64_t before = installed_packages_revision();
+    assert(run(zip("mods")) == TSUCHI_OK && installed_packages_revision() > before);
+    const auto& receipt = *installed_package(0);
+    ModRecord description{};
+    const auto records_before = mod_count();
+    assert(installed_mod_description(0, 0, description) == TSUCHI_OK);
+    assert(described_id == receipt.mods[0] && described_manifest.find("author.mod") != std::string::npos);
+    assert(!description.context && mod_count() == records_before);
+    assert(installed_mod_description(0, receipt.count, description) == TSUCHI_NOT_FOUND);
+    const std::string manifest = root_of(receipt.folder) + "/mods/" + receipt.mods[0] + "/mod.json";
+    disk[manifest] = std::string(1024 * 1024 + 1, 'x');
+    assert(installed_mod_description(0, 0, description) == TSUCHI_CAPACITY);
+    const uint64_t published = installed_packages_revision();
+    assert(service.remove(downloader, 0) == TSUCHI_OK && installed_packages_revision() > published);
 }
 
 void start_cleans() {
@@ -478,6 +519,7 @@ int main(int argc, char** argv) {
     std::printf("updates_in_use_wait_for_start\n"); std::fflush(stdout); updates_in_use_wait_for_start();
     std::printf("replacing_must_match\n"); std::fflush(stdout); replacing_must_match();
     std::printf("removes\n"); std::fflush(stdout); removes();
+    descriptions_follow_publication();
     std::printf("start_cleans\n"); std::fflush(stdout); start_cleans();
     std::printf("too_many_lists_none\n"); std::fflush(stdout); too_many_lists_none();
     std::printf("cooked_ids_come_from_source_and_key\n"); std::fflush(stdout); cooked_ids_come_from_source_and_key();

@@ -4,6 +4,7 @@
 #include "ui_native.h"
 #include "ui_feedback.h"
 #include "ui_label_layout.h"
+#include "ui_native_classes.h"
 #include "game.h"
 #include "holds.h"
 #include "hooks.h"
@@ -20,7 +21,7 @@ namespace {
 namespace t = game::table;
 struct Array { uint64_t data; int32_t count, capacity; };
 struct Row {
-    char id[kModIdBytes], name[641], status[641];
+    char id[kModIdBytes], name[641], status[641], state_label[32];
     uint64_t widget, selector;
     bool requested, has_settings, button;
     UiLabelFitStamp fit;
@@ -56,6 +57,8 @@ using Refresh = decltype(t::code_site::ui_settings_refresh)::Function;
 void* next_refresh = nullptr;
 using Reopen = decltype(t::code_site::ui_settings_reopen)::Function;
 void* next_reopen = nullptr;
+void startup_trace(const char* what, uint64_t began);
+uint32_t list_timing_reports = 0;
 game::ClassRef category_class{t::name::ui_mod_list_category_class};
 game::ClassRef row_class{t::name::ui_mod_list_row_class};
 game::ClassRef label_class{t::name::ui_mod_list_label_class};
@@ -78,10 +81,21 @@ bool copy(char* out, size_t room, const char* text) {
     memcpy(out, text, length + 1); return true;
 }
 bool caption(const Row& row, char out[641]) {
-    const size_t name = strlen(row.name), status = strlen(row.status);
-    if (!status) return copy(out, 641, row.name);
-    if (name + 3 + status > 640) return false;
-    memcpy(out, row.name, name); memcpy(out + name, " - ", 3); memcpy(out + name + 3, row.status, status + 1); return true;
+    // Keep a normal-sized label; the complete name remains in Details.
+    // Count UTF-8 code points so truncation never splits a character.
+    size_t at = 0; uint32_t characters = 0;
+    while (row.name[at] && characters < 32) {
+        ++at;
+        while ((uint8_t(row.name[at]) & 0xc0) == 0x80) ++at;
+        ++characters;
+    }
+    memcpy(out, row.name, at);
+    if (row.name[at]) { memcpy(out + at, "...", 4); }
+    else out[at] = 0;
+    return true;
+}
+const char* switch_label(const Row& row, bool on) {
+    return on == row.requested && row.state_label[0] ? row.state_label : on ? "On" : "Off";
 }
 void finish(State* state) {
     if (--state->calls || !state->retired) return;
@@ -136,7 +150,7 @@ void fit_labels(State& state) {
     if (!current()) return;
     ui_fit_owned_label(state.heading_fit, live(state.scroll), child(live(state.category), t::ui_mod_list_category::title), true, current);
     for (uint32_t i = 0; i < state.rows.count && current(); ++i)
-        ui_fit_owned_label(state.rows[i].fit, live(state.scroll), child(live(state.rows[i].widget), t::ui_mod_list_row::title), false, current);
+        ui_fit_owned_label(state.rows[i].fit, live(state.scroll), child(live(state.rows[i].widget), t::ui_mod_list_row::title), false, current, true);
 }
 void update_footer(State& state) {
     if (!usable(state)) return;
@@ -181,6 +195,7 @@ uint64_t named(uint64_t widget, const char* name) {
     for (uint32_t i = 0; i < count; ++i) {
         const uint64_t current = pending[i];
         if (game::name_is(game::name_of(current), name)) return current;
+        ui_native_seed_class(panel_base_class, game::class_of(current));
         if (!game::is_a(current, panel_base_class)) continue;
         Array slots{};
         if (!game::read(current + t::ui_panel::slots, slots) || slots.count < 0 ||
@@ -218,6 +233,21 @@ bool choice(uint64_t widget, const char* text) {
     game::EngineText text_value = t::fn::text_from_string(string);
     t::fn::ui_mod_list_append_choice(reinterpret_cast<void*>(widget), &text_value);
     game::drop_shared(text_value.counter()); return true;
+}
+bool replace_choice(uint64_t selector, uint32_t index, const char* text, game::CallGuard guard) {
+    const Array choices = game::read_or<Array>(selector + t::ui_mod_list_selector::choices);
+    if (choices.count != 2 || choices.capacity < choices.count || index >= 2) return false;
+    const uint64_t at = choices.data + uint64_t(index) * sizeof(game::EngineText);
+    game::EngineText before{};
+    char16_t units[33]; size_t count = 0;
+    if (!game::read(at, before) || !game::utf8_to_units(text, units, 32, count)) return false;
+    units[count] = 0;
+    alignas(8) uint8_t string[t::array::size]{};
+    const uint64_t data = reinterpret_cast<uint64_t>(units); const int32_t length = int32_t(count + 1);
+    memcpy(string + t::array::data, &data, 8); memcpy(string + t::array::count, &length, 4); memcpy(string + t::array::max, &length, 4);
+    game::EngineText made = t::fn::text_from_string(string);
+    if (!guard.permits() || !game::write(at, made)) { game::drop_shared(made.counter()); return false; }
+    game::drop_shared(before.counter()); return true;
 }
 bool set_choice(uint64_t widget, uint64_t selector, bool requested, game::CallGuard guard = {}) {
     const auto valid = game::method(selector, t::ui_mod_list_selector::valid);
@@ -282,6 +312,7 @@ void cleanup(State& state, HoldEnd why) {
     cleanup_source(state);
 }
 TSUCHI_Result apply(const Hold& hold, Kept& kept, const HoldNothing&, bool fresh) {
+    const uint64_t began = cost_now();
     if (!fresh) return TSUCHI_OK;
     const uint64_t host = live(hold.object);
     const auto guard = hold_call_guard(hold);
@@ -321,17 +352,21 @@ TSUCHI_Result apply(const Hold& hold, Kept& kept, const HoldNothing&, bool fresh
         row.requested = input.requested && !input.button;   // an entry's one choice is its label
         row.has_settings = input.has_settings;
         row.button = input.button;
+        if (okay) okay = copy(row.state_label, sizeof row.state_label, input.state_label ? input.state_label : "");
         if (okay) okay = state->rows.add(row) != nullptr;
     }
     if (okay && guard.permits()) {
         problem = "Mods menu: category creation unavailable";
         const uint64_t kind = child(host, t::ui_mod_list_menu::category_class);
+        ui_native_seed_class(category_class, kind);
         const uint64_t category = kind ? reinterpret_cast<uint64_t>(t::fn::ui_create_widget(reinterpret_cast<void*>(host), reinterpret_cast<void*>(kind), nullptr)) : 0;
         state->category = game::to_handle(category);
         okay = guard.permits() && category && game::is_a(category, category_class) && pin(category, hold.object, state->scope);
         if (okay) {
             problem = "Mods menu: category children unavailable";
             const uint64_t title = named(category, t::name::ui_mod_list_title_child), panel = named(category, t::name::ui_mod_list_panel_child);
+            ui_native_seed_class(label_class, game::class_of(title));
+            ui_native_seed_class(panel_class, game::class_of(panel));
             okay = title && panel && game::is_a(title, label_class) && game::is_a(panel, panel_class) &&
                 game::write<uint64_t>(category + t::ui_mod_list_category::title, title) &&
                 game::write<uint64_t>(category + t::ui_mod_list_category::panel, panel) && label(title, "Mods") && guard.permits();
@@ -346,6 +381,7 @@ TSUCHI_Result apply(const Hold& hold, Kept& kept, const HoldNothing&, bool fresh
                 if (!okay) result = TSUCHI_NO_MEMORY;
             }
             const uint64_t row_kind = child(category, t::ui_mod_list_category::row_class);
+            ui_native_seed_class(row_class, row_kind);
             for (uint32_t i = 0; i < count && okay && guard.permits(); ++i) {
                 problem = "Mods menu: row creation unavailable";
                 const uint64_t widget = row_kind ? reinterpret_cast<uint64_t>(t::fn::ui_create_widget(reinterpret_cast<void*>(host), reinterpret_cast<void*>(row_kind), nullptr)) : 0;
@@ -359,7 +395,7 @@ TSUCHI_Result apply(const Hold& hold, Kept& kept, const HoldNothing&, bool fresh
                 // A mod's entry shows its label in the box, as its one choice, and nothing beside it: a button.
                 char text[641];
                 okay = guard.permits() && title_widget && selector && caption(row, text) && label(title_widget, row.button ? "" : text) && guard.permits() &&
-                    (row.button ? choice(widget, row.name) : choice(widget, "Off") && guard.permits() && choice(widget, "On")) && guard.permits() &&
+                    (row.button ? choice(widget, row.name) : choice(widget, switch_label(row, false)) && guard.permits() && choice(widget, switch_label(row, true))) && guard.permits() &&
                     game::write<uint8_t>(widget + t::ui_mod_list_row::kind, uint8_t(t::constant::ui_mod_list_item)) &&
                     game::write<uint8_t>(widget + t::ui_mod_list_row::parent, 0) && game::write<int32_t>(widget + t::ui_mod_list_row::count, -1) &&
                     game::write<uint8_t>(widget + t::ui_mod_list_row::enabled, 1) && game::write<uint8_t>(selector + t::ui_mod_list_selector::wrap, 0) &&
@@ -386,7 +422,11 @@ TSUCHI_Result apply(const Hold& hold, Kept& kept, const HoldNothing&, bool fresh
             }
         }
     }
-    if (okay && guard.permits()) { tab_highlight(hold.object, true); finish(state); return guard.permits() ? TSUCHI_OK : TSUCHI_NOT_READY; }
+    if (okay && guard.permits()) {
+        tab_highlight(hold.object, true);
+        if (list_timing_reports < 8) { ++list_timing_reports; startup_trace("Mods list ready", began); }
+        finish(state); return guard.permits() ? TSUCHI_OK : TSUCHI_NOT_READY;
+    }
     // An ended apply is restored once by HoldTable after this call returns.
     if (guard.permits()) { cleanup(*state, HoldEnd::released); kept.state = nullptr; mod_note(kFrameworkLogId, problem); }
     finish(state); return result;
@@ -1078,7 +1118,8 @@ TSUCHI_Result ui_mod_list_native_sync(uint64_t host) {
         UiModListRow input{};
         if (!callbacks.row || !callbacks.row(i, input) || !usable(*state) || !input.id || strcmp(input.id, state->rows[i].id)) return TSUCHI_NOT_READY;
         Row row = state->rows[i];
-        if (!copy(row.name, sizeof row.name, input.name) || !copy(row.status, sizeof row.status, input.status ? input.status : "")) return TSUCHI_INVALID;
+        if (!copy(row.name, sizeof row.name, input.name) || !copy(row.status, sizeof row.status, input.status ? input.status : "") ||
+            !copy(row.state_label, sizeof row.state_label, input.state_label ? input.state_label : "")) return TSUCHI_INVALID;
         row.requested = input.requested && !input.button;
         row.has_settings = input.has_settings;
         row.button = input.button;
@@ -1089,7 +1130,11 @@ TSUCHI_Result ui_mod_list_native_sync(uint64_t host) {
             char text[641]; const uint64_t title = child(widget, t::ui_mod_list_row::title);
             if (!caption(row, text) || !label(title, text) || !usable(*state)) return TSUCHI_NOT_READY;
         }
-        if (game::read_or<uint32_t>(selector + t::ui_mod_list_selector::choice) != uint32_t(row.requested)) {
+        const bool relabel = !row.button && (row.requested != state->rows[i].requested || strcmp(row.state_label, state->rows[i].state_label));
+        const game::CallGuard guard{[](void* pointer) { return usable(*static_cast<State*>(pointer)); }, state};
+        if (relabel && (!replace_choice(selector, 0, switch_label(row, false), guard) || !usable(*state) ||
+                        !replace_choice(selector, 1, switch_label(row, true), guard) || !usable(*state))) return TSUCHI_NOT_READY;
+        if (relabel || game::read_or<uint32_t>(selector + t::ui_mod_list_selector::choice) != uint32_t(row.requested)) {
             if (!set_choice(widget, selector, row.requested, {[](void* pointer) { return usable(*static_cast<State*>(pointer)); }, state}) || !usable(*state)) return TSUCHI_NOT_READY;
         }
         state->rows[i] = row;

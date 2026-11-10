@@ -126,6 +126,10 @@ uint32_t mod_count();
 // By ID order.
 ModRecord* mod_at(uint32_t index);
 ModRecord* find_mod(const char* id);
+// Read-only catalogue metadata. These never start code or prepare declarations;
+// the caller keeps the record stable and releases it after its UI references end.
+TSUCHI_Result describe_mod_manifest(ModRecord& out, const char* id, const char* text, uint64_t bytes);
+void forget_mod_description(ModRecord& record);
 
 // ---- Restarts, and the development folder ----------------------------------------------------------------
 

@@ -1338,6 +1338,12 @@ void forget_mods() {
 }
 
 uint32_t mod_count() { return records.count; }
+TSUCHI_Result describe_mod_manifest(ModRecord& out, const char* id, const char* text, uint64_t bytes) {
+    if (out.context || out.manifest || !id || !valid_mod_id(id) || !text || bytes > SIZE_MAX) return TSUCHI_INVALID;
+    memcpy(out.id, id, strlen(id) + 1);
+    return read_manifest(out, text, size_t(bytes)) ? TSUCHI_OK : TSUCHI_INVALID;
+}
+void forget_mod_description(ModRecord& record) { if (!record.context) forget(record); }
 ModRecord* mod_at(uint32_t index) { return index < records.count ? &records[index] : nullptr; }
 ModRecord* find_mod(const char* id) {
     for (uint32_t i = 0; i < records.count; ++i)

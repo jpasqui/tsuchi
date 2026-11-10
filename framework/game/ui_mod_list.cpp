@@ -15,6 +15,7 @@
 #include "mods.h"
 #include "cost_clock.h"
 #include "packages.h"
+#include "containers.h"
 #include "ui_cheats.h"
 #include "ui_mod_page.h"
 #include "actors.h"
@@ -52,6 +53,9 @@ void tab_input_trace(const TabInputTrace& trace) {
 ModManager manager;
 struct Row { ModRecord* native; ExternalModEntry* external; };
 List<Row> rows;
+List<ModRecord*> downloaded;
+uint64_t catalogue_attempt = 0;
+bool downloaded_overflow = false;
 uint32_t native_rows = 0;
 TSUCHI_Screen detail{}, settings{};
 TSUCHI_Dialog question{};
@@ -97,6 +101,42 @@ bool dialog_up() {
     return screens && game::read_or<uint64_t>(screens + t::ui_manager::open_dialog) != 0;
 }
 bool live() { return frontend_mod && mod_usable(frontend_mod) && current_host; }
+void forget_downloaded(List<ModRecord*>& descriptions) {
+    for (uint32_t i = 0; i < descriptions.count; ++i) {
+        forget_mod_description(*descriptions[i]); release(descriptions[i]);
+    }
+    descriptions.clear();
+}
+bool pending_download(const ModRecord& record) { return find_mod(record.id) != &record; }
+ModRecord* described_mod(const char* id) {
+    if (auto* record = find_mod(id)) return record;
+    for (uint32_t i = 0; i < downloaded.count; ++i) if (!strcmp(downloaded[i]->id, id)) return downloaded[i];
+    return nullptr;
+}
+bool refresh_downloaded() {
+    catalogue_attempt = installed_packages_revision();
+    List<ModRecord*> staged;
+    bool ok = true;
+    for (uint32_t p = 0; ok && p < installed_package_count(); ++p) {
+        const auto* package = installed_package(p);
+        for (uint32_t m = 0; package && ok && m < package->count; ++m) {
+            if (find_mod(package->mods[m])) continue;
+            auto* record = static_cast<ModRecord*>(allocate(sizeof(ModRecord)));
+            if (!record) { ok = false; break; }
+            *record = ModRecord{};
+            const auto read = installed_mod_description(p, m, *record);
+            if ((read != TSUCHI_OK && read != TSUCHI_INVALID) || !record->id[0] || !staged.add(record)) {
+                forget_mod_description(*record); release(record); ok = false;
+            }
+        }
+    }
+    if (!ok || manager.additional(staged.items, staged.count) != TSUCHI_OK) { forget_downloaded(staged); return false; }
+    // No running loader record moves. Retire old descriptions only after the
+    // manager has switched to the new catalogue and no detail form is open.
+    rows.count = 0;
+    forget_downloaded(downloaded); downloaded = staged;
+    return true;
+}
 // Plain labels cannot smuggle stock rich-text markup. Keep the stored data exact.
 void plain(const char* text, char out[641], uint32_t limit = 637) {
     uint32_t n = 0;
@@ -110,7 +150,7 @@ void plain(const char* text, char out[641], uint32_t limit = 637) {
     out[n] = 0;
 }
 bool ordering() {
-    rows.count = 0; external_overflow = false;
+    rows.count = 0; external_overflow = downloaded_overflow = false;
     for (uint32_t i = 0; i < mod_count(); ++i) if (!rows.add({mod_at(i), nullptr})) return false;
     for (uint32_t i = 1; i < rows.count; ++i) {
         const auto row = rows[i]; uint32_t j = i;
@@ -121,7 +161,6 @@ bool ordering() {
         }
         rows[j] = row;
     }
-    native_rows = rows.count;
     // The entries of mods that stopped or let go of theirs leave here, between two pages. The ones that
     // stay have their rows before the external packages are counted in: a full list drops packages, not entries.
     for (uint32_t i = 0; i < entries.count;)
@@ -131,9 +170,24 @@ bool ordering() {
         } else ++i;
     shown_entries = 0;
     while (shown_entries < entries.count && rows.count + shown_entries < game::table::constant::ui_mod_list_rows_limit) ++shown_entries;
+    for (uint32_t i = 0; i < downloaded.count; ++i) {
+        if (rows.count + shown_entries < game::table::constant::ui_mod_list_rows_limit) {
+            if (!rows.add({downloaded[i], nullptr})) return false;
+        } else downloaded_overflow = true;
+    }
+    for (uint32_t i = 1; i < rows.count; ++i) {
+        const auto value = rows[i]; uint32_t j = i;
+        const uint32_t rank = manager.draft().rank(value.native->id);
+        while (j && (manager.draft().rank(rows[j - 1].native->id) > rank ||
+            (manager.draft().rank(rows[j - 1].native->id) == rank && strcmp(rows[j - 1].native->id, value.native->id) > 0))) {
+            rows[j] = rows[j - 1]; --j;
+        }
+        rows[j] = value;
+    }
+    native_rows = rows.count;
     for (uint32_t i = 0; i < external_mods().count(); ++i) {
         auto* record = external_mods().at(i);
-        if (find_mod(record->id)) {
+        if (described_mod(record->id)) {
             record->manageable = false;
             record->requested = record->saved = record->observed == ExternalModState::enabled;
             if (!record->problem.set("A Tsuchi mod uses this ID. Import this external package with another ID.")) return false;
@@ -146,6 +200,11 @@ bool ordering() {
 }
 const char* description(const ModRecord& record) {
     if (!record.manifest_valid) return "Blocked";
+    if (pending_download(record)) {
+        const bool enabled = manager.draft().enabled(record.id);
+        if (container_mounted_for(record.id)) return enabled ? "Active for new loads" : "Restart to disable";
+        return enabled ? "Restart to load" : "Disabled";
+    }
     if (manager.draft().enabled(record.id) != mod_choices().enabled(record.id) ||
         ((!manager.draft().enabled(record.id) && (record.state == ModState::running || record.state == ModState::ready)) ||
          (manager.draft().enabled(record.id) && record.state == ModState::disabled))) return "Restart";
@@ -187,11 +246,17 @@ bool row(uint32_t index, UiModListRow& out) {
         if (rows[index].native) {
             auto& record = *rows[index].native; plain(record.name.get()[0] ? record.name.get() : record.id, caption, 300);
             plain(description(record), status, 300);
-            out = {record.id, caption, manager.draft().enabled(record.id), status, has_visible_settings(record.settings)};
+            out = {record.id, caption, manager.draft().enabled(record.id), status,
+                   !pending_download(record) && has_visible_settings(record.settings)};
+            out.state_label = !strcmp(status, "Running") || !strcmp(status, "Active for new loads") ? "On" :
+                !strcmp(status, "Disabled") || !strcmp(status, "Stopped") ? "Off" :
+                !memcmp(status, "Restart", 7) || !strcmp(status, "Ready") ? "Restart" : "Blocked";
         } else {
             auto& record = *rows[index].external; plain(record.name.get()[0] ? record.name.get() : record.id, caption, 300);
             plain(external_description(record), status, 300);
             out = {record.id, caption, record.manageable && record.requested, status, false};
+            out.state_label = !strcmp(status, "Files enabled") ? "On" : !strcmp(status, "Files disabled") ? "Off" :
+                !strcmp(status, "Apply with manager") ? "Pending" : "Blocked";
         }
     } else return false;
     return true;
@@ -204,8 +269,8 @@ void sync() { if (live() && ui_mod_list_native_active(current_host)) ui_mod_list
 // Leaves the list: for the Game tab in Settings, and out of the page when it is on its own. There the game's
 // own Back closes it, sent from the next input step that the menu takes it in.
 void leave(uint64_t host) {
-    if (ui_mod_page_alone()) leaving = true;
-    else ui_mod_list_native_release(host);
+    (void)host;
+    leaving = true;
 }
 void ask(Question kind, const char* text) {
     if (!live() || asking != Question::none) return;
@@ -240,6 +305,10 @@ void show_detail(ModRecord& record) {
     plain(description(record), status);
     if (result == TSUCHI_OK) result = ui::table.add_text(frontend_mod, screen, "id", "ID", record.id);
     if (result == TSUCHI_OK) result = ui::table.add_text(frontend_mod, screen, "status", "Status", status);
+    if (result == TSUCHI_OK && pending_download(record))
+        result = ui::table.add_text(frontend_mod, screen, "loading", "Loading",
+            container_mounted_for(record.id) ? "Reload affected characters or areas. Activation changes need a game restart." :
+                                              "Restart Pikmin 4 to load this mod and its settings.");
     if (result == TSUCHI_OK && record.problem.get()[0]) {
         plain(record.problem.get(), status); result = ui::table.add_text(frontend_mod, screen, "reason", "Reason", status);
     }
@@ -304,7 +373,7 @@ void show_external_detail(const ExternalModEntry& record) {
 void activated(void*, const TSUCHI_UiActivated* event) {
     if (live() && cheats.showing() && event->screen.id == cheats.screen().id) { cheats.activate(*event); return; }
     if (!live() || event->screen.id != detail.id || detail_external) return;
-    auto* record = find_mod(selected); if (!record) { close_detail(); return; }
+    auto* record = described_mod(selected); if (!record) { close_detail(); return; }
     if (!strcmp(event->control, "cheats")) {
         char id[kModIdBytes]; memcpy(id, record->id, strlen(record->id) + 1);
         close_detail();
@@ -438,7 +507,7 @@ bool selected_action(uint64_t host, uint32_t index, uint32_t action, bool reques
         const auto result = manager.propose(record.id, requested);
         if (result == TSUCHI_OK) { if (manager.pending()) review(); else sync(); }
         else note(manager.problem()[0] ? manager.problem() : "This mod cannot be enabled.");
-    } else if (action == 4 && has_visible_settings(record.settings)) {
+    } else if (action == 4 && !pending_download(record) && has_visible_settings(record.settings)) {
         TSUCHI_Screen screen{};
         if (ui_mod_settings(record, &screen) == TSUCHI_OK) {
             if (live() && ui::table.hold_open(frontend_mod, screen) == TSUCHI_OK) settings = screen;
@@ -453,6 +522,7 @@ TSUCHI_Result apply(const Hold& hold, HoldNothing&, const HoldNothing&, bool fre
     if (result != TSUCHI_OK) return result;
     const auto external_result = load_external_mods();
     current_host = hold.object; previous_buttons = UINT64_MAX;
+    if (!refresh_downloaded()) note("Downloaded mods could not be refreshed; reopen Mods.");
     if (!ordering()) { current_host = 0; manager.cleanup(); return TSUCHI_NO_MEMORY; }
     ++tab_input_session; tab_session_traces = 0;
     if (external_mods().unread()) note("Saved requests unread; reopen Mods.");
@@ -460,6 +530,7 @@ TSUCHI_Result apply(const Hold& hold, HoldNothing&, const HoldNothing&, bool fre
         "Load failed; menu full. Use manager." :
         "External data could not be loaded.");
     else if (external_overflow) note("Menu full; use computer manager.");
+    else if (downloaded_overflow) note("Menu full; some downloaded mods are not shown.");
     return TSUCHI_OK;
 }
 bool keep(const Hold&, HoldNothing&) { return live(); }
@@ -467,7 +538,7 @@ void restore(const Hold& hold, HoldNothing&, HoldEnd) {
     if (current_host != hold.object) return;
     current_host = 0; asking = Question::none; question = {}; previous_buttons = UINT64_MAX;
     close_detail(); cheats.close(); if (settings.id && mod_usable(frontend_mod)) ui::table.destroy(frontend_mod, settings);
-    settings = {}; selected[0] = 0; rows.clear(); native_rows = 0; manager.cleanup(); external_mods().discard();
+    settings = {}; selected[0] = 0; rows.clear(); native_rows = 0; manager.cleanup(); forget_downloaded(downloaded); catalogue_attempt = 0; external_mods().discard();
     shown_entries = 0; leaving = false;
 }
 Holds<HoldNothing, HoldNothing, apply, keep, restore> sessions{"ui.mods", HoldOn::object, true};
@@ -482,13 +553,21 @@ void lost(uint64_t host) { if (current_host == host) sessions.release(frontend_m
 bool dispatch(uint64_t host, uint32_t action, bool& handled, bool& result) {
     if (input_holder || input_quiet) { handled = true; result = true; return true; }   // the mod's page has the presses
     if (!live() || host != current_host || asking != Question::none) return false;
-    if (leaving && action == 5) return false;   // the game's own Back, which closes the page
+    if (leaving && action == 5) {
+        // Restore native settings before its Save and Close, within this same
+        // input dispatch so no intermediate Game-tab picture is shown.
+        if (!ui_mod_page_alone()) ui_mod_list_native_release(host);
+        return false;
+    }
     if (action == 100 || action == 101) {
         // On its own the page has no other tab to go to.
         handled = true; result = ui_mod_page_alone() || ui_mod_list_native_cycle(host, action == 101) == TSUCHI_OK;
         return true;
     }
     if (ui_active_screen()) return false;
+    if (action == 5 && !ui_mod_list_native_active(host) && (manager.changed() || external_mods().changed())) {
+        handled = true; result = selected_action(host, 0, action, false); return true;
+    }
     return ui_mod_list_native_dispatch(host, action, handled, result);
 }
 void buttons(uint64_t held) {
@@ -575,6 +654,13 @@ TSUCHI_Result release_entry(TSUCHI_Mod* mod, TSUCHI_Menu menu, const char* id) {
 // Each frame: the cheat screen, and the entries chosen since the last one.
 void page_step() {
     cheats_step();
+    if (live() && !input_holder && !input_quiet && !screen_up() && asking == Question::none && !manager.pending() &&
+        ui_mod_list_native_active(current_host) && catalogue_attempt != installed_packages_revision()) {
+        if (refresh_downloaded() && ordering()) {
+            ui_mod_list_native_release(current_host); ui_mod_list_native_hold(current_host);
+            if (downloaded_overflow) note("Menu full; some downloaded mods are not shown.");
+        } else note("Downloaded mods could not be refreshed; reopen Mods.");
+    }
     if (!chosen.count) return;
     Chosen picks[4]; uint32_t count = 0;
     for (uint32_t i = 0; i < chosen.count && count < 4; ++i) picks[count++] = chosen[i];

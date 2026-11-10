@@ -811,8 +811,12 @@ int main() {
     const unsigned boundary_arrows = arrow_calls, boundary_focus = focus_calls;
     assert(screen.controls[0].selected == 1 && intercepted(reinterpret_cast<void*>(host), 3));
     assert(screen.controls[0].selected == 1 && arrow_calls == boundary_arrows && focus_calls == boundary_focus);
+    assert(visibility[field(active_selector(0), t::ui_mod_list_selector::left)] == t::constant::widget_shown);
+    assert(visibility[field(active_selector(0), t::ui_mod_list_selector::right)] == t::constant::widget_hidden);
     assert(intercepted(reinterpret_cast<void*>(host), 2) && screen.controls[0].selected == 0);
     assert(fake::get<uint32_t>(active_selector(0) + t::ui_mod_list_selector::choice) == 0 && arrow_calls == boundary_arrows + 1 && !arrow_increment);
+    assert(visibility[field(active_selector(0), t::ui_mod_list_selector::left)] == t::constant::widget_hidden);
+    assert(visibility[field(active_selector(0), t::ui_mod_list_selector::right)] == t::constant::widget_shown);
     const unsigned synchronized_redraws = redraw_calls, synchronized_arrows = arrow_calls;
     assert(renderer->update(active_view, screen) && redraw_calls == synchronized_redraws && arrow_calls == synchronized_arrows);
     const unsigned before_nested_sync = screen_sync_calls, before_busy_skip = screen_sync_busy_skips;
@@ -1174,6 +1178,16 @@ int main() {
     long_choices.controls[0].selected = 1; ++long_choices.revision; assert(renderer->update(active_view, long_choices));
     assert(labels[field(active_selector(0), t::ui_mod_list_selector::value)] == u"Short" && widget_calls == choice_widgets);
     close_active(); clear_screen(long_choices); assert_baseline();
+    // Tabs wrap between controls even when passive text follows the last one.
+    // Back restores the source and reaches the stock Options close in one press.
+    UiScreen wrap_tab{}; make_screen(wrap_tab, third_mod); wrap_tab.id = 14;
+    wrap_tab.controls[6].kind = UiKind::text; wrap_tab.selected = 5;
+    model_actions = true; begin(wrap_tab); assert(renderer->update(active_view, wrap_tab));
+    assert(intercepted(reinterpret_cast<void*>(host), 1) && wrap_tab.selected == 0 && focused_row == 0);
+    assert(intercepted(reinterpret_cast<void*>(host), 0) && wrap_tab.selected == 5 && focused_row == 5);
+    back_closes = true;
+    assert(intercepted(reinterpret_cast<void*>(host), 5) && effective_which == 5 && !active_view);
+    back_closes = false; model_actions = false; clear_screen(wrap_tab); assert_baseline();
     TSUCHI_Mod* installing_mod = mod_create("native.install-stop"); UiScreen installing{}; make_screen(installing, installing_mod); installing.id = 13;
     active_screen = &installing; refresh_callback = stop_unpublished; missing = nullptr;
     assert(renderer->open(installing, &missing) == TSUCHI_NOT_READY && !missing && !mod_usable(installing_mod));

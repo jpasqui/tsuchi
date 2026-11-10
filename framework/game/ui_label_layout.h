@@ -8,7 +8,7 @@ namespace tsuchi {
 // caller; each native setter may end that owner's host, so recheck between calls.
 template<class Valid>
 void ui_fit_owned_label(UiLabelFitStamp& stamp, uint64_t scroll, uint64_t label,
-                        bool heading, Valid valid) {
+                        bool heading, Valid valid, bool proportional = false) {
     namespace t = game::table;
     if (!valid() || !scroll || !label || !t::bound(t::fn::ui_cached_geometry) ||
         !t::bound(t::fn::ui_widget_pivot) || !t::bound(t::fn::ui_widget_scale) || !t::bound(t::fn::ui_mod_list_transform)) return;
@@ -41,7 +41,7 @@ void ui_fit_owned_label(UiLabelFitStamp& stamp, uint64_t scroll, uint64_t label,
     ui_label_fit_remember(stamp, clip, geometry);
     t::fn::ui_widget_pivot(heading ? 0 : 1, pivot_y, reinterpret_cast<void*>(label));
     if (!current()) return;
-    t::fn::ui_widget_scale(scale, vertical, reinterpret_cast<void*>(label));
+    t::fn::ui_widget_scale(scale, proportional ? scale : vertical, reinterpret_cast<void*>(label));
     if (!current() || !game::write<float>(label + t::ui_widget::render_x, x)) return;
     if (current()) t::fn::ui_mod_list_transform(reinterpret_cast<void*>(label));
 }

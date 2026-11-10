@@ -2,10 +2,14 @@
 #pragma once
 #include "mod_choices.h"
 namespace tsuchi {
+struct ModRecord;
 struct ModChange { char id[kModIdBytes]; bool enabled; };
 class ModManager {
   public:
     TSUCHI_Result begin(const ModChoices& saved);
+    // Extend the player's catalogue without changing the running loader or the
+    // draft. Descriptions stay alive until replaced or cleanup runs.
+    TSUCHI_Result additional(const ModRecord* const* records, uint32_t count);
     TSUCHI_Result propose(const char* mod_id, bool enabled);
     const List<ModChange>& changes() const { return changes_; }
     TSUCHI_Result confirm();
@@ -23,6 +27,7 @@ class ModManager {
     ModChoices draft_, proposed_;
     Text activation_, order_, problem_;
     List<ModChange> changes_;
+    List<const ModRecord*> additional_;
     bool begun_ = false, busy_ = false;
 };
 } // namespace tsuchi

@@ -28,11 +28,21 @@ const Json* section(const ModRecord& record, const char* key) {
 bool present(const ModRecord* record, const ModChoices& choices) {
     return record && record->manifest_valid && record->manifest && choices.enabled(record->id);
 }
+uint32_t catalogue_count(const List<const ModRecord*>& extra) { return mod_count() + extra.count; }
+const ModRecord* catalogue_at(const List<const ModRecord*>& extra, uint32_t index) {
+    const uint32_t native = mod_count();
+    return index < native ? mod_at(index) : index - native < extra.count ? extra[index - native] : nullptr;
+}
+const ModRecord* catalogue_find(const List<const ModRecord*>& extra, const char* id) {
+    if (const auto* record = find_mod(id)) return record;
+    for (uint32_t i = 0; i < extra.count; ++i) if (!strcmp(extra[i]->id, id)) return extra[i];
+    return nullptr;
+}
 struct Node { const ModRecord* record; bool placed; };
-TSUCHI_Result validate_graph(const ModChoices& choices, Text& problem) {
+TSUCHI_Result validate_graph(const ModChoices& choices, Text& problem, const List<const ModRecord*>& extra) {
     List<Node> nodes;
-    for (uint32_t i = 0; i < mod_count(); ++i) {
-        const ModRecord* record = mod_at(i);
+    for (uint32_t i = 0; i < catalogue_count(extra); ++i) {
+        const ModRecord* record = catalogue_at(extra, i);
         if (present(record, choices) && !nodes.add({record, false})) {
             nodes.clear(); return TSUCHI_NO_MEMORY;
         }
@@ -41,7 +51,7 @@ TSUCHI_Result validate_graph(const ModChoices& choices, Text& problem) {
         const ModRecord& record = *nodes[i].record;
         const Json* overrides = section(record, "settings_overrides");
         for (const Json* target = overrides ? overrides->first : nullptr; target; target = target->next) {
-            ModRecord* provider = find_mod(target->name);
+            const ModRecord* provider = catalogue_find(extra, target->name);
             for (const Json* value = target->first; value; value = value->next) {
                 const Setting* setting = provider ? find_setting(provider->settings, value->name) : nullptr;
                 if (!present(provider, choices) || !setting || !setting->overridable || !setting_value_allowed(*setting, *value)) {
@@ -62,12 +72,12 @@ TSUCHI_Result validate_graph(const ModChoices& choices, Text& problem) {
         }
         const Json* conflicts = section(record, "conflicts");
         for (const Json* other = conflicts ? conflicts->first : nullptr; other; other = other->next)
-            if (present(find_mod(other->text), choices)) {
+            if (present(catalogue_find(extra, other->text), choices)) {
                 problem.set("The enabled mods conflict."); nodes.clear(); return TSUCHI_INVALID;
             }
         const Json* optional = section(record, "optional");
         for (const Json* need = optional ? optional->first : nullptr; need; need = need->next) {
-            const ModRecord* other = find_mod(need->name);
+            const ModRecord* other = catalogue_find(extra, need->name);
             if (present(other, choices) && !mod_requirement_satisfied(*other, need->text)) {
                 problem.set("An enabled optional dependency has an incompatible version.");
                 nodes.clear(); return TSUCHI_INVALID;
@@ -106,17 +116,32 @@ TSUCHI_Result ModManager::begin(const ModChoices& saved) {
     if (result == TSUCHI_OK && (!saved.activation_text(activation) || !saved.order_text(order)))
         result = TSUCHI_NO_MEMORY;
     if (result == TSUCHI_OK) {
+        const auto additional = additional_; additional_ = {};
         cleanup(); draft_ = staged; staged = ModChoices{};
+        additional_ = additional;
         activation_ = activation; activation = Text{};
         order_ = order; order = Text{}; begun_ = true;
     }
     staged.clear(); activation.clear(); order.clear(); return result;
 }
+TSUCHI_Result ModManager::additional(const ModRecord* const* records, uint32_t count) {
+    if (busy_ || pending()) return TSUCHI_BUSY;
+    if (!begun_) return TSUCHI_NOT_READY;
+    if ((!records && count) || count > 256) return TSUCHI_INVALID;
+    List<const ModRecord*> staged;
+    for (uint32_t i = 0; i < count; ++i) {
+        if (!records[i] || !valid_mod_id(records[i]->id) || find_mod(records[i]->id)) { staged.clear(); return TSUCHI_INVALID; }
+        for (uint32_t j = 0; j < i; ++j) if (!strcmp(records[i]->id, records[j]->id)) { staged.clear(); return TSUCHI_INVALID; }
+        if (!staged.add(records[i])) { staged.clear(); return TSUCHI_NO_MEMORY; }
+    }
+    additional_.clear(); additional_ = staged;
+    return TSUCHI_OK;
+}
 TSUCHI_Result ModManager::propose(const char* id, bool enabled) {
     if (busy_ || pending()) return TSUCHI_BUSY;
     if (!begun_) return TSUCHI_NOT_READY;
     if (!valid_mod_id(id)) return TSUCHI_INVALID;
-    ModRecord* target = find_mod(id);
+    const ModRecord* target = catalogue_find(additional_, id);
     if (!target) return TSUCHI_NOT_FOUND;
     problem_.clear();
     ModChoices staged;
@@ -125,7 +150,7 @@ TSUCHI_Result ModManager::propose(const char* id, bool enabled) {
     if (result == TSUCHI_OK && !add_change(affected, id, enabled)) result = TSUCHI_NO_MEMORY;
     if (enabled) {
         for (uint32_t i = 0; result == TSUCHI_OK && i < affected.count; ++i) {
-            const ModRecord* record = find_mod(affected[i].id);
+            const ModRecord* record = catalogue_find(additional_, affected[i].id);
             if (!record || !record->manifest_valid || !record->manifest) {
                 problem_.set("A required mod is missing or has an invalid manifest.");
                 result = TSUCHI_NOT_READY; break;
@@ -133,7 +158,7 @@ TSUCHI_Result ModManager::propose(const char* id, bool enabled) {
             result = staged.set_enabled(record->id, true);
             const Json* needs = section(*record, "requires");
             for (const Json* need = needs ? needs->first : nullptr; result == TSUCHI_OK && need; need = need->next) {
-                const ModRecord* provider = find_mod(need->name);
+                const ModRecord* provider = catalogue_find(additional_, need->name);
                 if (!provider || !provider->manifest_valid || !provider->manifest) {
                     problem_.set("A required mod is missing or has an invalid manifest.");
                     result = TSUCHI_NOT_READY;
@@ -142,12 +167,12 @@ TSUCHI_Result ModManager::propose(const char* id, bool enabled) {
                 } else if (!add_change(affected, provider->id, true)) result = TSUCHI_NO_MEMORY;
             }
         }
-        if (result == TSUCHI_OK) result = validate_graph(staged, problem_);
+        if (result == TSUCHI_OK) result = validate_graph(staged, problem_, additional_);
     } else {
         // Walk the requested-enabled dependents to a fixed point, even when blocked.
         for (uint32_t i = 0; result == TSUCHI_OK && i < affected.count; ++i)
-            for (uint32_t j = 0; result == TSUCHI_OK && j < mod_count(); ++j) {
-                const ModRecord* record = mod_at(j);
+            for (uint32_t j = 0; result == TSUCHI_OK && j < catalogue_count(additional_); ++j) {
+                const ModRecord* record = catalogue_at(additional_, j);
                 if (!record || !draft_.enabled(record->id)) continue;
                 const Json* needs = section(*record, "requires");
                 for (const Json* need = needs ? needs->first : nullptr; result == TSUCHI_OK && need; need = need->next)
@@ -181,12 +206,12 @@ TSUCHI_Result ModManager::move(const char* id, const char* before) {
     if (busy_ || pending()) return TSUCHI_BUSY;
     if (!begun_) return TSUCHI_NOT_READY;
     if (!valid_mod_id(id) || !before || (*before && !valid_mod_id(before))) return TSUCHI_INVALID;
-    if (!find_mod(id) || (*before && !find_mod(before))) return TSUCHI_NOT_FOUND;
+    if (!catalogue_find(additional_, id) || (*before && !catalogue_find(additional_, before))) return TSUCHI_NOT_FOUND;
     if (!strcmp(id, before)) return TSUCHI_OK;
     ModChoices staged;
     TSUCHI_Result result = copy_choices(draft_, staged);
-    for (uint32_t i = 0; result == TSUCHI_OK && i < mod_count(); ++i) {
-        const ModRecord* record = mod_at(i);
+    for (uint32_t i = 0; result == TSUCHI_OK && i < catalogue_count(additional_); ++i) {
+        const ModRecord* record = catalogue_at(additional_, i);
         if (record && staged.rank(record->id) == UINT32_MAX) result = staged.move(record->id, "");
     }
     if (result == TSUCHI_OK) result = staged.move(id, before);
@@ -205,7 +230,7 @@ TSUCHI_Result ModManager::defaults() {
     if (!begun_) return TSUCHI_NOT_READY;
     ModChoices defaults;
     problem_.clear();
-    const TSUCHI_Result result = validate_graph(defaults, problem_);
+    const TSUCHI_Result result = validate_graph(defaults, problem_, additional_);
     if (result != TSUCHI_OK) return result;
     draft_.swap(defaults); defaults.clear();
     return TSUCHI_OK;
@@ -229,7 +254,7 @@ TSUCHI_Result ModManager::save(TSUCHI_Result (*write)(const ModChoices&)) {
 }
 void ModManager::cleanup() {
     if (busy_) return;
-    draft_.clear(); proposed_.clear(); changes_.clear();
+    draft_.clear(); proposed_.clear(); changes_.clear(); additional_.clear();
     activation_.clear(); order_.clear(); problem_.clear(); begun_ = false;
 }
 } // namespace tsuchi

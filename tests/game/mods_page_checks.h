@@ -70,7 +70,7 @@ void mods_page_checks(uint64_t host) {
     callbacks.host_lost(host); active = 0;
 
     // The page on its own: the list shows as soon as its host is ready, and there is no other tab to go to.
-    page_alone = true;
+    page_alone = true; stock_backs = 0;
     callbacks.host_ready(host); assert(active == host);
     const unsigned calls_before = menu_calls;
     assert(dispatcher(host, 100, handled, result) && handled && result && active == host);

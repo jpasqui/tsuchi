@@ -178,9 +178,25 @@ void label(void* pointer, void* value) {
     if (object_id == footer_label) ++footer_sets;
 }
 void footer_caption(const char16_t* caption) { auto text = make_text(caption); label(reinterpret_cast<void*>(footer_label), &text); }
-void append_choice(void* pointer, void*) { choices[child(reinterpret_cast<uint64_t>(pointer), t::ui_mod_list_row::selector)].push_back(temporary); }
+void append_choice(void* pointer, void*) {
+    const uint64_t selector = child(reinterpret_cast<uint64_t>(pointer), t::ui_mod_list_row::selector);
+    auto array = fake::get<Array>(selector + t::ui_mod_list_selector::choices);
+    if (!array.data) { array.data = fake::memory(8 * sizeof(game::EngineText)); array.capacity = 8; }
+    assert(array.count < array.capacity);
+    fake::put(array.data + uint64_t(array.count++) * sizeof(game::EngineText), make_text(temporary));
+    fake::put(selector + t::ui_mod_list_selector::choices, array);
+    choices[selector].push_back(temporary);
+}
 bool valid(void* pointer, int32_t choice) { return choice >= 0 && uint32_t(choice) < choices[reinterpret_cast<uint64_t>(pointer)].size(); }
-void redraw(void* pointer) { assert(valid(pointer, int32_t(fake::get<uint32_t>(reinterpret_cast<uint64_t>(pointer) + t::ui_mod_list_selector::choice)))); }
+void redraw(void* pointer) {
+    const uint64_t selector = reinterpret_cast<uint64_t>(pointer);
+    assert(valid(pointer, int32_t(fake::get<uint32_t>(selector + t::ui_mod_list_selector::choice))));
+    const auto array = fake::get<Array>(selector + t::ui_mod_list_selector::choices);
+    for (int32_t i = 0; i < array.count; ++i) {
+        auto text = fake::get<game::EngineText>(array.data + uint64_t(i) * sizeof(game::EngineText));
+        choices[selector][i] = string_at(text_string(&text));
+    }
+}
 void set_visible(void* pointer, uint32_t value) { visibility[reinterpret_cast<uint64_t>(pointer)] = value; }
 void set_clipping(void* pointer, uint32_t value) { fake::put<uint8_t>(reinterpret_cast<uint64_t>(pointer) + t::ui_widget::clipping, uint8_t(value)); }
 void offsets(void* pointer, float left, float top, float width, float height) { fake::put<Margin>(reinterpret_cast<uint64_t>(pointer) + t::ui_mod_list_tab::offsets, {left, top, width, height}); }
@@ -292,7 +308,8 @@ uint32_t count() { return 8; }
 bool row(uint32_t index, UiModListRow& out) {
     static const char* ids[] = {"mod.a", "mod.b", "mod.c", "mod.d", "mod.e", "mod.f", "mod.g", "mod.h"};
     if (row_callback) { const auto callback = row_callback; row_callback = nullptr; callback(); }
-    out = {ids[index], fit_mode && !index ? "A very long installed mod caption crossing the native clipping boundary" : ids[index], requested[index], pending_status ? "Restart pending" : "", index == 0, entry_row && index == 7}; return true;
+    out = {ids[index], fit_mode && !index ? "A very long installed mod caption crossing the native clipping boundary" : ids[index], requested[index], pending_status ? "Restart pending" : "", index == 0, entry_row && index == 7};
+    out.state_label = pending_status ? "Restart" : nullptr; return true;
 }
 bool action(uint64_t handle, uint32_t index, uint32_t which, bool choice) { assert(handle == host_handle); ++action_calls; if (which == 2 || which == 3) requested[index] = choice; return true; }
 void host_ready(uint64_t handle) { assert(handle == host_handle); ++ready_calls; }
@@ -663,12 +680,12 @@ void fit_scenarios() {
     assert(ui_mod_list_native_hold(host_handle) == TSUCHI_OK);
     const FitLabels fitted = fitting_labels(); arrange_labels(fitted);
     frame();
-    assert(labels[fitted.row] == u"A very long installed mod caption crossing the native clipping boundary");
+    assert(labels[fitted.row] == u"A very long installed mod captio...");
     assert(label_writes.size() == 6);
     assert(fake::get<float>(fitted.row + t::ui_widget::render_pivot_x) == 1);
     assert(near(fake::get<float>(fitted.row + t::ui_widget::render_scale_x), .636666667f));
     assert(near(fake::get<float>(fitted.row + t::ui_widget::render_x), -110));
-    assert(near(fake::get<float>(fitted.row + t::ui_widget::render_scale_y), .9f));
+    assert(near(fake::get<float>(fitted.row + t::ui_widget::render_scale_y), .636666667f));
     assert(near(fake::get<float>(fitted.row + t::ui_widget::render_pivot_y), .4f));
     // Independent rendered edge checks use the fixture's known parent origin
     // and native pivot transform. The original right edge is 500 pixels.
@@ -1165,7 +1182,8 @@ int main(int argc, char** argv) {
     assert(ui_mod_list_native_dispatch(host_handle, 4, handled, result) && handled && result && action_calls == 2);
     pending_status = true; assert(ui_mod_list_native_sync(host_handle) == TSUCHI_OK);
     const uint64_t last_row = fake::get<uint64_t>(rows.data + 7 * 8);
-    assert(labels[child(last_row, t::ui_mod_list_row::title)] == u"mod.h - Restart pending"); pending_status = false;
+    assert(labels[child(last_row, t::ui_mod_list_row::title)] == u"mod.h");
+    assert(choices[child(last_row, t::ui_mod_list_row::selector)][1] == u"Restart"); pending_status = false;
     assert(ui_mod_list_native_focus(host_handle, 3) == TSUCHI_OK && fake::get<int32_t>(host + t::ui_mod_list_menu::selected) == 3);
     assert(ui_mod_list_native_focus(host_handle, 99) == TSUCHI_NOT_FOUND);
     thread = 2; assert(ui_mod_list_native_release(host_handle) == TSUCHI_INVALID && ui_mod_list_native_focus(host_handle, 0) == TSUCHI_INVALID); thread = 1;
@@ -1311,7 +1329,7 @@ int main(int argc, char** argv) {
         assert(ui_mod_list_native_dispatch(host_handle, 3, handled, result) && handled && action_calls == calls_before);
         assert(ui_mod_list_native_dispatch(host_handle, 4, handled, result) && handled && result && action_calls == calls_before + 1);
         pending_status = true; assert(ui_mod_list_native_sync(host_handle) == TSUCHI_OK); pending_status = false;
-        assert(labels[child(entry, t::ui_mod_list_row::title)].empty() && labels[child(mod_row, t::ui_mod_list_row::title)] == u"mod.g - Restart pending");
+        assert(labels[child(entry, t::ui_mod_list_row::title)].empty() && labels[child(mod_row, t::ui_mod_list_row::title)] == u"mod.g");
         entry_row = false;
         assert(ui_mod_list_native_release(host_handle) == TSUCHI_OK);
     }

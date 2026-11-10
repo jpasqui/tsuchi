@@ -8,6 +8,7 @@
 #include "tsuchi/core.h"
 
 namespace tsuchi {
+struct ModRecord;
 
 // Where packages live: one folder each, named by 32 hexadecimal digits.
 inline constexpr char kPackagesFolder[] = "tsuchisd:/tsuchi/downloads";
@@ -21,6 +22,9 @@ void packages_set_clock(int64_t (*seconds)());
 
 uint32_t installed_package_count();
 const package_store::Receipt* installed_package(uint32_t index);
+// Changes only when a successful install/removal/catalogue read publishes.
+uint64_t installed_packages_revision();
+TSUCHI_Result installed_mod_description(uint32_t package, uint32_t mod, ModRecord& out);
 // The installed package a mod came from, and its index; null for a mod of the game's files.
 const package_store::Receipt* package_holding(const char* mod_id, uint32_t* index = nullptr);
 // Marks a package removed. Its files go at once when no loaded mod uses them, else at the next start.
