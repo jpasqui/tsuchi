@@ -25,7 +25,7 @@ class UiTitleTests(unittest.TestCase):
         binary = ROOT / 'build' / ('ui_title_test.exe' if sys.platform == 'win32' else 'ui_title_test')
         sources = ['framework/core/registry.cpp', 'framework/core/ids.cpp', 'framework/core/text.cpp', 'framework/core/texts.cpp',
                    'framework/base/names.cpp', 'framework/base/objects.cpp', 'framework/game/ui_title.cpp', 'framework/game/ui_title_host.cpp',
-                   'framework/game/ui_title_options.cpp', 'framework/game/player_choice.cpp', 'tests/game/ui_title_test.cpp',
+                   'framework/game/ui_title_options.cpp', 'framework/game/player_choice.cpp', 'framework/game/ui_keyboard.cpp', 'tests/game/ui_title_test.cpp',
                    'build/gen/framework/ui_service.cpp', 'build/gen/framework/game_service.cpp']
         command = [shutil.which('clang++'), '-std=c++17', '-Wall', '-Wextra', '-Werror']
         for folder in [gen / 'include', fixture / 'framework', gen / 'framework', ROOT / 'framework/core', ROOT / 'framework/base',

@@ -3,6 +3,7 @@
 // handlers are test functions that count their calls.
 #include "fake_game.h"
 #include "ui_title.h"
+#include "ui_keyboard.h"
 #include "ui_screens.h"
 #include "ui_service.h"
 #include "game_service.h"
@@ -305,6 +306,46 @@ void player_choice() {
     assert(fake::get<uint8_t>(flow + t::title_flow::answered) == 1 && fake::get<uint64_t>(flow + t::title_flow::answer) == 0x100 + t::data::dialog_answer_no);
     mod_stop(mod);
 }
+void keyboard() {
+    static uint64_t required = 0x7d4;
+    static uint32_t shown = 0, result_code = 0;
+    static bool accepted = false;
+    static std::string entered;
+    t::fn::ui_keyboard_work_size = +[](bool) -> uint64_t { return 0x1000; };
+    t::fn::ui_keyboard_text_size = +[]() -> uint64_t { return required; };
+    t::fn::ui_keyboard_preset = +[](void* p, uint32_t) { std::memset(p, 0, t::ui_keyboard::size); };
+    t::fn::ui_keyboard_initial = +[](void*, const char*) {};
+    t::fn::ui_keyboard_guide = +[](void*, const char*) {};
+    t::fn::ui_keyboard_show = +[](void* p, const void* args) -> uint32_t {
+        struct Output { char* data; uint64_t bytes; };
+        auto* out = static_cast<Output*>(p);
+        assert(out->bytes == required);
+        assert(reinterpret_cast<uintptr_t>(out->data) % 4096 == 0);
+        const auto* config = static_cast<const uint8_t*>(args);
+        uint32_t maximum = 0; std::memcpy(&maximum, config + t::ui_keyboard::maximum, 4);
+        assert(maximum == 100 && config[t::ui_keyboard::utf8] == 1);
+        std::memcpy(out->data, "Early", 6); ++shown;
+        return result_code;
+    };
+    ui_keyboard_start();
+    auto* mod = mod_create("keyboard.mod"); TSUCHI_Subscription sub{};
+    assert(ui::table.on_text_entered(mod, +[](void*, const TSUCHI_UiTextEntered* e) {
+        accepted = e->accepted; entered = e->text;
+    }, nullptr, &sub) == TSUCHI_OK);
+    auto& backend = ui_screen_backend();
+    assert(backend.ask_text(mod, "Search", "", 100, TSUCHI_TEXT_KIND_TEXT) == TSUCHI_OK);
+    assert(backend.ask_text(mod, "Search", "", 100, TSUCHI_TEXT_KIND_TEXT) == TSUCHI_BUSY);
+    frame(); assert(shown == 1 && accepted && entered == "Early");
+    result_code = 1;
+    assert(backend.ask_text(mod, "Search", "", 100, TSUCHI_TEXT_KIND_TEXT) == TSUCHI_OK);
+    frame(); assert(shown == 2 && !accepted && entered.empty());
+    required = 0x1001;
+    assert(backend.ask_text(mod, "Search", "", 100, TSUCHI_TEXT_KIND_TEXT) == TSUCHI_OK);
+    frame(); assert(shown == 2 && !accepted && entered.empty());
+    required = 0x7d4;
+    assert(backend.ask_text(mod, "Search", "", 100, TSUCHI_TEXT_KIND_TEXT) == TSUCHI_OK);
+    mod_stop(mod); frame(); assert(shown == 2);
+}
 } // namespace
 
 int main() {
@@ -334,6 +375,7 @@ int main() {
     title_menu();
     options_menu();
     player_choice();
+    keyboard();
     std::puts("title ok");
     return 0;
 }

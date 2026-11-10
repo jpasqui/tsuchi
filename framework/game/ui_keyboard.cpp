@@ -38,7 +38,9 @@ void show() {
     if (!mod_usable(asked.mod)) return;
     alignas(4096) static uint8_t work[0x1000];
     alignas(8) static uint8_t arguments[0x800];
-    static char result[kMost * 4 + 8];
+    // nn::swkbd requires its full string buffer, even when
+    // this request's character limit is smaller than the system maximum.
+    alignas(4096) static char result[0x1000];
     memset(work, 0, sizeof work); memset(arguments, 0, sizeof arguments); memset(result, 0, sizeof result);
     bool accepted = false;
     const uint64_t needed_work = t::fn::ui_keyboard_work_size(false), needed_text = t::fn::ui_keyboard_text_size();
@@ -49,12 +51,12 @@ void show() {
         memcpy(arguments + t::ui_keyboard::maximum, &most, 4);
         memcpy(arguments + t::ui_keyboard::minimum, &least, 4);
         arguments[t::ui_keyboard::utf8] = 1;
-        const uint64_t at = reinterpret_cast<uint64_t>(work), bytes = sizeof work;
+        const uint64_t at = reinterpret_cast<uint64_t>(work), bytes = needed_work;
         memcpy(arguments + t::ui_keyboard::work, &at, 8);
         memcpy(arguments + t::ui_keyboard::work_bytes, &bytes, 8);
         t::fn::ui_keyboard_guide(arguments, asked.prompt);
         t::fn::ui_keyboard_initial(arguments, asked.initial);
-        struct Output { char* data; uint64_t bytes; } output{result, sizeof result};
+        struct Output { char* data; uint64_t bytes; } output{result, needed_text};
         accepted = t::fn::ui_keyboard_show(&output, arguments) == 0;
     }
     result[sizeof result - 1] = 0;
