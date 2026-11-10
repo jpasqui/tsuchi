@@ -9,6 +9,7 @@
 #include "actors.h"
 #include "added.h"
 #include "compiled_mods.h"
+#include "containers.h"
 #include "files.h"
 #include "angles.h"
 #include "flow.h"
@@ -2537,7 +2538,63 @@ void watch_actors() {
 
 namespace tsuchi::target {
 
+// Opt-in, isolated archive qualification. This mode skips the ordinary broad
+// self-checks and never exists in the production build. The fixture carries a
+// tiny independently cooked package; no player package or save is changed.
+static bool live_container_check_selected() { return find_mod("check.live-assets") != nullptr; }
+static void check_live_container() {
+    static bool done = false;
+    if (done || status.frames < 300) return;
+    done = true;
+    namespace t = game::table;
+    const auto fail = [](const char* text) { mod_note("check.live-assets", text); };
+    if (!container_live_switchable("check.live-assets")) return fail("live unmount FAIL: archive not reversible");
+    const uint64_t dispatcher = game::global<uint64_t>(t::data::io_dispatcher);
+    const uint64_t impl = game::read_or<uint64_t>(dispatcher + t::container_io::implementation);
+    void* backend = reinterpret_cast<void*>(impl + t::container_io::backend);
+    char* bytes = nullptr; uint64_t length = 0;
+    const char* toc_path = "rom:/tsuchi/mods/check.live-assets/NativeMapTables_P.utoc";
+    if (game::file_size(toc_path, length) != TSUCHI_OK || length > 65536 ||
+        game::read_whole_file(toc_path, bytes, length) != TSUCHI_OK) return fail("live unmount FAIL: fixture TOC unreadable");
+    ContainerToc toc; const char* wrong = nullptr;
+    if (!read_container_toc(reinterpret_cast<const uint8_t*>(bytes), size_t(length), toc, wrong) || !toc.packages.count) {
+        forget_container_toc(toc); release(bytes); return fail("live unmount FAIL: fixture TOC invalid");
+    }
+    alignas(8) uint8_t chunk[16]{};
+    memcpy(chunk, &toc.packages[0], 8); chunk[11] = 2; // ExportBundleData
+    forget_container_toc(toc); release(bytes);
+    if (!t::fn::io_chunk_exists(backend, chunk)) return fail("live unmount FAIL: original chunk unavailable");
+    mod_note("check.live-assets", "live unmount native chunk initially available");
+    Text problem;
+    for (unsigned i = 0; i < 10; ++i) {
+        if (set_container_enabled("check.live-assets", false, problem) != TSUCHI_OK) {
+            mod_note("check.live-assets", problem.get()); problem.clear(); return fail("live unmount FAIL: detach refused");
+        }
+        if (t::fn::io_chunk_exists(backend, chunk) || container_active_for("check.live-assets")) {
+            problem.clear(); return fail("live unmount FAIL: retired chunk still visible");
+        }
+        if (set_container_enabled("check.live-assets", true, problem) != TSUCHI_OK) {
+            mod_note("check.live-assets", problem.get()); problem.clear(); return fail("live unmount FAIL: restore refused");
+        }
+        if (!t::fn::io_chunk_exists(backend, chunk) ||
+            !container_active_for("check.live-assets")) { problem.clear(); return fail("live unmount FAIL: original chunk not restored"); }
+    }
+    problem.clear(); mod_note("check.live-assets", "live unmount PASS: 10 native detach/restore cycles; native chunk availability restored");
+    TSUCHI_Object loaded{};
+    if (host.asset->load(self, "/Game/P4ContentAssetsFixture/T_Unsaved.T_Unsaved", &loaded) != TSUCHI_OK)
+        return fail("live loaded-object guard FAIL: fixture asset could not load");
+    const auto refused = set_container_enabled("check.live-assets", false, problem);
+    if (refused != TSUCHI_NOT_READY || !container_change_pending("check.live-assets") ||
+        !t::fn::io_chunk_exists(backend, chunk)) { problem.clear(); return fail("live loaded-object guard FAIL: streaming package was detached"); }
+    if (set_container_enabled("check.live-assets", true, problem) != TSUCHI_OK || container_change_pending("check.live-assets")) {
+        problem.clear(); return fail("live loaded-object guard FAIL: cancel refused");
+    }
+    host.asset->release(self, loaded);
+    problem.clear(); mod_note("check.live-assets", "live loaded-object guard PASS: queued unload preserves streaming; On cancels it");
+}
+
 void selfcheck_start() {
+    if (live_container_check_selected()) return;
     // Check the public screen lifetime without taking the player's menu.
     TSUCHI_Screen screen{};
     const TSUCHI_Result created = host.ui->create(self, "UI selfcheck", &screen);
@@ -2580,6 +2637,7 @@ static void check_content_port() {
 }
 
 void selfcheck_frame() {
+    if (live_container_check_selected()) { check_live_container(); return; }
     // Reads alone: action and screenshot checks live in the explicit camera-input proof mod.
     static bool camera_input_read = false;
     if (!camera_input_read && game::player_captain(0)) {

@@ -14,6 +14,8 @@ build_names: [game_container, shader_format]
 
 
 data:
+  garbage_collecting: 0x9860
+  io_dispatcher: 0x9840
   academy_points_session_gate: absent
   academy_points_provider_gate: absent
   academy_points_blocked_gate: absent
@@ -551,6 +553,8 @@ rows:
   area_messages: [Note_More, Note_Base, Note_Done]
 
 structs:
+  container_io: {fields: {implementation: 8, backend: 88, lock: 424, lock_bytes: 32, readers: 456, readers_count: 464, container_id: 240, toc: 8, toc_bytes: 80, package_lock: 112, package_map: 144}}
+  container_map: {fields: {count: 8, free_count: 52, first_free: 48, bits_capacity: 44, hash_inline: 56, hash_data: 64, hash_count: 72, entry_bytes: 24, value: 8, next: 16}}
   slate_brush:
     size: 0x88
     fields: {resource: 0x48, resource_handle: 0x70}
@@ -1522,6 +1526,9 @@ structs:
 
   # carry: stand-in fields for the attachment-list backend.
 functions:
+  find_loaded_object: {address: 0x9858, returns: pointer, args: [pointer, pointer, text16, bool]}
+  io_chunk_exists: {address: 0x9850, returns: bool, args: [pointer, const_pointer]}
+  flush_async_loading: {address: 0x9848, returns: void, args: [i32]}
   options_button_icon: {address: 0x9750, returns: void, args: [pointer, i32]}
   options_direction: {address: 0x9700, returns: bool, args: [pointer, bool]}
   options_confirm: {address: 0x9710, returns: bool, args: [pointer]}
@@ -2165,7 +2172,7 @@ route_frame_either: [particle_sprite.z]
 route_frame_optional: [cursor_written.saved_widget, cursor_written.saved_component, cursor_written.saved_return]
 
 route_frames:
-  package_store_entry: {slot: 8, entry: 24}
+  package_store_entry: {slot: 8, entry: 24, store: 23}
   ui_settings_dispatch: {object: 19, action: 20, no_action: 8}
   scene_publish: {task: 20}
   # z: x0-x30 as 0-30 (a float's bits), v0-v31 as 32-63 (lane 0); the others are vector registers.

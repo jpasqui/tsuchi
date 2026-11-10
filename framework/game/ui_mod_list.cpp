@@ -55,6 +55,7 @@ struct Row { ModRecord* native; ExternalModEntry* external; };
 List<Row> rows;
 List<ModRecord*> downloaded;
 uint64_t catalogue_attempt = 0;
+uint64_t container_revision = 0;
 bool downloaded_overflow = false;
 uint32_t native_rows = 0;
 TSUCHI_Screen detail{}, settings{};
@@ -108,6 +109,11 @@ void forget_downloaded(List<ModRecord*>& descriptions) {
     descriptions.clear();
 }
 bool pending_download(const ModRecord& record) { return find_mod(record.id) != &record; }
+bool removed_owner(TSUCHI_Mod* mod) {
+    for (uint32_t i = 0; i < mod_count(); ++i)
+        if (mod_at(i)->context == mod) return installed_mod_removed(*mod_at(i));
+    return false;
+}
 ModRecord* described_mod(const char* id) {
     if (auto* record = find_mod(id)) return record;
     for (uint32_t i = 0; i < downloaded.count; ++i) if (!strcmp(downloaded[i]->id, id)) return downloaded[i];
@@ -116,7 +122,10 @@ ModRecord* described_mod(const char* id) {
 bool refresh_downloaded() {
     catalogue_attempt = installed_packages_revision();
     List<ModRecord*> staged;
+    List<const ModRecord*> removed;
     bool ok = true;
+    for (uint32_t i = 0; ok && i < mod_count(); ++i)
+        if (installed_mod_removed(*mod_at(i)) && !removed.add(mod_at(i))) ok = false;
     for (uint32_t p = 0; ok && p < installed_package_count(); ++p) {
         const auto* package = installed_package(p);
         for (uint32_t m = 0; package && ok && m < package->count; ++m) {
@@ -130,7 +139,10 @@ bool refresh_downloaded() {
             }
         }
     }
-    if (!ok || manager.additional(staged.items, staged.count) != TSUCHI_OK) { forget_downloaded(staged); return false; }
+    if (!ok || manager.additional(staged.items, staged.count, removed.items, removed.count) != TSUCHI_OK) {
+        removed.clear(); forget_downloaded(staged); return false;
+    }
+    removed.clear();
     // No running loader record moves. Retire old descriptions only after the
     // manager has switched to the new catalogue and no detail form is open.
     rows.count = 0;
@@ -151,7 +163,8 @@ void plain(const char* text, char out[641], uint32_t limit = 637) {
 }
 bool ordering() {
     rows.count = 0; external_overflow = downloaded_overflow = false;
-    for (uint32_t i = 0; i < mod_count(); ++i) if (!rows.add({mod_at(i), nullptr})) return false;
+    for (uint32_t i = 0; i < mod_count(); ++i)
+        if (!installed_mod_removed(*mod_at(i)) && !rows.add({mod_at(i), nullptr})) return false;
     for (uint32_t i = 1; i < rows.count; ++i) {
         const auto row = rows[i]; uint32_t j = i;
         const uint32_t rank = manager.draft().rank(row.native->id);
@@ -168,8 +181,16 @@ bool ordering() {
             for (uint32_t j = i; j + 1 < entries.count; ++j) entries[j] = entries[j + 1];
             --entries.count;
         } else ++i;
+    // Keep registrations while their code is still alive, but hide entries of
+    // uninstalled packages. Reinstalling can reveal the same registration again.
+    uint32_t available_entries = 0;
+    for (uint32_t i = 0; i < entries.count; ++i) if (!removed_owner(entries[i].mod)) {
+        const Entry item = entries[i];
+        for (uint32_t j = i; j > available_entries; --j) entries[j] = entries[j - 1];
+        entries[available_entries++] = item;
+    }
     shown_entries = 0;
-    while (shown_entries < entries.count && rows.count + shown_entries < game::table::constant::ui_mod_list_rows_limit) ++shown_entries;
+    while (shown_entries < available_entries && rows.count + shown_entries < game::table::constant::ui_mod_list_rows_limit) ++shown_entries;
     for (uint32_t i = 0; i < downloaded.count; ++i) {
         if (rows.count + shown_entries < game::table::constant::ui_mod_list_rows_limit) {
             if (!rows.add({downloaded[i], nullptr})) return false;
@@ -200,6 +221,12 @@ bool ordering() {
 }
 const char* description(const ModRecord& record) {
     if (!record.manifest_valid) return "Blocked";
+    if (installed_asset_mod(record.id)) {
+        const bool active = container_active_for(record.id);
+        if (manager.draft().enabled(record.id) != active && container_change_pending(record.id)) return "Reload";
+        if (manager.draft().enabled(record.id) != active) return "Restart";
+        return active ? "Active for new loads" : "Disabled";
+    }
     if (pending_download(record)) {
         const bool enabled = manager.draft().enabled(record.id);
         if (container_mounted_for(record.id)) return enabled ? "Active for new loads" : "Restart to disable";
@@ -250,6 +277,7 @@ bool row(uint32_t index, UiModListRow& out) {
                    !pending_download(record) && has_visible_settings(record.settings)};
             out.state_label = !strcmp(status, "Running") || !strcmp(status, "Active for new loads") ? "On" :
                 !strcmp(status, "Disabled") || !strcmp(status, "Stopped") ? "Off" :
+                !strcmp(status, "Reload") ? "Reload" :
                 !memcmp(status, "Restart", 7) || !strcmp(status, "Ready") ? "Restart" : "Blocked";
         } else {
             auto& record = *rows[index].external; plain(record.name.get()[0] ? record.name.get() : record.id, caption, 300);
@@ -421,9 +449,23 @@ void answered(void*, const TSUCHI_DialogAnswered* event) {
         if (event->accepted) {
             // The package by its folder: the list may have changed while the question was up.
             TSUCHI_Result removed = TSUCHI_NOT_FOUND;
+            bool asset_unmounted = false, asset_waiting = false;
             for (uint32_t i = 0; i < installed_package_count(); ++i)
-                if (!strcmp(installed_package(i)->folder, removing)) { removed = remove_installed_package(i); break; }
-            note(removed == TSUCHI_OK ? "Removed. Its mods stop loading when Pikmin 4 restarts." :
+                if (!strcmp(installed_package(i)->folder, removing)) {
+                    const auto receipt = *installed_package(i);
+                    removed = remove_installed_package(i);
+                    asset_unmounted = receipt.kind == uint32_t(package_store::Kind::assets) && receipt.count == 1 &&
+                        !container_active_for(receipt.mods[0]);
+                    asset_waiting = receipt.kind == uint32_t(package_store::Kind::assets) && receipt.count == 1 &&
+                        container_change_pending(receipt.mods[0]);
+                    break;
+                }
+            if (removed == TSUCHI_OK && refresh_downloaded() && ordering()) {
+                ui_mod_list_native_release(current_host); ui_mod_list_native_hold(current_host);
+            }
+            note(removed == TSUCHI_OK ? (asset_unmounted ? "Removed. Already loaded assets change when reloaded." :
+                 asset_waiting ? "Removed. Close affected maps or menus to finish unloading its assets." :
+                 "Removed. Restart Pikmin 4 to release content already in use.") :
                  removed == TSUCHI_BUSY ? "A download is running. Remove the package when it ends." : "The package could not be removed.");
         }
         removing[0] = 0;
@@ -440,9 +482,31 @@ void answered(void*, const TSUCHI_DialogAnswered* event) {
         // own draft open; a retry must not rewrite choices that already saved.
         if (event->accepted) {
             const bool native_changed = manager.changed(), external_changed = external_mods().changed();
+            List<ModChange> assets;
+            bool needs_restart = false;
+            if (native_changed && !assets.reserve(native_rows)) { note("No memory to apply choices; draft kept."); sync(); return; }
+            for (uint32_t i = 0; native_changed && i < native_rows; ++i) {
+                const auto& record = *rows[i].native;
+                if (manager.draft().rank(record.id) != mod_choices().rank(record.id)) needs_restart = true;
+                if (manager.draft().enabled(record.id) == mod_choices().enabled(record.id)) continue;
+                if (installed_asset_mod(record.id)) {
+                    ModChange change{}; memcpy(change.id, record.id, strlen(record.id) + 1);
+                    change.enabled = manager.draft().enabled(record.id); assets.add(change);
+                } else needs_restart = true;
+            }
             const auto native_result = native_changed ? manager.save(save_mod_choices) : TSUCHI_OK;
+            bool assets_applied = false, assets_waiting = false;
+            if (native_result == TSUCHI_OK) for (uint32_t i = 0; i < assets.count; ++i) {
+                Text problem;
+                const auto applied = apply_installed_asset_choice(assets[i].id, assets[i].enabled, problem);
+                if (applied == TSUCHI_NOT_READY && container_change_pending(assets[i].id)) assets_waiting = true;
+                else if (applied != TSUCHI_OK) needs_restart = true;
+                else assets_applied = true;
+                problem.clear();
+            }
+            assets.clear();
             const auto external_result = external_changed ? save_external_mods() : TSUCHI_OK;
-            restart_needed = restart_needed || (native_changed && native_result == TSUCHI_OK);
+            restart_needed = restart_needed || (native_changed && native_result == TSUCHI_OK && needs_restart);
             if (native_result != TSUCHI_OK || external_result != TSUCHI_OK) {
                 if (native_result != TSUCHI_OK && external_result != TSUCHI_OK)
                     note("Save failed; both drafts are kept.");
@@ -456,7 +520,9 @@ void answered(void*, const TSUCHI_DialogAnswered* event) {
             if (external_changed) note(native_changed ?
                 "Both saved; apply requests with manager." :
                 "Requests saved; apply with manager.");
-            else note("Choices saved; restart Pikmin 4.");
+            else note(needs_restart ? "Choices saved; restart Pikmin 4." : assets_waiting ?
+                "Asset choices saved. Close affected maps or menus to finish unloading." : assets_applied ?
+                "Asset choices applied. Reload affected maps or objects to see the change." : "Choices saved.");
         } else {
             if (manager.begin(mod_choices()) != TSUCHI_OK) {
                 note("Discard failed; drafts are kept."); sync(); return;
@@ -627,6 +693,7 @@ TSUCHI_Result hold_entry(TSUCHI_Mod* mod, TSUCHI_Menu menu, const char* id, cons
     if (menu != TSUCHI_MENU_MODS) return next_hold_entry ? next_hold_entry(mod, menu, id, text, description) : TSUCHI_UNSUPPORTED;
     if (!mod || !id || !text || !description || !id[0] || !text[0] || !text_fits(id, kEntryIdBytes - 1) ||
         !text_fits(text, kEntryLabelBytes - 1) || !text_fits(description, 300)) return TSUCHI_INVALID;
+    if (removed_owner(mod)) return TSUCHI_NOT_READY;
     uint32_t held = 0;
     for (uint32_t i = 0; i < entries.count; ++i) {
         if (entries[i].mod != mod) { held += entries[i].mod ? 1 : 0; continue; }
@@ -654,6 +721,9 @@ TSUCHI_Result release_entry(TSUCHI_Mod* mod, TSUCHI_Menu menu, const char* id) {
 // Each frame: the cheat screen, and the entries chosen since the last one.
 void page_step() {
     cheats_step();
+    if (container_revision != container_choices_revision()) {
+        container_revision = container_choices_revision(); sync();
+    }
     if (live() && !input_holder && !input_quiet && !screen_up() && asking == Question::none && !manager.pending() &&
         ui_mod_list_native_active(current_host) && catalogue_attempt != installed_packages_revision()) {
         if (refresh_downloaded() && ordering()) {
@@ -666,7 +736,7 @@ void page_step() {
     for (uint32_t i = 0; i < chosen.count && count < 4; ++i) picks[count++] = chosen[i];
     chosen.count = 0;
     for (uint32_t i = 0; i < count; ++i)
-        if (mod_usable(picks[i].mod)) ui::emit_entry_chosen_to(picks[i].mod, {TSUCHI_MENU_MODS, picks[i].id});
+        if (mod_usable(picks[i].mod) && !removed_owner(picks[i].mod)) ui::emit_entry_chosen_to(picks[i].mod, {TSUCHI_MENU_MODS, picks[i].id});
 }
 // Tsuchi's own entry in the title menu opens the page on its own.
 constexpr char kTitleEntry[] = "mods";

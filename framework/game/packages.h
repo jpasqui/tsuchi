@@ -27,6 +27,11 @@ uint64_t installed_packages_revision();
 TSUCHI_Result installed_mod_description(uint32_t package, uint32_t mod, ModRecord& out);
 // The installed package a mod came from, and its index; null for a mod of the game's files.
 const package_store::Receipt* package_holding(const char* mod_id, uint32_t* index = nullptr);
+// A frozen startup record whose downloaded package is no longer installed.
+// A manually installed/ROM mod is never treated as a removed package.
+bool installed_mod_removed(const ModRecord& record);
+bool installed_asset_mod(const char* id);
+TSUCHI_Result apply_installed_asset_choice(const char* id, bool enabled, Text& problem);
 // Marks a package removed. Its files go at once when no loaded mod uses them, else at the next start.
 TSUCHI_Result remove_installed_package(uint32_t index);
 bool package_install_running();

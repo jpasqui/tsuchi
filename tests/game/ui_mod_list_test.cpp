@@ -509,6 +509,8 @@ int main(int argc,char** argv) {
  cheat_menu_checks();
  callbacks.host_lost(107);installed_page_checks(150);
  downloaded_catalogue_checks(155);
+ removed_startup_catalogue_checks(156);
+ live_asset_choice_checks(157);
  mods_page_checks(160);
  mod_stop(framework);assert(!callbacks.row(0,row));external.clear();external_load_result=TSUCHI_OK;
  diagnostic_samples();

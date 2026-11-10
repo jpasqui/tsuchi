@@ -17,6 +17,9 @@ uint32_t description_reads = 0;
 TSUCHI_Result description_result = TSUCHI_OK;
 std::map<std::string, std::string> package_manifests;
 std::set<std::string> mounted_packages;
+std::set<std::string> live_assets, active_assets;
+TSUCHI_Result asset_choice_result = TSUCHI_OK;
+unsigned asset_choice_calls = 0;
 }
 namespace tsuchi {
 uint32_t cheat_count() { return uint32_t(fake_cheats.size()); }
@@ -29,6 +32,16 @@ TSUCHI_Result set_cheat(const char* mod, const char* name, bool on) {
 uint32_t installed_package_count() { return uint32_t(fake_packages.size()); }
 uint64_t installed_packages_revision() { return fake_package_revision; }
 bool container_mounted_for(const char* id) { return mounted_packages.count(id) != 0; }
+bool container_active_for(const char* id) { return live_assets.count(id) ? active_assets.count(id) != 0 : container_mounted_for(id); }
+bool container_change_pending(const char*) { return false; }
+uint64_t container_choices_revision() { return 1; }
+bool installed_asset_mod(const char* id) { return live_assets.count(id) != 0; }
+TSUCHI_Result apply_installed_asset_choice(const char* id, bool enabled, Text&) {
+    ++asset_choice_calls;
+    if (asset_choice_result != TSUCHI_OK) return asset_choice_result;
+    if (enabled) active_assets.insert(id); else active_assets.erase(id);
+    return TSUCHI_OK;
+}
 TSUCHI_Result installed_mod_description(uint32_t p, uint32_t m, ModRecord& out) {
     ++description_reads;
     if (description_result != TSUCHI_OK) return description_result;
@@ -59,6 +72,11 @@ TSUCHI_Result remove_installed_package(uint32_t i) {
     if (remove_result != TSUCHI_OK) return remove_result;
     if (i >= fake_packages.size()) return TSUCHI_NOT_FOUND;
     removed_packages.push_back(i); fake_packages.erase(fake_packages.begin() + i); ++fake_package_revision; return TSUCHI_OK;
+}
+bool installed_mod_removed(const ModRecord& record) {
+    constexpr size_t prefix = sizeof kPackagesFolder - 1;
+    return strlen(record.folder) > prefix && !memcmp(record.folder, kPackagesFolder, prefix) &&
+        record.folder[prefix] == '/' && !package_holding(record.id);
 }
 }
 namespace {
@@ -112,6 +130,69 @@ package_store::Receipt package_of(const char* folder, const char* title, std::in
     set(r.source, "github"); set(r.key, "author/mod"); set(r.title, title); set(r.release, "v2"); memset(r.digest, 'a', 64);
     for (const char* id : mods) set(r.mods[r.count++], id);
     return r;
+}
+void live_asset_choice_checks(uint64_t host) {
+    Text original_activation, original_order;
+    assert(mod_choices().activation_text(original_activation) && mod_choices().order_text(original_order));
+    fake_packages = {package_of("00000000000000000000000000000009", "Live asset", {"live.hair"})};
+    fake_packages[0].kind = uint32_t(package_store::Kind::assets);
+    package_manifests["live.hair"] = "{\"id\":\"live.hair\",\"name\":\"Hair\",\"version\":\"1.0.0\"}";
+    live_assets.insert("live.hair"); active_assets.insert("live.hair"); ++fake_package_revision;
+    asset_choice_calls = 0;
+    callbacks.host_ready(host); assert(ui_mod_list_native_hold(host) == TSUCHI_OK);
+    UiModListRow row{};
+    assert(callbacks.row(find_row("live.hair"),row) && !strcmp(row.state_label,"On"));
+    callbacks.action(host, find_row("live.hair"), 2, false); answer(true);
+    assert(callbacks.row(find_row("live.hair"),row) && !strcmp(row.state_label,"Restart"));
+    callbacks.action(host,0,5,false); answer(false); // discard never touches the archive
+    assert(asset_choice_calls == 0 && active_assets.count("live.hair"));
+    assert(ui_mod_list_native_hold(host) == TSUCHI_OK);
+    callbacks.action(host,find_row("live.hair"),2,false); answer(true);
+    save_result = TSUCHI_IO; callbacks.action(host,0,5,false); answer(true);
+    assert(asset_choice_calls == 0 && active_assets.count("live.hair"));
+    save_result = TSUCHI_OK; callbacks.action(host,0,5,false); answer(true);
+    assert(asset_choice_calls == 1 && !active_assets.count("live.hair") && message.find("Asset choices applied") == 0);
+    assert(ui_mod_list_native_hold(host) == TSUCHI_OK);
+    assert(callbacks.row(find_row("live.hair"),row) && !strcmp(row.state_label,"Off"));
+    callbacks.action(host,find_row("live.hair"),3,true); answer(true); callbacks.action(host,0,5,false); answer(true);
+    assert(asset_choice_calls == 2 && active_assets.count("live.hair"));
+    assert(ui_mod_list_native_hold(host) == TSUCHI_OK);
+    asset_choice_result = TSUCHI_BUSY;
+    callbacks.action(host,find_row("live.hair"),2,false); answer(true); callbacks.action(host,0,5,false); answer(true);
+    assert(asset_choice_calls == 3 && active_assets.count("live.hair") && message.find("restart") != std::string::npos);
+    assert(ui_mod_list_native_hold(host) == TSUCHI_OK);
+    assert(callbacks.row(find_row("live.hair"),row) && !strcmp(row.state_label,"Restart"));
+    callbacks.host_lost(host);
+    asset_choice_result = TSUCHI_OK; live_assets.clear(); active_assets.clear(); fake_packages.clear(); package_manifests.clear(); ++fake_package_revision;
+    ModChoices restored; assert(restored.load(original_activation.get(),original_order.get()) == TSUCHI_OK);
+    swap_mod_choices(restored); restored.clear(); original_activation.clear(); original_order.clear();
+}
+// A package already present at startup must disappear without erasing its live
+// record or its callbacks. Its registered menu button must disappear too.
+void removed_startup_catalogue_checks(uint64_t host) {
+    auto& record = records[2];
+    char original_folder[sizeof record.folder]; memcpy(original_folder, record.folder, sizeof record.folder);
+    TSUCHI_Mod* original_context = record.context;
+    auto* owner = mod_create("removed.asset.fixture"); assert(owner); record.context = owner;
+    const std::string folder = std::string(kPackagesFolder) + "/00000000000000000000000000000003/mods/" + record.id;
+    assert(folder.size() < sizeof record.folder); memcpy(record.folder, folder.c_str(), folder.size() + 1);
+    fake_packages = {package_of("00000000000000000000000000000003", "Hair asset", {record.id})}; ++fake_package_revision;
+    assert(!installed_mod_removed(record) && mod_usable(owner));
+    assert(ui::table.hold_menu_entry(owner, TSUCHI_MENU_MODS, "asset", "Asset tools", "") == TSUCHI_OK);
+    callbacks.host_ready(host); assert(ui_mod_list_native_hold(host) == TSUCHI_OK && callbacks.count() == 4);
+    const auto before = record.state;
+    callbacks.action(host, find_row(record.id), 102, true); select("remove"); answer(true);
+    assert(callbacks.count() == 2 && mod_count() == 3 && record.context == owner && record.state == before && mod_usable(owner));
+    for (uint32_t i = 0; i < callbacks.count(); ++i) { UiModListRow row{}; assert(callbacks.row(i,row) && strcmp(row.id,record.id)); }
+    assert(ui::table.hold_menu_entry(owner, TSUCHI_MENU_MODS, "asset", "Asset tools", "") == TSUCHI_NOT_READY);
+    callbacks.host_lost(host); callbacks.host_ready(host);
+    assert(ui_mod_list_native_hold(host) == TSUCHI_OK && callbacks.count() == 2);
+    // A reinstall can show the same stable record and registration again.
+    fake_packages = {package_of("00000000000000000000000000000003", "Hair asset", {record.id})}; ++fake_package_revision; step();
+    assert(callbacks.count() == 4 && find_row(record.id) < 3 && mod_count() == 3);
+    callbacks.host_lost(host); ui::table.release_menu_entry(owner, TSUCHI_MENU_MODS, "asset"); mod_stop(owner);
+    record.context = original_context; memcpy(record.folder, original_folder, sizeof record.folder);
+    fake_packages.clear(); removed_packages.clear(); ++fake_package_revision;
 }
 // The Installed page: a mod from a downloaded package shows its package and can remove it; one with cheats
 // opens them; none of it needs a downloader mod.

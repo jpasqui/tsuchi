@@ -28,6 +28,8 @@ identity:
   - {offset: 0x3405610, hash: 0x12E47DB99BCCB5CC}
 
 data:
+  io_dispatcher: 0x97FB9F0        # FIoDispatcher*, implementation at +8; qualified for 1.1.1
+  garbage_collecting: 0x9851628   # StaticFindObject's game-thread GC guard
   academy_points_session_gate: absent
   academy_points_provider_gate: absent
   academy_points_blocked_gate: absent
@@ -587,6 +589,10 @@ rows:
                   AreaSelect_Common_Complete_00]
 
 structs:
+  # FFileIoStore and immutable reader/map layouts, checked against native mount,
+  # resolve, exists and reader-constructor code. Ownership/index arrays stay intact.
+  container_io: {fields: {implementation: 8, backend: 0x58, lock: 0x1A8, lock_bytes: 0x20, readers: 0x1C8, readers_count: 0x1D0, container_id: 0xF0, toc: 8, toc_bytes: 0x50, package_lock: 0x70, package_map: 0x90}}
+  container_map: {fields: {count: 8, free_count: 0x34, first_free: 0x30, bits_capacity: 0x2C, hash_inline: 0x38, hash_data: 0x40, hash_count: 0x48, entry_bytes: 0x18, value: 8, next: 0x10}}
   academy_local_presenter:
     fields: {widget: absent, phase: absent, busy: absent}
   academy_local_callback:
@@ -1964,6 +1970,9 @@ functions:
   platform_files: {address: 0x35C5FE0, returns: pointer, args: []}
   find_platform_file: {address: 0x35C5A30, returns: pointer, args: [pointer, text16]}
   pak_mount: {address: 0x4F3CB70, returns: bool, args: [pointer, text16, u32, text16, bool]}
+  flush_async_loading: {address: 0x381D010, returns: void, args: [i32]} # request ID; -1 drains package loads before live archive changes
+  io_chunk_exists: {address: 0x36717E0, returns: bool, args: [pointer, const_pointer]}
+  find_loaded_object: {address: 0x39B5160, returns: pointer, args: [pointer, pointer, text16, bool]} # StaticFindObject; never loads, refused during GC
   # The engine opens a library of shaders, as it opens the game's as it starts: (the library's name, the folder
   # it is in), both the engine's strings by reference -> opened. The file is ShaderArchive-<name>-<format>.ushaderbytecode.
   shader_library_open: {address: 0x3F0A040, returns: bool, args: [pointer, pointer]}
@@ -2248,7 +2257,7 @@ route_frame_either: [particle_sprite.z]
 route_frame_optional: [cursor_written.saved_widget, cursor_written.saved_component, cursor_written.saved_return]
 
 route_frames:
-  package_store_entry: {slot: 8, entry: 24}
+  package_store_entry: {slot: 8, entry: 24, store: 23}
   ui_settings_dispatch: {object: 19, action: 20, no_action: 8}
   scene_publish: {task: 20}
   # z: x0-x30 as 0-30 (a float's bits), v0-v31 as 32-63 (lane 0; see route_frame_either); the others are vector registers.

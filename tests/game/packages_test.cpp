@@ -22,6 +22,9 @@ TSUCHI_Result install_result = TSUCHI_OK; // what the manifest check says
 std::vector<std::string> checked_incoming, checked_existing, checked_replaced;
 std::vector<std::string> mounted, mounted_folders;
 std::set<std::string> retained_mounts;
+bool live_capable = false, live_pending = false, live_active = true;
+TSUCHI_Result live_result = TSUCHI_OK;
+std::vector<bool> live_calls;
 std::string described_id, described_manifest;
 tsuchi::https::HttpsJob* queued = nullptr;
 TSUCHI_Result (*listing)(tsuchi::Texts&) = nullptr;
@@ -76,6 +79,15 @@ bool container_mounted_for(const char* id) { return retained_mounts.count(id) !=
 bool container_mounted_from(const char* prefix) {
     for (const auto& folder : mounted_folders) if (folder.rfind(prefix, 0) == 0) return true;
     return false;
+}
+bool container_folder_matches(const char*, const char*) { return true; }
+bool container_active_for(const char*) { return live_active; }
+bool container_live_switchable(const char*) { return live_capable; }
+bool container_change_pending(const char*) { return live_pending; }
+TSUCHI_Result set_container_enabled(const char*, bool enabled, Text&) {
+    live_calls.push_back(enabled);
+    if (live_result == TSUCHI_OK) { live_active = enabled; live_pending = false; }
+    return live_result;
 }
 TSUCHI_Result validate_downloaded_assets(const char*, const char*, Text&) { return TSUCHI_OK; }
 TSUCHI_Result mount_downloaded_assets(const char* id, const char* folder, Text&) { mounted.push_back(id); mounted_folders.push_back(folder); return TSUCHI_OK; }
@@ -351,13 +363,20 @@ void replacing_must_match() {
 void removes() {
     reset(); add_capable("the.downloader");
     assert(run(zip("mods")) == TSUCHI_OK && run(zip("other"), {.key = "author/other"}) == TSUCHI_OK && count() == 2);
-    const std::string a = installed_package(0)->folder, b = installed_package(1)->folder;
+    uint32_t a_index = 0;
+    const auto* a_receipt = package_holding("author.mod", &a_index);
+    const auto* b_receipt = package_holding("other.mod");
+    assert(a_receipt && b_receipt);
+    const std::string a = a_receipt->folder, b = b_receipt->folder;
     // Not loaded: its files go at once.
-    assert(service.remove(downloader, 0) == TSUCHI_OK && count() == 1 && !package_files(a.c_str()));
+    assert(service.remove(downloader, a_index) == TSUCHI_OK && count() == 1 && !package_files(a.c_str()));
     assert(service.remove(downloader, 5) == TSUCHI_NOT_FOUND);
     // Loaded: it is marked, and its files stay until the next start.
     loaded("other.mod", (root_of(b.c_str()) + "/mods/other.mod").c_str());
+    assert(!installed_mod_removed(records.back()));
     assert(service.remove(downloader, 0) == TSUCHI_OK && count() == 0 && package_files(b.c_str()) && disk.count(root_of(b.c_str()) + "/removed"));
+    assert(installed_mod_removed(records.back()));
+    assert(!installed_mod_removed(records.front())); // the manually installed downloader stays
     records.pop_back(); cleaned = false;
     assert(start_listing().empty() && !package_files(b.c_str()) && package_folders() == 0);
     // A reinstall after a removal is a fresh package.
@@ -467,6 +486,30 @@ void cooked_ids_come_from_source_and_key() {
     const std::string unmounted = installed_package(0)->folder;
     assert(service.remove(downloader, 0) == TSUCHI_OK && count() == 0 && !package_files(unmounted.c_str()));
 }
+void live_asset_choices_and_removal() {
+    reset(); retained_mounts.clear(); add_capable("the.downloader");
+    assert(run(zip("cooked")) == TSUCHI_OK);
+    const auto receipt = *installed_package(0);
+    const std::string id = receipt.mods[0];
+    retained_mounts.insert(id); live_capable = true; live_result = TSUCHI_OK;
+    live_active = true; live_pending = false; live_calls.clear();
+    assert(installed_asset_mod(id.c_str()) && !installed_asset_mod("the.downloader"));
+    Text problem;
+    assert(apply_installed_asset_choice(id.c_str(),false,problem) == TSUCHI_OK && !live_active);
+    assert(apply_installed_asset_choice(id.c_str(),true,problem) == TSUCHI_OK && live_active);
+    assert(live_calls.size()==2 && !live_calls[0] && live_calls[1]);
+    // A failed native transaction preserves the receipt and disk state.
+    live_result = TSUCHI_BUSY;
+    assert(service.remove(downloader,0) == TSUCHI_BUSY && count()==1 && package_files(receipt.folder));
+    assert(!disk.count(root_of(receipt.folder)+"/removed") && live_active);
+    // A queued unload counts as accepted removal. The row/receipt disappears,
+    // while retained streaming files survive for automatic cleanup next start.
+    live_result = TSUCHI_NOT_READY; live_pending = true;
+    assert(service.remove(downloader,0) == TSUCHI_OK && count()==0 && package_files(receipt.folder));
+    assert(disk.count(root_of(receipt.folder)+"/removed") && live_pending && live_active);
+    problem.clear(); live_capable = false; live_pending = false; live_result = TSUCHI_OK;
+    retained_mounts.clear(); live_calls.clear();
+}
 
 void cheats_install() {
     reset(); add_capable("the.downloader");
@@ -523,6 +566,7 @@ int main(int argc, char** argv) {
     std::printf("start_cleans\n"); std::fflush(stdout); start_cleans();
     std::printf("too_many_lists_none\n"); std::fflush(stdout); too_many_lists_none();
     std::printf("cooked_ids_come_from_source_and_key\n"); std::fflush(stdout); cooked_ids_come_from_source_and_key();
+    live_asset_choices_and_removal();
     std::printf("cheats_install\n"); std::fflush(stdout); cheats_install();
     std::printf("owner_stopping_cancels\n"); std::fflush(stdout); owner_stopping_cancels();
     records.clear(); listed.clear();

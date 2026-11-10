@@ -10,6 +10,8 @@ identity:
 - offset: 54633456
   hash: 17676423334391457610
 data:
+  garbage_collecting: absent
+  io_dispatcher: absent
   options_direction_delegate_table: 124569840
   options_input_delegate_table: 124569952
   dialog_answer_yes: 134277568
@@ -361,6 +363,31 @@ constants:
   effect_spawn_blocked: 2097664
   ui_keyboard_characters: 31
 structs:
+  container_io:
+    fields:
+      implementation: absent
+      backend: absent
+      lock: absent
+      lock_bytes: absent
+      readers: absent
+      readers_count: absent
+      container_id: absent
+      toc: absent
+      toc_bytes: absent
+      package_lock: absent
+      package_map: absent
+  container_map:
+    fields:
+      count: absent
+      free_count: absent
+      first_free: absent
+      bits_capacity: absent
+      hash_inline: absent
+      hash_data: absent
+      hash_count: absent
+      entry_bytes: absent
+      value: absent
+      next: absent
   slate_brush:
     size: 0x88
     fields: {resource: 0x48, resource_handle: 0x70}
@@ -2012,6 +2039,9 @@ structs:
     fields:
       throw_length_max: 1104
 functions:
+  find_loaded_object: absent
+  io_chunk_exists: absent
+  flush_async_loading: absent
   options_button_icon: 11961184
   options_direction: 63622000
   options_confirm: 63622400
@@ -2950,6 +2980,7 @@ route_frames:
   package_store_entry:
     slot: 8
     entry: 24
+    store: 23
   ui_settings_dispatch:
     object: 19
     action: 20

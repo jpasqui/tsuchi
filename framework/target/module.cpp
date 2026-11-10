@@ -243,7 +243,7 @@ extern "C" void tsuchi_initialize() {
     // sees the entry from the same container whose package bytes win in IoStore.
     native_route(t::native_route::package_store_entry, [](NativeFrame& frame) {
         namespace r = t::route_frame::package_store_entry;
-        refresh_mounted_package_entry(frame.x[r::slot], frame.x[r::entry]);
+        refresh_mounted_package_entry(frame.x[r::slot], frame.x[r::entry], frame.x[r::store]);
     });
     hooks_start();
     dynamic_hooks_start();
@@ -434,6 +434,7 @@ extern "C" void tsuchi_target_frame(float seconds) {
     tell_off_thread_calls();
     find_mods_once();
     start_mods_once();
+    poll_container_changes();
 #if TSUCHI_SELFCHECK
     selfcheck_frame();
 #endif

@@ -7,9 +7,11 @@ struct ModChange { char id[kModIdBytes]; bool enabled; };
 class ModManager {
   public:
     TSUCHI_Result begin(const ModChoices& saved);
-    // Extend the player's catalogue without changing the running loader or the
-    // draft. Descriptions stay alive until replaced or cleanup runs.
-    TSUCHI_Result additional(const ModRecord* const* records, uint32_t count);
+    // Publish the installed catalogue: startup records minus removed packages,
+    // plus new descriptions. The running loader and draft stay unchanged.
+    // Descriptions stay alive until replaced or cleanup runs.
+    TSUCHI_Result additional(const ModRecord* const* records, uint32_t count,
+                             const ModRecord* const* removed = nullptr, uint32_t removed_count = 0);
     TSUCHI_Result propose(const char* mod_id, bool enabled);
     const List<ModChange>& changes() const { return changes_; }
     TSUCHI_Result confirm();
@@ -28,6 +30,7 @@ class ModManager {
     Text activation_, order_, problem_;
     List<ModChange> changes_;
     List<const ModRecord*> additional_;
+    bool catalogue_known_ = false;
     bool begun_ = false, busy_ = false;
 };
 } // namespace tsuchi

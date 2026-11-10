@@ -734,15 +734,52 @@ const ps::Receipt* package_holding(const char* id, uint32_t* index) {
     return nullptr;
 }
 bool package_install_running() { return install_state.active; }
+bool installed_mod_removed(const ModRecord& record) {
+    constexpr size_t prefix = sizeof kPackagesFolder - 1;
+    return strlen(record.folder) > prefix && !memcmp(record.folder, kPackagesFolder, prefix) &&
+        record.folder[prefix] == '/' && !package_holding(record.id);
+}
+bool installed_asset_mod(const char* id) {
+    const auto* receipt = package_holding(id);
+    return receipt && receipt->kind == uint32_t(ps::Kind::assets) && receipt->count == 1;
+}
+TSUCHI_Result apply_installed_asset_choice(const char* id, bool enabled, Text& problem) {
+    const auto* receipt = package_holding(id);
+    if (!receipt || !installed_asset_mod(id)) return TSUCHI_UNSUPPORTED;
+    char where[128];
+    if (!path(where, sizeof where, receipt->folder, "/mods/") || !append(where, sizeof where, id)) return TSUCHI_CAPACITY;
+    if (container_mounted_for(id)) {
+        if (!container_folder_matches(id, where)) {
+            problem.set("An earlier version still owns this archive identity. Restart to use the installed version.");
+            return TSUCHI_BUSY;
+        }
+        return set_container_enabled(id, enabled, problem);
+    }
+    if (!enabled) return TSUCHI_OK;
+    return mount_downloaded_assets(id, where, problem);
+}
 TSUCHI_Result remove_installed_package(uint32_t index) {
     if (install_state.active) return TSUCHI_BUSY;
     const ps::Receipt* r = installed_package(index);
     if (!r || !initialize()) return TSUCHI_NOT_FOUND;
     char folder[33];
     memcpy(folder, r->folder, sizeof folder);
+    bool reactivate = false;
+    char asset[kModIdBytes]{};
+    if (r->kind == uint32_t(ps::Kind::assets) && r->count == 1 && container_live_switchable(r->mods[0])) {
+        memcpy(asset, r->mods[0], strlen(r->mods[0]) + 1);
+        reactivate = container_active_for(asset) && !container_change_pending(asset);
+        Text problem;
+        const auto result = set_container_enabled(asset, false, problem);
+        problem.clear();
+        if (result != TSUCHI_OK && !(result == TSUCHI_NOT_READY && container_change_pending(asset))) return result;
+    }
     {
         SdScope scope;
-        if (!mark_removed(folder)) return TSUCHI_IO;
+        if (!mark_removed(folder)) {
+            if (reactivate) { Text problem; set_container_enabled(asset, true, problem); problem.clear(); }
+            return TSUCHI_IO;
+        }
     }
     if (!in_use(folder)) delete_package(folder);
     return refresh_installed_packages();
