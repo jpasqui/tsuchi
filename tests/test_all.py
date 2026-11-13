@@ -386,7 +386,7 @@ class SchemaRules(unittest.TestCase):
         # What the generators make of it: the header and the reference page say it once, at the end of the entry.
         schema = load(self.broken(*added, self.BUBBLE, self.BUBBLE[:-1] + ', since: 2}', version=4))
         combat = next(s for s in schema.services if s.name == 'combat')
-        self.assertEqual([combat.since(fn) for fn in combat.functions], [0, 0, 0, 3, 0])
+        self.assertEqual([combat.since(fn) for fn in combat.functions], [0, 0, 0, 3, 0, 0, 0])
         header = c_header.generate(schema)['include/tsuchi/combat.h']
         self.assertIn('     * Added in version 3. A mod that also runs on a framework older than that asks TSUCHI_HAS\n'
                       '     * before it uses this. */\n    TSUCHI_Result (*knockback)(', header)
@@ -394,7 +394,7 @@ class SchemaRules(unittest.TestCase):
         self.assertIn('    TSUCHI_ATTACK_KIND_BUBBLE = 7u, /* A bubble that traps the target. Added in version 2. */', header)
         self.assertIn('#define TSUCHI_API_VERSION 4u', c_header.generate(schema)['include/tsuchi/core.h'])
         page = docs_page.generate(schema)['docs/reference/combat.mdx']
-        self.assertIn('Fails with `no_memory`: The game is out of memory.\n\nAdded in version 3.\n\n### kill_pikmin', page)
+        self.assertIn('Fails with `no_memory`: The game is out of memory.\n\nAdded in version 3.\n\n### thrown_hit', page)
         self.assertIn('| `bubble` | A bubble that traps the target. Added in version 2. |', page)
         self.assertEqual(page.count('Added in version'), 2)
         # A script has the function or does not: nothing in the binding turns on the version.
@@ -402,7 +402,7 @@ class SchemaRules(unittest.TestCase):
         # A whole service added later tells it of each of its members, since each is as new as the service.
         schema = load(self.broken('service: combat\n', 'service: combat\nsince: 2\n', *added, version=4))
         combat = next(s for s in schema.services if s.name == 'combat')
-        self.assertEqual([combat.since(fn) for fn in combat.functions], [2, 2, 2, 3, 2])
+        self.assertEqual([combat.since(fn) for fn in combat.functions], [2, 2, 2, 3, 2, 2, 2])
         self.assertIn('    const TSUCHI_CombatService *combat; /* Added in version 2. */', c_header.generate(schema)['include/tsuchi/tsuchi.h'])
         self.assertIn('A Pikmin is either alive or dead.\n\nAdded in version 2.\n\n## Tutorials',
                       docs_page.generate(schema)['docs/reference/combat.mdx'])
@@ -461,7 +461,7 @@ class SchemaRules(unittest.TestCase):
         self.assertEqual(script.count('tsuchi_lua::deprecated('), 3)
         page = docs_page.generate(schema)['docs/reference/combat.mdx']
         self.assertIn('Fails with `not_ready`: The game isn\'t ready.\n\nDeprecated in version 3: use [`combat.damage`](#damage).\n\n### damage', page)
-        self.assertIn('Added in version 2. Deprecated in version 4: use [`entity.destroy`](/reference/entity/#destroy).\n\n## Event descriptions', page)
+        self.assertIn('Added in version 2. Deprecated in version 4: use [`entity.destroy`](/reference/entity/#destroy).\n\n### refresh_gauge', page)
         self.assertIn('Deprecated in version 3: use [`combat.damaged`](#damaged).\n\n### pikmin_died', page)
         self.assertIn('| `bubble` | A bubble that traps the target. Deprecated in version 2: use `water`. |', page)
         self.assertIn('for actors that don\'t have any. Deprecated in version 4: use `max_extra`. |', page)
@@ -520,7 +520,7 @@ class SchemaRules(unittest.TestCase):
         # A released table is in the order its members were added: a framework has everything up to the length of
         # its table, so what was added in version 3 cannot sit before what the first release had.
         made['released'] = True
-        with self.assertRaisesRegex(SchemaError, 'combat.kill_pikmin: its place in schema/abi.lock is after knockback, which was added in version 3'):
+        with self.assertRaisesRegex(SchemaError, 'combat.thrown_hit: its place in schema/abi.lock is after knockback, which was added in version 3'):
             load(folder(made, *added, *retired))
         members = made['tables']['combat']
         members.append(members.pop(members.index('knockback')))
