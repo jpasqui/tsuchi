@@ -617,7 +617,7 @@ structs:
     fields:
       name: 0
       kind: 772
-      bytes: absent
+      bytes: 776
   dialog_request:
     size: 944
     fields:

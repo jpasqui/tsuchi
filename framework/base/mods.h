@@ -37,7 +37,10 @@ struct ModRecord {
     uint32_t rank;        // its first context's rank, kept by every restart; 0 until it has had a context
     bool dev_folder;      // its development folder on the SD card was there as it last started
     bool restart_asked;   // a restart waits for the end of the step
-    uint64_t dev_print;   // what its development folder held as it last started or was last watched; 0 for none
+    uint64_t dev_print;   // its development folder's files, by path and size, as last seen; 0 for none
+    uint64_t dev_content; // their bytes, as last read through
+    uint64_t dev_partial; // the bytes read so far of the pass under way, and the file it goes on from
+    uint32_t dev_next;
     // For the framework's own use while it works out which can run and in what order.
     uint32_t seen;
     bool circular;
@@ -125,6 +128,11 @@ void set_dev_folder(const char* root, bool (*begin)(), void (*end)());
 // Watches the development folders: every `steps` steps, a mod that has had its turn is restarted when its
 // development folder was made, taken away, or had a file added, removed or changed since it last started. 0, as
 // before the first call, watches nothing. See DESIGN.md, "The development folder".
+//
+// Each look lists the folder: a file added, removed or of another size is seen at once, and no file is opened for
+// it. The files' bytes are read a few at a time, in passes over the folder (kWatchFiles files and kWatchBytes
+// bytes a look, at least one file), so a change that keeps a file's size is seen at the end of the pass it falls
+// in. A mod with a few small files has a pass every look.
 void set_dev_watch(uint32_t steps);
 // Looks at the development folders when the interval set_dev_watch gave has passed. Runs after each step, before
 // run_restarts.
