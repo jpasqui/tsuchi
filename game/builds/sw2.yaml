@@ -10,6 +10,7 @@ identity:
 - offset: 54633456
   hash: 17676423334391457610
 data:
+  academy_schedule: 134226088
   wwise_audio_manager: 133583072
   wwise_parameter_manager: 133583128
   ui_select_sound: 134123088
@@ -266,6 +267,39 @@ constants:
   effect_spawn_blocked: 2097664
   ui_keyboard_characters: 31
 structs:
+  academy_schedule:
+    fields:
+      status: 72
+      record: 672
+      valid: 680
+      set: 688
+      latest: 704
+      prev: 760
+      first_period: 816
+      refresh_pending: 933
+      uses_schedule: 1042
+      tab_checked: 932
+  academy_period:
+    fields:
+      stage: 0
+      delivery: 8
+      starts: 16
+      ends: 32
+      ticket: 48
+      ticket_limit: 52
+      closed: 53
+  academy_save:
+    fields:
+      held_ids: 504
+      disable_test_guide: 545
+      update_delivery: 576
+      delivery_text: 584
+      service_end: 952
+  academy_course_entry:
+    size: 64
+    fields:
+      key: 0
+      row: 8
   console_manager_table:
     fields:
       find_variable: 176
@@ -588,8 +622,13 @@ structs:
   dialog_widget:
     fields:
       text: 1416
+  academy_data:
+    fields:
+      test_courses: 96
   ui_manager:
     fields:
+      academy_data: 6000
+      academy_courses: 5584
       announcer: 840
   announcer:
     fields:
@@ -748,6 +787,7 @@ structs:
       controllers: 768
       pause_manager: 1360
       saves: 496
+      academy_save: 552
   config_save:
     fields:
       play_mode: 128
@@ -1675,6 +1715,8 @@ functions:
   ui_arrow_left: 59306432
   ui_arrow_right: 59306512
   ui_post_sound: 6162000
+  academy_open_periods: 57872448
+  academy_period_start: 57873600
   ui_context_world: 2909680
   ui_widget_in_viewport: 9958848
   ui_widget_viewport: 15774736

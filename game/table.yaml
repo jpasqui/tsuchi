@@ -11,7 +11,7 @@ build_id: 060F827BD2B38703E9EA11E3210D89BC   # of the game's code, as patch file
 # containers of the engine and numbers the framework itself owns belong here, never a gameplay layout.
 fixed:
   constants: [native_jump_offset, dynamic_hook_slots, player_slots]
-  structs: [array, text_value, enum_name, frozen_name]
+  structs: [array, text_value, enum_name, frozen_name, sparse_array]
 
 # The constants that are addresses, the only ones a build can lack. The others are flags, counts, and sizes,
 # which the framework reads as numbers of every build.
@@ -114,6 +114,7 @@ data:
   battle_end_table: 0x89C0470
   gimmick_warp_stage_function: 0x14AB0D0
   content_icon_size: 0x935E568
+  academy_schedule: absent          # Switch 2 Edition: pointer to the Dandori Academy's schedule manager (what it parsed of DDKStages and DDKHeldInfo)
 constants:
   stream_block_load: 0x80
   stream_source_cdo: 0x10
@@ -717,7 +718,12 @@ structs:
   dialog_widget:
     fields: {text: 0x588}             # a weak reference to the block its text is shown in
   ui_manager:
-    fields: {announcer: 0x2F0}        # what shows the game's announcements
+    fields: {announcer: 0x2F0,        # what shows the game's announcements
+             academy_courses: absent,  # Switch 2 Edition: a sparse_array of academy_course_entry, the Academy's copy of
+                                       # each exam period's row of its course table, made once as the game starts
+             academy_data: absent}     # pointer to the Academy's data asset
+  academy_data:                     # the Academy's data asset: its tables and limits
+    fields: {test_courses: absent}   # a soft pointer to the table of exam courses; it starts with a weak reference
   announcer:
     fields: {banner: 0x2C0}           # the banner's widget, once the game has made it
   banner_widget:
@@ -795,6 +801,41 @@ structs:
   array:
     size: 0x10
     fields: {data: 0x0, count: 0x8, max: 0xC}
+  sparse_array:                     # the engine's sparse array, which its maps and sets keep their entries in
+    size: 0x38
+    fields: {data: 0x0, count: 0x8,  # the entries, the free ones among them
+             bits: 0x10,            # a bit for each entry, set when it holds one: here for the first 128
+             more_bits: 0x20,       # or, when not null, the bits are there instead
+             bit_count: 0x28}
+  academy_schedule:                 # the Academy's schedule manager (Switch 2 Edition), as its download parser fills it
+    fields: {status: absent,         # the download's result: 1 when the schedule loaded
+             record: absent,         # the parsed schedule, which the game's period functions read
+             valid: absent,          # 1 while the parsed schedule holds
+             set: absent,            # array of i32: DDKStages.Set, the exam periods in the order they come out
+             latest: absent,         # an academy_period: DDKHeldInfo.Latest
+             prev: absent,           # an academy_period: DDKHeldInfo.Prev
+             first_period: absent,   # u8: 1 when there is no Prev
+             refresh_pending: absent,  # u8: set, a tab change throws the schedule away
+             uses_schedule: absent,  # u8: the exam list takes its periods from the schedule, not the save
+             tab_checked: absent}    # u8: the player has looked at the Exams tab since the last delivery
+  academy_period:                   # one period of DDKHeldInfo
+    fields: {stage: absent,          # i32: how many periods of the Set are out, from 1
+             delivery: absent,       # i64 FDateTime ticks: DeliveryDate
+             starts: absent,         # array of i64 ticks: TestDates' Start
+             ends: absent,           # array of i64 ticks: TestDates' End
+             ticket: absent,         # i32: Redo Passes handed out
+             ticket_limit: absent,   # u8: UseTicketLimit
+             closed: absent}         # u8: Close
+  academy_save:                     # the Academy's save, as the game keeps it while it runs
+    fields: {held_ids: absent,       # array of i32: the exam periods delivered to the player
+             disable_test_guide: absent,  # u8: the player turned the Exams guide off
+             update_delivery: absent,     # u8: a delivery waits to be announced
+             delivery_text: absent,       # engine string: when the delivered periods came out, %Y-%m-%dT%H:%M:%S.%sZ
+             service_end: absent}         # u8: the save is past the end of the service
+  academy_course_entry:              # one entry of the Academy's copy of its course table
+    size: absent
+    fields: {key: absent,            # the row's name
+             row: absent}            # a copy of the row, of the table's row type
   game_context:
     fields: {night_start: 0xFC, snapshot_owner: 0, rule: 0xD0,              # the number of the rule being played: 1 the story, 6 and 8 battles
              players: 0x408,          # what the game keeps of its players, here within the context itself
@@ -812,7 +853,8 @@ structs:
              pending: 0xB0}                # a stage waiting to become its child
   game_instance:
     fields: {scene_manager: 0x1B0, config_save: 0x1F0, story_save: 0x1F8, controllers: 0x2E8, pause_manager: 0x538,
-             saves: 0x1F0}               # CarrotSaveGames: one object pointer for each of the save_kinds, config first
+             saves: 0x1F0,               # CarrotSaveGames: one object pointer for each of the save_kinds, config first
+             academy_save: absent}       # Switch 2 Edition: pointer to the Dandori Academy's save (CarrotSaveGames.DDK)
   config_save:
     fields: {play_mode: 0x80, slot: 0x98}         # see the play_mode_ constants
   story_save:
@@ -1329,6 +1371,10 @@ functions:
   map_set_package: {address: 0x055C6FE0, args: [pointer, u64]}
   ui_arrow_left: {address: 0x02274CB0, args: [pointer]}
   ui_arrow_right: {address: 0x02274D70, args: [pointer]}
+  # Switch 2 Edition: the exam periods open now by the schedule (an array of i32), and when the
+  # period in effect came out (FDateTime ticks; the second argument is 0). Both read the network clock.
+  academy_open_periods: {address: absent, returns: engine_array, args: [const_pointer]}
+  academy_period_start: {address: absent, returns: i64, args: [const_pointer, u32]}
   ui_post_sound: {address: 0x18d02f0, returns: u64, args: [pointer, const_pointer, u32, u32, bool, bool]}
   ui_context_world: {address: 0x05B14720, returns: pointer, args: [pointer, pointer, u32]}
   ui_widget_in_viewport: {address: 0x4c97e00, returns: bool, args: [pointer]}

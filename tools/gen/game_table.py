@@ -44,11 +44,12 @@ KEYWORDS = {'class', 'struct', 'union', 'enum', 'namespace', 'template', 'this',
 C_TYPES = {'void': 'void', 'bool': 'bool', 'u8': 'uint8_t', 'i32': 'int32_t', 'u32': 'uint32_t', 'i64': 'int64_t', 'u64': 'uint64_t',
            'f32': 'float', 'f64': 'double', 'pointer': 'void*', 'const_pointer': 'const void*',
            'engine_text': '::tsuchi::game::EngineText', 'physics_pose': '::tsuchi::game::PhysicsPose',
+           'engine_array': '::tsuchi::game::EngineArray',
            'text': 'const char*', 'text16': 'const char16_t*'}
 SIGNED = {'returns', 'args'}
 ABSENT = 'absent'                    # how a build file writes an entry that build does not have
 ABSENT_VALUE = 0x0FFF0000FFFF0000    # the number of one: added to an address, it is an address nothing can read, and cut to 32 bits it is not 0
-BY_VALUE = {'engine_text', 'physics_pose'}  # returned by value, so no stand-in can be generated for a missing function
+BY_VALUE = {'engine_text', 'physics_pose', 'engine_array'}  # returned by value: a missing function is null, not a stand-in
 BUILD_KEY = re.compile(r'[a-z0-9][a-z0-9.-]{0,23}')
 MOST_FAMILIES = 64
 
@@ -306,7 +307,8 @@ def load_builds(path, fixtures=None):
 
 
 def load_raw(raw, path, build_key=None):
-    """The table in `raw`, checked. `build_key` says it is a build's, which alone may hold absent entries."""
+    """The table in `raw`, checked. `build_key` says it is a build's. A build may hold absent entries; the base table
+    only absent globals, structure fields and functions, for what only a later build of the game has."""
     for key in ('game', 'version'):
         if not raw.get(key):
             raise SchemaError(f'{path}: missing "{key}"')
@@ -323,8 +325,10 @@ def load_raw(raw, path, build_key=None):
         """A number, or the number of an entry this build does not have."""
         if value != ABSENT:
             return number(at, value)
-        if build_key is None:
-            raise SchemaError(f'{at}: only a build file can mark an entry absent')
+        # The first build can lack a global, a structure's field or a function a later build has, as the Switch 2
+        # Edition's Dandori Academy. Everything else a later build has needs a change of format first.
+        if build_key is None and not at.startswith(('data.', 'structs.', 'functions.')):
+            raise SchemaError(f'{at}: only a build file can mark an entry absent, but for a global, a structure field or a function')
         if at.startswith('constants.') and at.split('.')[1] not in (raw.get('address_constants') or ()):
             raise SchemaError(f'{at} cannot be absent: only a constant under address_constants can')
         table['absent'].append(at)
@@ -363,8 +367,6 @@ def load_raw(raw, path, build_key=None):
             'address': amount(at, body.get('address')),
             'returns': c_type(at, body.get('returns', 'void')),
             'args': [c_type(at, arg) for arg in body.get('args') or []]}
-        if body.get('address') == ABSENT and body.get('returns') in BY_VALUE:
-            raise SchemaError(f'{at}: a function that returns a {body["returns"]} by value cannot be absent')
     for name, body in names('slots', raw.get('slots')).items():
         at = f'slots.{name}'
         table['slots'][name] = {'table': amount(at, body.get('table')), 'offset': amount(at, body.get('offset')),
@@ -876,7 +878,7 @@ def generate(path, source=None):
     def cell(entry):
         return f'{{{index[entry]}}}'
 
-    out = [BANNER.format(source=source or Path(path).as_posix()), '#pragma once\n#include <stdint.h>\n\nnamespace tsuchi::game { struct EngineText; struct PhysicsPose; }\n\n',
+    out = [BANNER.format(source=source or Path(path).as_posix()), '#pragma once\n#include <stdint.h>\n\nnamespace tsuchi::game { struct EngineText; struct PhysicsPose; struct EngineArray; }\n\n',
            'namespace tsuchi::game::table {\n\n',
            f'constexpr const char* game = "{table["game"]}";\n\n']
     out.append('// How to tell a build of the game from any other: the 16 bytes at each offset hash (FNV-1a, 64-bit) to the value.\n'
@@ -982,7 +984,7 @@ def generate(path, source=None):
                 out.append(f'constexpr uint32_t size = {body["size"]:#x};\n')
             else:
                 out.append(f'constexpr Cell<uint64_t> size{cell(f"structs.{name}.size")};\n')
-            largest = max(s for s in (build['structs'][name]['size'] for build in builds) if s != ABSENT_VALUE)
+            largest = max((s for s in (build['structs'][name]['size'] for build in builds) if s != ABSENT_VALUE), default=0)
             out.append(f'constexpr uint32_t most = {largest:#x};\n')
         for field, offset in body['fields'].items():
             if is_fixed:
@@ -1093,19 +1095,22 @@ def generate(path, source=None):
     missing = [name for name in table['functions'] if any(build['functions'][name]['address'] == ABSENT_VALUE for build in builds)]
     out.append('}\n\n// What a function a build does not have is bound to: it does nothing and returns zero. `bound` says whether a\n'
                '// function can be called for what it does, which a check that it is not null cannot say of this stand-in.\n'
+               '// One that returns a structure by value is left null instead, as this header only names those types.\n'
                'template <class R, class... A>\ninline R absent_function(A...) { return R(); }\n'
                'template <class R>\nstruct by_value { static constexpr bool value = false; };\n'
                + ''.join(f'template <>\nstruct by_value<{C_TYPES[kind]}> {{ static constexpr bool value = true; }};\n' for kind in sorted(BY_VALUE)) +
                'template <class R, class... A>\ninline bool bound(R (*function)(A...)) {\n'
-               '    if constexpr (by_value<R>::value) return function != nullptr; // never absent: the generator refuses it\n'
+               '    if constexpr (by_value<R>::value) return function != nullptr;\n'
                '    else return function && function != &absent_function<R, A...>;\n}\n')
+    by_value_types = {C_TYPES[kind] for kind in BY_VALUE}
     out.append('\ninline void bind_functions(uint64_t main_base) {\n')
     for name, f in table['functions'].items():
         signature_ = f'{f["returns"]} (*)({", ".join(f["args"]) or "void"})'
         bound = f'reinterpret_cast<{signature_}>(main_base + cells[{index[f"functions.{name}"]}])'
         if name in missing:
             kinds = ', '.join([f['returns']] + f['args'])
-            bound = f'cells[{index[f"functions.{name}"]}] == absent_value ? absent_function<{kinds}> : {bound}'
+            stand_in = 'nullptr' if f['returns'] in by_value_types else f'absent_function<{kinds}>'
+            bound = f'cells[{index[f"functions.{name}"]}] == absent_value ? {stand_in} : {bound}'
         out.append(f'    fn::{identifier(name)} = {bound};\n')
     if not table['functions']:
         out.append('    (void)main_base;\n')
