@@ -38,6 +38,15 @@ flags:
       - {name: collision, value: 8, doc: "The whole actor's collision. Other objects pass through it, but it can still be found, hit, and whistled at. To turn off one collision component instead, use `collision.hold_off`."}
 
 structs:
+  Track:
+    doc: "The newest timed pose that your mod fed for one key, with the time of each part."
+    fields:
+      - {name: location, type: vec3, doc: "The position, in centimeters."}
+      - {name: rotation, type: rotation, doc: "The direction its body faces."}
+      - {name: velocity, type: vec3, doc: "Its velocity, in centimeters per second, or zero when none was fed."}
+      - {name: location_time, type: f32, doc: "The time of the position, in the clock your mod feeds times in."}
+      - {name: rotation_time, type: f32, doc: "The time of the rotation."}
+
   Pose:
     doc: "An entity's gameplay position and the direction its body faces. This differs from `actor.transform`, which is Unreal's root transform."
     fields:
@@ -200,6 +209,94 @@ functions:
       invalid: "You didn't pass any parts, or the actor isn't a game entity."
     users: [groink, online-coop]
 
+  - name: hold_track
+    doc: |
+      Shows an actor along a track of timed poses that your mod feeds with
+      `feed_tracks`, under a key of your own. Each `show_tracks` puts it where
+      its track is at that moment: the newest position, carried on by its
+      velocity for up to 0.2 seconds past its time. The first six showings
+      ease from where the actor stood. It is only moved when its track has
+      moved, and moved back at the next showing when something pushed it.
+      Between world steps, the frames show it moving from its last place to
+      the new one, the same as an actor that the game moves, so it stays smooth
+      above 30 frames per second. `set_pose` moves an actor at once instead.
+      Each showing also gives the actor's body, while it is awake, the
+      velocity of its motion along the track since the showing before, across
+      the ground: 0 while it stands. The game's own logic and animation then see
+      it walk and stop as it is shown.
+      Suspend the actor's movement and physics too, or the game moves it as
+      well. The hold ends when released, when the actor leaves the world, or
+      when your mod stops; the actor then stays where it was last put.
+    owns: true
+    params:
+      - {name: actor, type: handle<actor>, doc: The actor.}
+      - {name: key, type: u32, doc: "Your number for its track, from `1`."}
+    fails:
+      not_found: "The actor no longer exists."
+      invalid: "The key is `0`, or the actor isn't a game entity."
+      busy: "Another mod shows this actor along a track, or another of your actors has this key."
+    completes: hold_suspended
+
+  - name: release_track
+    doc: "Stops showing an actor along its track. It stays where it was last put."
+    owns: true
+    params:
+      - {name: actor, type: handle<actor>, doc: The actor.}
+    fails:
+      not_found: "The actor no longer exists, or your mod doesn't show it along a track."
+      invalid: "The actor isn't a game entity."
+    completes: hold_suspended
+
+  - name: feed_tracks
+    doc: |
+      Adds timed poses to your mod's tracks. A part older than the one a track
+      has is left out, so poses that arrive late or out of order do no harm.
+      The data is little-endian: a byte `1` (the format), the time as a 32-bit
+      float, and a 16-bit count of records. Each record is a 32-bit key, a byte
+      of parts (`1` position, `2` rotation, `4` velocity), then the parts it
+      has: the position as three floats in centimeters, the rotation as three
+      signed 16-bit hundredths of a degree (pitch, yaw, roll), and the velocity
+      as three floats. Keys need no actor: `track` reads any key fed.
+    owns: true
+    params:
+      - {name: data, type: bytes, doc: "The block, up to 65,536 bytes."}
+    returns: {type: u32, doc: "How many records were taken."}
+    fails:
+      invalid: "The data isn't a whole block of this format, a key is `0`, or a value isn't finite."
+      no_memory: "There is no memory for more tracks."
+    completes: hold_suspended
+
+  - name: show_tracks
+    doc: |
+      Puts each actor your mod shows along a track where its track is at `now`,
+      in the clock your mod feeds times in. Call it once a step.
+    owns: true
+    params:
+      - {name: now, type: f32, doc: "The time to show, in your clock."}
+    returns: {type: u32, doc: "How many actors were moved."}
+    fails:
+      not_ready: No world is loaded.
+    completes: hold_suspended
+
+  - name: track
+    doc: "The newest timed pose your mod fed for a key."
+    owns: true
+    params:
+      - {name: key, type: u32, doc: "The key."}
+    returns: {type: struct<Track>, doc: "The pose and its times."}
+    fails:
+      not_found: "Your mod fed no position for this key, or forgot it."
+    completes: hold_suspended
+
+  - name: forget_track
+    doc: "Forgets everything your mod fed for a key. An actor shown along it stays where it is until it is fed again."
+    owns: true
+    params:
+      - {name: key, type: u32, doc: "The key."}
+    fails:
+      not_found: "Your mod has no track under this key."
+    completes: hold_suspended
+
   - name: suspended
     doc: "The parts of an actor that are suspended by any mod."
     params:
@@ -209,6 +306,20 @@ functions:
       not_found: "The actor no longer exists."
       invalid: "The actor isn't a game entity."
     users: [groink, online-coop]
+
+  - name: parts
+    doc: |
+      The parts an actor has that `hold_suspended` can suspend: an AI that
+      decides for it, its own movement, a physics body that simulates, and parts
+      that block. A body part that a mod suspended still counts, as the actor has
+      it; suspending a part the actor doesn't have doesn't add it.
+    params:
+      - {name: actor, type: handle<actor>, doc: "The actor to check."}
+    returns: {type: flags<EntityParts>, doc: "The parts, or none."}
+    fails:
+      not_found: "The actor no longer exists."
+      invalid: "The actor isn't a game entity."
+    completes: hold_suspended
 
   - name: spawn
     doc: |
@@ -272,6 +383,24 @@ functions:
       not_ready: "There is no fresh completed contact update for the actor's current body and pose."
       no_memory: "There is no memory to observe another actor."
     users: [captain-jump, motion-checks]
+
+  - name: read_poses
+    doc: |
+      Reads many entities' positions, rotations and velocities in one call, for a
+      mod that sends a whole squad's places each step. `actors` is little-endian
+      64-bit actor handles, up to 512. You get one 31-byte record for each, in the
+      same order: a byte of parts (`1` position, `2` rotation, `4` velocity), the
+      position as three floats in centimeters, the rotation as three signed 16-bit
+      hundredths of a degree (pitch, yaw, roll), and the velocity as three floats
+      in centimeters per second. A part an actor lacks is zeros, and an actor that
+      is gone, isn't a game entity or has no position yet has parts `0`. The
+      record is a `feed_tracks` record without its key. Ask for 31 bytes an actor.
+    params:
+      - {name: actors, type: bytes, doc: "The handles, 8 bytes each."}
+    returns: {type: bytes, doc: "One record for each handle."}
+    fails:
+      invalid: "`actors` isn't a whole number of handles or has more than 512, or fewer than 31 bytes an actor were asked for."
+    completes: hold_suspended
 
 events:
   - name: spawned

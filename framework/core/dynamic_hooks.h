@@ -165,6 +165,11 @@ struct DynamicPlatform {
 };
 void set_dynamic_platform(const DynamicPlatform& platform);
 
+// Where a named entry of the game table is, and the function the game keeps there, both as offsets from the start
+// of the game's code. TSUCHI_NOT_FOUND for a name the table doesn't have, TSUCHI_UNSUPPORTED when the running
+// build of the game has no such entry.
+TSUCHI_Result hook_slot_entry(const char* name, uint64_t& entry, uint64_t& stock);
+
 } // namespace tsuchi
 
 // A gateway's way in. Returns nothing: the results are in the frame.

@@ -170,5 +170,23 @@ check(not pcall(reflection.get, 5, "Health"))
 check(not pcall(reflection.get, red))
 check(not pcall(reflection.set, red, "Health"))
 
+-- A field list, one name at a time: the class's own fields, then its parent's.
+check(reflection.field_at(red, "", 0) == "Anger" and reflection.field_at(red, "", 3) == "Health")
+check(reflection.field_at(red, "Location", 2) == "Z")
+check(fails("not_found", reflection.field_at(red, "Location", 3)))
+check(fails("invalid", reflection.field_at(red, "Health", 0)))
+
+-- Memory: a block, written and read back as packed numbers, and freed.
+check(memory.main() > 0)
+local block = memory.allocate(16, 8, false)
+local at = memory.address(block)
+check(math.type(at) == "integer" and memory.read(at, 16) == string.rep("\0", 16))
+check(memory.write(at, string.pack("<I4i2", 4242, -7)) == true)
+local number, small = string.unpack("<I4i2", memory.read(at, 6))
+check(number == 4242 and small == -7)
+check(fails("not_found", memory.read(0x10, 4)))
+check(fails("invalid", memory.write(memory.main(), "\0\0\0\0")), "the game's code isn't written here")
+check(memory.free(block) == true and fails("not_found", memory.address(block)))
+
 -- The typed services take the same handle.
 check(combat ~= nil and not pcall(combat.life, body), "a component is not an actor")

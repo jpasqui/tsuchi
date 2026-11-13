@@ -12,6 +12,13 @@
 // steps of each value; before each picture between steps the renderer is given the value between them, and once a
 // value stops changing, its own value again. The game's own copy is never changed.
 //
+// The carry counters are one component's quads in the world, made on the game's thread from each counter's point
+// when the component sends its dynamic data, which its update asks for once a step; each step the counter's point is
+// put where its carried thing is. The renderer draws the quads through each picture's view, so only the points stay
+// behind: before each picture between steps every counter's point is put between its last two steps and the
+// component is asked to send its data again. The next step puts every point back from its thing; one the game left
+// as this put it keeps the step's own.
+//
 // Cascade particles keep the location they had before their last update next to the one after it, and the
 // renderer draws from a copy of both. While a scene is drawn on the render thread, the particles' routes move each
 // particle that far between the two that its view family is between the last two steps. The game's thread tells
@@ -40,6 +47,91 @@ uint64_t (*microseconds)() = nullptr;
 void count(uint32_t& counter, uint32_t by = 1) { __atomic_fetch_add(&counter, by, __ATOMIC_RELAXED); }
 
 double at() { return double(moment.steps) - 1 + moment.fraction; }
+
+// ---- Carry counters ------------------------------------------------------------------------------------
+
+constexpr unsigned kCounters = 192;
+constexpr uint64_t kCounterEntry = 0x18; // one counter in the component's list
+
+struct Counter {
+    uint64_t item, step;
+    float before[3], now[3], shown[3];
+    bool used, pair, wrote, seen;
+};
+Counter counters[kCounters] = {};
+uint64_t counters_step = 0; // the step the counters were last read at
+
+Counter* counter_of(uint64_t item) {
+    Counter* free = nullptr;
+    for (Counter& c : counters) {
+        if (c.used && c.item == item) return &c;
+        if (!c.used && !free) free = &c;
+    }
+    if (free) *free = Counter{}, free->item = item;
+    return free;
+}
+
+void counters_present() {
+    namespace n = t::carry_numbers;
+    if (!(moment.parts & kPartMarkers) || !t::bound(t::fn::mark_end_of_frame) || !t::present(t::game_framework::carry_numbers))
+        return;
+    const uint64_t framework = game::global<uint64_t>(t::data::game_framework);
+    const uint64_t numbers = framework ? game::read_or<uint64_t>(framework + t::game_framework::carry_numbers) : 0;
+    if (!numbers || !game::readable(numbers + t::carry_numbers::entries, 16)) return;
+    // Registered with a render state (its update asks only then).
+    const uint32_t flags = game::read_or<uint32_t>(numbers + t::actor_component::lifecycle_flags);
+    if ((~flags & 3) != 0) return;
+    const int32_t listed = game::read_or<int32_t>(numbers + n::count);
+    const uint64_t entries = game::read_or<uint64_t>(numbers + n::entries);
+    if (listed <= 0 || listed > int32_t(kCounters) || !entries || !game::readable(entries, uint64_t(listed) * kCounterEntry)) return;
+    const bool fresh = counters_step != moment.steps; // the first picture since a step
+    if (fresh)
+        for (Counter& c : counters) c.seen = false;
+    const double place = at();
+    bool moved = false;
+    for (int32_t i = 0; i < listed; ++i) {
+        const uint64_t item = game::read_or<uint64_t>(entries + uint64_t(i) * kCounterEntry);
+        float p[3];
+        if (!item || !game::readable(item + t::carry_number::place, sizeof p)) continue;
+        memcpy(p, reinterpret_cast<const void*>(item + t::carry_number::place), sizeof p);
+        if (!(p[0] - p[0] == 0 && p[1] - p[1] == 0 && p[2] - p[2] == 0)) continue;
+        Counter* c = counter_of(item);
+        if (!c) continue;
+        if (c->step != moment.steps) {
+            float real[3];
+            memcpy(real, c->wrote && !memcmp(p, c->shown, sizeof p) ? c->now : p, sizeof real);
+            c->pair = c->used && c->step + 1 == moment.steps;
+            if (c->pair) memcpy(c->before, c->now, sizeof c->before);
+            memcpy(c->now, real, sizeof c->now);
+            c->step = moment.steps, c->used = true, c->wrote = false;
+        }
+        c->seen = true;
+        // One that didn't move between its last two steps is where its step put it: nothing to send for it.
+        if (!c->pair || (!c->wrote && !memcmp(c->before, c->now, sizeof c->now))) continue;
+        const float f = place_between(c->step - 1, c->step, place);
+        float move = 0, shown[3];
+        if (f >= 1 || jumped(c->before, c->now, 0, move)) {
+            memcpy(shown, c->now, sizeof shown);
+            if (!c->wrote) continue;
+        } else {
+            for (int k = 0; k < 3; ++k) shown[k] = c->before[k] + (c->now[k] - c->before[k]) * f;
+        }
+        memcpy(reinterpret_cast<void*>(item + t::carry_number::place), shown, sizeof shown);
+        memcpy(c->shown, shown, sizeof shown);
+        c->wrote = true, moved = true;
+        count(counts.counters_moved);
+    }
+    if (fresh) {
+        for (Counter& c : counters)
+            if (c.used && !c.seen) c.used = false;
+        counters_step = moment.steps;
+    }
+    if (!moved) return;
+    // Its dynamic data is sent again, as its own update asks for it.
+    game::write<uint32_t>(numbers + t::actor_component::lifecycle_flags, game::read_or<uint32_t>(numbers + t::actor_component::lifecycle_flags) | 0x80);
+    t::fn::mark_end_of_frame(reinterpret_cast<void*>(numbers));
+    count(counts.counter_sends);
+}
 
 // ---- Instances -----------------------------------------------------------------------------------------
 
@@ -128,6 +220,7 @@ struct MaterialValue {
     uint64_t material, weak, from, to;
     uint8_t info[16];
     float a[4], b[4], sent;
+    float rate[4]; // the change a step across the last two steps
     bool used, pair, scalar;
 };
 MaterialValue materials[kMaterialValues] = {};
@@ -180,12 +273,20 @@ void keep_material(void* material, const void* parameter, bool scalar) {
     } else if (step == entry->to) {
         memcpy(entry->b, value, sizeof value); // set again in the same step: the newest is the step's
     } else {
-        float most = 0;
+        float most = 0, rate[4];
+        bool snap = false;
         for (unsigned i = 0; i < 4; ++i) {
             const float d = value[i] > entry->b[i] ? value[i] - entry->b[i] : entry->b[i] - value[i];
             if (d > most) most = d;
+            // A value that went back across this step much faster than it went on across the step before wrapped,
+            // as a looping clip's time or a turning angle does, or was set again: shown at once, not swept back.
+            rate[i] = (value[i] - entry->b[i]) / float(step - entry->to);
+            const float before = entry->rate[i] < 0 ? -entry->rate[i] : entry->rate[i], now = rate[i] < 0 ? -rate[i] : rate[i];
+            if (rate[i] * entry->rate[i] < 0 && now > kSnapTimes * before) snap = true;
         }
-        entry->pair = step - entry->to <= kMaterialGap && most < kMaterialJump;
+        if (snap) count(counts.material_snaps);
+        entry->pair = step - entry->to <= kMaterialGap && most < kMaterialJump && !snap;
+        memcpy(entry->rate, rate, sizeof rate);
         memcpy(entry->a, entry->b, sizeof value), memcpy(entry->b, value, sizeof value);
         entry->from = entry->to, entry->to = step;
     }
@@ -491,6 +592,7 @@ void effects_family(float world_seconds, float fraction) {
 void effects_present() {
     if (!moment.active) return;
     materials_present();
+    counters_present();
     if (!(moment.parts & kPartCrowds) || !t::bound(t::fn::mark_render_state)) return;
     const double place = at();
     for (CrowdPart& entry : crowds) {
@@ -528,6 +630,8 @@ void effects_present() {
 
 void effects_forget() {
     for (CrowdPart& entry : crowds) entry.used = false; // its block is kept for the next
+    for (Counter& c : counters) c.used = false;
+    counters_step = 0;
     for (MaterialValue& entry : materials) {
         if (entry.used && entry.sent < 1 && next_vector && next_scalar && game::from_weak_value(entry.weak) == entry.material)
             give(entry, entry.b);

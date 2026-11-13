@@ -131,6 +131,27 @@ functions:
       no_memory: "The game is out of memory."
     users: [groink, online-coop]
 
+  - name: thrown_hit
+    doc: |
+      Has a thrown Pikmin land on a target, the same way that the game's own
+      throw does when it doesn't latch on. The target takes the hit from that
+      Pikmin, so its type counts, as Rock and Purple Pikmin hit harder. With
+      `press`, the landing presses the target: a creature that a press defeats
+      at once, like a Dwarf Bulborb, is squished. Without it, an ordinary Pikmin's
+      landing does no damage. The Pikmin itself doesn't move. The game
+      delivers the hit on the target's next update.
+    params:
+      - {name: target, type: handle<actor>, doc: "The creature or other actor that the Pikmin landed on."}
+      - {name: pikmin, type: handle<actor>, doc: "The Pikmin that landed."}
+      - {name: point, type: vec3, doc: "Where the Pikmin touched the target, in centimeters."}
+      - {name: press, type: bool, default: true, doc: "If `true`, the landing presses the target, as a long throw does."}
+    fails:
+      not_found: "The target or the Pikmin no longer exists, or the target has no health."
+      invalid: "The `pikmin` actor isn't a Pikmin."
+      not_ready: "The game is paused, or the target is asleep or put away, so it takes no hit."
+      no_memory: "The game is out of memory."
+    users: [online-coop, groink]
+
   - name: kill_pikmin
     doc: |
       Kills a Pikmin the same way that the game does. It dies from the cause that
@@ -145,6 +166,34 @@ functions:
       not_found: "The Pikmin or the killer no longer exists, the actor isn't a Pikmin, or the Pikmin is already being removed."
       not_ready: "The game can't remove actors right now."
     users: [groink, online-coop]
+
+  - name: refresh_gauge
+    doc: |
+      Runs one update of a creature's health gauge, for a creature whose own
+      update is held, as `entity.hold_suspended` holds it. The game updates the
+      gauge only in the creature's own update, so a held creature's gauge
+      otherwise doesn't show, move, or hide. Call this every world step with
+      that step's time. The gauge does what it does in the game: it shows when
+      the health changes or is below full, follows the creature, and hides
+      after a while. Nothing else of the creature runs. Health set with
+      `set_life` and `smooth_gauge` shows the gauge. Without `smooth_gauge` the
+      gauge already has the new value, so the change doesn't show it.
+
+      A creature's own game also hides its gauge while it isn't chasing anyone
+      and no Pikmin cling to it, as a held creature may stay asleep. With
+      `show`, this update shows the gauge as it does while Pikmin cling to the
+      creature, when its health is below full. Pass it for as long as the gauge
+      should stay up; without it the gauge does what the creature's game says.
+    params:
+      - {name: creature, type: handle<actor>, doc: "The creature."}
+      - {name: seconds, type: f32, doc: "The time that the gauge moves on by, from `0` to `1` second."}
+      - {name: show, type: bool, default: false, doc: "If `true`, the gauge shows while the health is below full, whatever the creature is doing."}
+    fails:
+      not_found: "The creature no longer exists, has no health, or has been defeated."
+      invalid: "`seconds` is below `0`, above `1`, or not a number."
+      unsupported: "The actor isn't a creature, its health has no gauge, or the game version doesn't support this."
+      not_ready: "No world is loaded, the creature is put away or on its way out of play, or its parts can't be read."
+    users: [online-coop, puppet-demo]
 
 events:
   - name: damaged
@@ -197,4 +246,6 @@ events:
       - {name: amount, type: f32, doc: "For a hit, the damage before scaling. For a knockback, the damage that comes with it."}
       - {name: attack, type: enum<AttackKind>, doc: "For a hit, the kind of hit. The game has some kinds that `AttackKind` doesn't list."}
       - {name: vector, type: vec3, doc: "For a hit, the position that it came from. For a knockback, the velocity that it would apply."}
+      - {name: press, type: bool, doc: "For a `direct_hit`, `true` when the Pikmin landed hard enough to press the target. A creature that a press defeats at once takes it as a squish. `false` for anything else."}
+      - {name: point, type: vec3, doc: "For a `direct_hit`, where the Pikmin touched the target, in centimeters. Zero for anything else."}
     users: [groink, online-coop]

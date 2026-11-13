@@ -101,6 +101,9 @@ class Function:
     # once that event names the handle the call returned.
     waits: str = ''
     returns_outputs: bool = False  # a script also gets the arguments the function wrote, by name
+    # The call works inside a hook callback: it never calls into the engine or a script runtime, so the barrier a
+    # hook raises against other mod calls doesn't apply to it.
+    in_hooks: bool = False
 
     @property
     def native(self):
@@ -459,11 +462,13 @@ def _service(path, version):
             waits = 'result'
         if 'returns_outputs' in row and not isinstance(row['returns_outputs'], bool):
             raise SchemaError(f'{at}: "returns_outputs" is true or false')
+        if 'in_hooks' in row and not isinstance(row['in_hooks'], bool):
+            raise SchemaError(f'{at}: "in_hooks" is true or false')
         service.functions.append(Function(
             row['name'], _doc(at, row), [_value(at, p) for p in row.get('params') or []],
             returns, dict(row.get('fails') or {}), _users(at, row), bool(row.get('owns', False)), only,
             mark=_mark(at, row, version), completes=row.get('completes', ''),
-            waits=waits, returns_outputs=bool(row.get('returns_outputs', False))))
+            waits=waits, returns_outputs=bool(row.get('returns_outputs', False)), in_hooks=bool(row.get('in_hooks', False))))
     for row in raw.get('events') or []:
         at = f'{name}.{_member(name, _need(name, row, "name"))}'
         service.events.append(Event(row['name'], _doc(at, row),

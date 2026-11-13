@@ -71,8 +71,73 @@ bool same_ignoring_case(const char* a, const char* b) {
     }
 }
 
+bool to_units(const char* text, char16_t* out, size_t capacity, size_t& count);
+
+bool same_name(Name a, Name b) { return a.index == b.index && a.number == b.number; }
+
+// The engine's own name for a field's, found without adding one. False when there is none or the engine's
+// lookup isn't there; the field is then looked for by its text. The engine's names compare without case, as
+// the text below does.
+bool engine_name_of(const char* text, Name& out) {
+    size_t units = 0;
+    if (!text || !*text || !t::bound(t::fn::name_from_text) || !to_units(text, nullptr, 0, units) || units > t::constant::max_name_units)
+        return false;
+    char16_t wide[t::most::max_name_units + 1];
+    to_units(text, wide, units, units);
+    wide[units] = 0;
+    const uint64_t found = t::fn::name_from_text(wide, units, 0);
+    if (!found) return false;
+    memcpy(&out, &found, sizeof out);
+    return true;
+}
+
+// Fields found lately by their engine name. A script that writes the same few fields every step would
+// otherwise walk every field of a large class, and its parents', each time: a character's animation blueprint
+// took about 6 ms a write on Eden. An entry is used only while the struct it was found in still heads the same
+// list of fields, is still the type or one of its parents, and the field still has that name.
+struct FoundField {
+    uint64_t type, owner, head, property;
+    Name name;
+};
+constexpr unsigned kFoundFields = 64;
+FoundField found_fields[kFoundFields];
+unsigned next_found_field = 0;
+
+uint64_t remembered_field(uint64_t type, Name name) {
+    for (const FoundField& found : found_fields) {
+        if (found.type != type || !found.property || !same_name(found.name, name)) continue;
+        if (read_or<uint64_t>(found.owner + t::struct_type::properties) != found.head) return 0;
+        if (!same_name(read_or<Name>(found.property + t::property::name), name)) return 0;
+        uint64_t at = type;
+        for (int depth = 0; at && depth < 64 && at != found.owner; ++depth) at = read_or<uint64_t>(at + t::struct_type::super);
+        return at == found.owner ? found.property : 0;
+    }
+    return 0;
+}
+
+// The walk by engine name: two numbers compared for each field instead of its text.
+uint64_t field_by_engine_name(uint64_t type, Name name) {
+    if (const uint64_t known = remembered_field(type, name)) return known;
+    const uint64_t first = type;
+    for (int depth = 0; type && depth < 64; ++depth, type = read_or<uint64_t>(type + t::struct_type::super)) {
+        const uint64_t head = read_or<uint64_t>(type + t::struct_type::properties);
+        uint64_t property = head;
+        for (int guard = 0; property && guard < 8192; ++guard, property = read_or<uint64_t>(property + t::property::next)) {
+            if (!same_name(read_or<Name>(property + t::property::name), name)) continue;
+            found_fields[next_found_field] = {first, type, head, property, name};
+            next_found_field = (next_found_field + 1) % kFoundFields;
+            return property;
+        }
+    }
+    return 0;
+}
+
 // A field of a type or of one of its parents.
 uint64_t find_field(uint64_t type, const char* name) {
+    Name engine{};
+    if (engine_name_of(name, engine))
+        if (const uint64_t property = field_by_engine_name(type, engine)) return property;
+    // By text: no engine name, or none of the fields has it (a field whose name the engine keeps apart).
     for (int depth = 0; type && depth < 64; ++depth, type = read_or<uint64_t>(type + t::struct_type::super)) {
         uint64_t property = read_or<uint64_t>(type + t::struct_type::properties);
         for (int guard = 0; property && guard < 8192; ++guard, property = read_or<uint64_t>(property + t::property::next)) {
@@ -519,7 +584,9 @@ TSUCHI_Result units_to_utf8(uint64_t data, int32_t units, char* out, size_t capa
     return TSUCHI_OK;
 }
 
-TSUCHI_Result name_from_utf8(const char* text, Name& out) {
+namespace {
+// The game's name constructor in one of its two modes: 1 adds the name, 0 only finds it.
+TSUCHI_Result text_name(const char* text, Name& out, uint64_t add) {
     size_t units = 0;
     if (!text || !to_units(text, nullptr, 0, units)) return TSUCHI_INVALID;
     if (units > t::constant::max_name_units) return TSUCHI_CAPACITY;
@@ -529,11 +596,17 @@ TSUCHI_Result name_from_utf8(const char* text, Name& out) {
         char16_t wide[t::most::max_name_units + 1];
         to_units(text, wide, units, units);
         wide[units] = 0;
-        name = t::fn::name_from_text(wide, units, 1);
+        name = t::fn::name_from_text(wide, units, add);
+        if (!name && !add) return TSUCHI_NOT_FOUND;
     }
     memcpy(&out, &name, sizeof out);
     return TSUCHI_OK;
 }
+} // namespace
+
+TSUCHI_Result name_from_utf8(const char* text, Name& out) { return text_name(text, out, 1); }
+
+TSUCHI_Result existing_name_from_utf8(const char* text, Name& out) { return text_name(text, out, 0); }
 
 TSUCHI_Result write_text(const Place& place, const char* text) {
     if (!text || !one_value(place)) return TSUCHI_INVALID;
@@ -1254,6 +1327,8 @@ TSUCHI_Result write_argument_guarded(const Place& place, const Value& value, Cal
 }
 
 void* engine_memory(uint64_t bytes) { return engine_allocate(bytes, 0); }
+void* engine_memory_aligned(uint64_t bytes, uint32_t alignment) { return engine_allocate(bytes, alignment); }
+bool engine_memory_available() { return engine_memory_ready(); }
 void release_engine_memory(void* block) { engine_release(reinterpret_cast<uint64_t>(block)); }
 
 } // namespace tsuchi::game

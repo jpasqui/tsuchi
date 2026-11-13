@@ -194,6 +194,8 @@ void take(void* context, const game::Message& message) {
     taken.amount = message.amount;
     taken.attack = message.attack;
     memcpy(taken.vector, message.vector, sizeof taken.vector);
+    taken.press = message.press;
+    memcpy(taken.point, message.point, sizeof taken.point);
     message_listener(taken);
 }
 
@@ -279,6 +281,12 @@ TSUCHI_Result resume_parts(TSUCHI_Mod* mod, uint64_t actor, uint32_t parts) {
 uint32_t suspended_parts(uint64_t actor) {
     const Held* entry = held.find(game::to_handle(actor), 0);
     return entry ? entry->parts : 0;
+}
+
+uint32_t suspended_body(uint64_t actor) {
+    const Held* entry = held.find(game::to_handle(actor), 0);
+    if (!entry) return 0;
+    return (entry->was_simulating ? kSuspendPhysics : 0) | (entry->solid_count ? kSuspendCollision : 0);
 }
 
 void on_message_taken(void (*listener)(const TakenMessage&)) { message_listener = listener; }

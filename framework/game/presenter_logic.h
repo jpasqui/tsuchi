@@ -424,14 +424,95 @@ inline void hold_both(const float a[7], const float b[7], float out[7]) {
     out[6] = radius;
 }
 
+// ---- Snaps -------------------------------------------------------------------------------------------
+//
+// A turn, a place or a size that changed across a step far more than it changed across the step before snapped:
+// a looping animation wrapped where its two ends are not the same pose (a flower whose petals look alike after a
+// part of a turn, spun that part and back), an animation started again, a pose set outright. The pictures between
+// the two steps would show it going the long way back through poses it never had, so it is shown at the newer step
+// at once. Each change is taken a step at a time, so something moved every few steps compares like with like, and
+// a steady motion, however fast, is never a snap.
+constexpr float kSnapTurn = 0.7853982f; // 45 degrees: a step's turn below this is never a snap
+constexpr float kSnapMove = 100;        // cm: nor a step's move below this
+constexpr float kSnapSize = 0.5f;       // nor a step's change of size below half the larger size
+constexpr float kSnapTimes = 4;         // and above them, a change is a snap only at more than this many times the step before's
+
+// What changed across one step.
+struct Change {
+    float turn, move, size;
+};
+
+// The angle between two turns, in radians, whichever sign either quaternion has; 0 when either is no turn.
+inline float turn_between(const float a[4], const float b[4]) {
+    if (!(a[0] * a[0] + a[1] * a[1] + a[2] * a[2] + a[3] * a[3] > 0.5f) || !(b[0] * b[0] + b[1] * b[1] + b[2] * b[2] + b[3] * b[3] > 0.5f))
+        return 0;
+    float d = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
+    if (d < 0) d = -d;
+    if (d > 1) d = 1;
+    return 2 * math::arctangent(math::square_root(1 - d * d), d);
+}
+
+// The largest change of one axis's size, as a share of the larger of the two.
+inline float size_between(const float a[3], const float b[3]) {
+    float most = 0;
+    for (unsigned i = 0; i < 3; ++i) {
+        const float x = a[i] < 0 ? -a[i] : a[i], y = b[i] < 0 ? -b[i] : b[i];
+        const float larger = x > y ? x : y, d = a[i] > b[i] ? a[i] - b[i] : b[i] - a[i];
+        if (larger > 1e-6f && d / larger > most) most = d / larger;
+    }
+    return most;
+}
+
+// The change from one turn, place and size to another, `steps` steps apart, as a step's.
+inline Change change_between(const float qa[4], const float ta[3], const float sa[3], const float qb[4], const float tb[3],
+                             const float sb[3], uint64_t steps) {
+    const float d[3] = {tb[0] - ta[0], tb[1] - ta[1], tb[2] - ta[2]};
+    const float per = steps > 1 ? 1.0f / float(steps) : 1.0f;
+    return {turn_between(qa, qb) * per, math::square_root(dot3(d, d)) * per, size_between(sa, sb) * per};
+}
+
+inline bool beyond(float now, float before, float least) {
+    const float most = kSnapTimes * before > least ? kSnapTimes * before : least;
+    return now > most;
+}
+// Whether the step's change is a snap after the step before's.
+inline bool snapped(const Change& now, const Change& before) {
+    return beyond(now.turn, before.turn, kSnapTurn) || beyond(now.move, before.move, kSnapMove) || beyond(now.size, before.size, kSnapSize);
+}
+
 // One bone of a pose as the renderer is given it: a turn, a place and a size, in 48 bytes.
 struct BonePose {
     float q[4], t[3], s[3], unused[2];
 };
 static_assert(sizeof(BonePose) == 48, "a pose's bone is 48 bytes");
-inline void blend_bones(const BonePose* a, const BonePose* b, uint32_t count, float f, BonePose* out) {
+
+// What a pose's bone did across its last two steps, and whether the newest snapped. Zeroed, a bone not yet seen.
+struct BoneMotion {
+    Change before, now;
+    uint8_t cut, known, measured, unused; // known: `before` was measured; measured: `now` was
+};
+
+// Takes each bone's change from `a` to `b`, `steps` steps apart. `advanced`: `b` is a newer step than the last
+// taken, so the change last taken becomes the step before's; otherwise the newest step was made again. A bone's
+// first change has nothing to be judged by and is never a snap. The count of bones that snapped.
+inline uint32_t mark_snaps(const BonePose* a, const BonePose* b, uint32_t count, uint64_t steps, bool advanced, BoneMotion* motion) {
+    uint32_t snaps = 0;
+    for (uint32_t bone = 0; bone < count; ++bone) {
+        BoneMotion& m = motion[bone];
+        if (advanced) m.before = m.now, m.known = m.measured;
+        m.now = change_between(a[bone].q, a[bone].t, a[bone].s, b[bone].q, b[bone].t, b[bone].s, steps);
+        m.measured = 1;
+        m.cut = m.known && snapped(m.now, m.before);
+        snaps += m.cut;
+    }
+    return snaps;
+}
+
+// The bones `f` of the way from `a` to `b`; a bone `motion` says snapped is at `b`.
+inline void blend_bones(const BonePose* a, const BonePose* b, uint32_t count, float f, BonePose* out, const BoneMotion* motion = nullptr) {
     for (uint32_t bone = 0; bone < count; ++bone) {
         out[bone] = b[bone];
+        if (motion && motion[bone].cut) continue;
         for (unsigned i = 0; i < 3; ++i) {
             out[bone].t[i] = a[bone].t[i] + (b[bone].t[i] - a[bone].t[i]) * f;
             out[bone].s[i] = a[bone].s[i] + (b[bone].s[i] - a[bone].s[i]) * f;

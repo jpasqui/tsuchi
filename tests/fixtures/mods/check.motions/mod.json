@@ -1,0 +1,23 @@
+{
+  "id": "check.motions",
+  "name": "The check of blueprint motions",
+  "version": "1.0.0",
+  "meta": {
+    "check": "motions",
+    "checks": [
+      "found",
+      "captain",
+      "dog",
+      "made",
+      "mesh",
+      "held",
+      "moved",
+      "speed",
+      "changed",
+      "released",
+      "refused",
+      "removed",
+      "gone"
+    ]
+  }
+}

@@ -68,7 +68,11 @@ TSUCHI_Result knockback(TSUCHI_Actor victim, const TSUCHI_Vec3* velocity, float,
 // The stand-in has no Pikmin.
 TSUCHI_Result kill_pikmin(TSUCHI_Actor, TSUCHI_DeathCause, TSUCHI_Actor) { return TSUCHI_NOT_FOUND; }
 
-const tsuchi::combat::Backend backend{get_life, set_life, damage, knockback, kill_pikmin};
+// Nor a Pikmin to land.
+TSUCHI_Result thrown_hit(TSUCHI_Actor, TSUCHI_Actor, const TSUCHI_Vec3*, bool) { return TSUCHI_NOT_FOUND; }
+
+TSUCHI_Result refresh_gauge(TSUCHI_Actor, float, bool) { return TSUCHI_NOT_FOUND; }
+const tsuchi::combat::Backend backend{get_life, set_life, damage, knockback, thrown_hit, kill_pikmin, refresh_gauge};
 
 TSUCHI_Result hold_look(TSUCHI_Mod*, uint32_t player, const TSUCHI_Look* target) {
     return player == 0 && target->actor.id <= 1 && target->point.x == 1 &&
@@ -94,12 +98,12 @@ JSValue test_emit(JSContext* c, JSValueConst, int n, JSValueConst* a) {
     tsuchi::entity::emit_spawned({{3}, "Creature", 0, id, {1,2,3}}); return JS_TRUE;
 }
 TSUCHI_Result question(TSUCHI_Mod*, const char*, TSUCHI_Dialog* out) { static uint64_t id = 1; out->id = id++; return TSUCHI_OK; }
-const tsuchi::dialog::Backend dialog_backend{question, question};
+const tsuchi::dialog::Backend dialog_backend{question, question, nullptr, nullptr, nullptr};
 JSValue test_answer(JSContext* c, JSValueConst, int n, JSValueConst* a) {
     auto id = tsuchi_js::handle(c, tsuchi_js::arg(n, a, 0), "dialog", false);
     bool yes = tsuchi_js::boolean(c, tsuchi_js::arg(n, a, 1));
     if (JS_HasException(c)) return JS_EXCEPTION;
-    tsuchi::dialog::emit_answered({{id}, yes}); return JS_TRUE;
+    tsuchi::dialog::emit_answered({{id}, yes, yes ? 0u : 1u}); return JS_TRUE;
 }
 // One file a mod can read, with a zero byte, a byte past 127 and a line break in it.
 const unsigned char known_file[] = {'T', 's', 'u', 0, 0xFF, 0x80, '\n', 'j', 's'};

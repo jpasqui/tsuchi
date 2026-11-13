@@ -78,6 +78,15 @@ structs:
     - name: refused
       type: enum<JoinRefusal>
       doc: The host's last refusal.
+  SessionAddress:
+    doc: An address and port as the internet sees them.
+    fields:
+    - name: ipv4
+      type: u32
+      doc: The four octets in most significant byte order.
+    - name: port
+      type: u32
+      doc: The UDP port.
   PeerInfo:
     doc: A peer snapshot.
     fields:
@@ -247,6 +256,68 @@ functions:
   returns:
     type: bytes
     doc: The requested value.
+- name: set_secret
+  doc: Secures the next session your mod starts with a shared secret. Every datagram of that session is then
+    encrypted and authenticated with keys made from the secret, and a machine without the same secret can't join
+    or send it anything. Both machines set the same secret before host or join. Pass no bytes for an open session.
+  params:
+  - name: secret
+    type: bytes
+    doc: 32 random bytes, or none.
+  fails:
+    invalid: The secret is neither 32 bytes nor empty.
+    busy: An event is being delivered.
+  users:
+  - online-coop
+  - remote-inspector
+  owns: true
+- name: discover
+  doc: Asks a STUN server, from the session's own socket, which address and port the internet sees for
+    the session that your mod started. Read the answer with `public_address`. Asking again starts over.
+  params:
+  - name: server
+    type: text
+    doc: The STUN server's dotted IPv4 address.
+  - name: port
+    type: u32
+    doc: The server's UDP port from 1 to 65535.
+  fails:
+    invalid: An argument is outside its documented range.
+    not_found: Your mod started no session.
+  users:
+  - online-coop
+  - remote-inspector
+  owns: true
+- name: public_address
+  doc: Returns the address and port that the STUN server saw for this machine's session.
+  params: []
+  fails:
+    not_found: There is no session, or `discover` was not called for it.
+    not_ready: The STUN server has not answered yet.
+    io: The STUN server did not answer.
+  users:
+  - online-coop
+  - remote-inspector
+  returns:
+    type: struct<SessionAddress>
+    doc: The address.
+- name: punch
+  doc: Sends short punch datagrams from the session that your mod hosts to an address for five seconds, so
+    the host's router lets in the joins of a guest at that address.
+  params:
+  - name: address
+    type: text
+    doc: The guest's dotted IPv4 address, as the internet sees it.
+  - name: port
+    type: u32
+    doc: The guest's UDP port from 1 to 65535, as the internet sees it.
+  fails:
+    invalid: An argument is outside its documented range.
+    not_found: Your mod hosts no session.
+  users:
+  - online-coop
+  - remote-inspector
+  owns: true
 events:
 - name: joined
   doc: Emitted when this machine starts hosting or joins its host.

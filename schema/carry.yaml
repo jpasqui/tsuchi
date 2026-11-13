@@ -71,6 +71,35 @@ functions:
       not_ready: "No world is loaded, or a carry component's carrier records cannot be read yet."
     users: [online-coop, carry-inspection]
 
+  - name: hold_count
+    doc: |
+      Holds the number that an object's carry counter shows over it, in place of
+      the strength of the carriers that the game counts. The counter shows while
+      the number is above `0`, beside the strength that the object needs, and
+      moves to a new number the way the game's own counter does. Use this for an
+      object whose carriers are elsewhere, such as a copy of another game's
+      object. Taking the hold again changes the number. Only the first number
+      is held: in Dandori Battle, the second team's number stays the game's.
+    owns: true
+    params:
+      - {name: actor, type: handle<actor>, doc: "The carried object."}
+      - {name: count, type: i32, doc: "The number to show, from `0`."}
+    fails:
+      invalid: "`count` is below `0`, or the handle names an engine actor outside the game's actor classes."
+      not_found: "The actor no longer exists."
+      unsupported: "The actor has no carry component, or the game version doesn't support this."
+      busy: "Another mod is holding this object's count."
+    users: [online-coop, puppet-demo]
+
+  - name: release_count
+    doc: "Ends your mod's hold, so the counter shows the game's own count again."
+    owns: true
+    params:
+      - {name: actor, type: handle<actor>, doc: "The carried object."}
+    fails:
+      not_found: "Your mod isn't holding this object's count."
+    users: [online-coop, puppet-demo]
+
 events:
   - name: delivered
     doc: |

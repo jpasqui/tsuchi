@@ -12,6 +12,7 @@
 #include "objects.h"
 #include "pikmin.h"
 #include "pikmin_hud.h"
+#include "pikmin_service.h"
 #include "registry.h"
 
 namespace tsuchi {
@@ -474,11 +475,47 @@ void show_icon(uint64_t icon, uint64_t material, uint64_t atlases, uint8_t toggl
     const uint8_t color = toggle > 0 ? uint8_t(toggle - 1) : 0;
     painted.take(types[slot].mod, handle, 0, Painted{material_handle, atlases, uint32_t(slot), toggle, color, cursor});
 }
+// The leader a mod has the throw-type HUD show, and the mod. The game's update binds the HUD to the
+// captain its UIActorAccessMgr keeps; for that call only, it keeps this leader.
+TSUCHI_Mod* hud_holder = nullptr;
+uint64_t hud_leader = 0;   // a handle
+uint64_t actor_access() {
+    const uint64_t framework = g::game_framework();
+    const uint64_t ui = framework ? g::read_or<uint64_t>(framework + t::game_framework::ui) : 0;
+    const uint64_t access = ui && g::live(ui) ? g::read_or<uint64_t>(ui + t::ui_manager::actor_access) : 0;
+    return access && g::live(access) ? access : 0;
+}
+// Runs the game's update with the held leader in the captain's place, and puts the captain back.
+void update_for_leader(void* widget) {
+    if (hud_holder && !mod_usable(hud_holder)) hud_holder = nullptr, hud_leader = 0;
+    const uint64_t leader = hud_holder ? g::from_handle(hud_leader) : 0;
+    const uint64_t access = leader && g::is_leader(leader) ? actor_access() : 0;
+    const uint64_t at = access ? access + t::ui_actor_access::captain : 0;
+    const uint64_t captain = at ? g::read_or<uint64_t>(at) : 0;
+    if (!at || !captain || captain == leader) { hud_before(widget); return; }
+    g::write(at, leader);
+    hud_before(widget);
+    if (g::read_or<uint64_t>(at) == leader) g::write(at, captain);
+}
+TSUCHI_Result held_hud_leader(TSUCHI_Mod* mod, TSUCHI_Actor leader) {
+    if (!mod_usable(mod)) return TSUCHI_INVALID;
+    const uint64_t actor = g::from_handle(leader.id);
+    if (!actor || !g::is_leader(actor)) return TSUCHI_NOT_FOUND;
+    if (!hud_before) return TSUCHI_UNSUPPORTED;
+    if (hud_holder && hud_holder != mod && mod_usable(hud_holder)) return TSUCHI_BUSY;
+    hud_holder = mod, hud_leader = leader.id;
+    return TSUCHI_OK;
+}
+TSUCHI_Result released_hud_leader(TSUCHI_Mod* mod) {
+    if (!mod || hud_holder != mod) return TSUCHI_NOT_FOUND;
+    hud_holder = nullptr, hud_leader = 0;
+    return TSUCHI_OK;
+}
 void hud_update(void* widget) {
     if (!on_game_thread() || !ready) { hud_before(widget); return; }
     refresh();
     lend_colors();
-    hud_before(widget);
+    update_for_leader(widget);
     for (auto& col : columns) for (auto& node : col.nodes) if (node.owner()) node.set_kind(int32_t(t::constant::squad_other_kind));
     const uint64_t hud = reinterpret_cast<uint64_t>(widget);
     const uint64_t player = g::read_or<uint64_t>(hud + t::squad_hud::player);
@@ -588,6 +625,33 @@ TSUCHI_Result selected(TSUCHI_Actor leader, char* buffer, uint64_t capacity, uin
     *out = strlen(result) + 1;
     if (capacity < *out) return TSUCHI_CAPACITY;
     memcpy(buffer, result, size_t(*out));
+    return TSUCHI_OK;
+}
+// The stock type a leader has selected for throwing, as the game answers for its formation, named as pikmin.info
+// names a type.
+TSUCHI_Result selected_pikmin_type(TSUCHI_Actor leader, char* buffer, uint64_t capacity, uint64_t* out) {
+    const uint64_t actor = g::from_handle(leader.id);
+    if (!actor || !g::is_leader(actor)) return TSUCHI_NOT_FOUND;
+    const uint64_t fs = formation(leader.id);
+    if (!fs || !t::bound(t::fn::squad_selected) || g::read_or<int32_t>(fs + t::squad_formation::count) < 1) return TSUCHI_NOT_READY;
+    const int32_t color = t::fn::squad_selected(pointer(fs));
+    if (color < 0 || color > 255) return TSUCHI_NOT_READY;
+    char name[kIdBytes];
+    id_of(pikmin::PikminType_vocabulary, uint32_t(color), name);
+    *out = strlen(name) + 1;
+    if (capacity < *out) return TSUCHI_CAPACITY;
+    memcpy(buffer, name, size_t(*out));
+    return TSUCHI_OK;
+}
+// Selects the type of a Pikmin that follows the leader, by the game's own function for it.
+TSUCHI_Result select_type_of(TSUCHI_Actor leader, TSUCHI_Actor pikmin) {
+    const uint64_t actor = g::from_handle(leader.id), member = g::from_handle(pikmin.id);
+    if (!actor || !g::is_leader(actor) || !member || !g::is_pikmin(member)) return TSUCHI_NOT_FOUND;
+    if (!t::bound(t::fn::pikmin_leader) || !t::bound(t::fn::squad_select_of)) return TSUCHI_NOT_READY;
+    if (g::pikmin_leader(member) != actor) return TSUCHI_INVALID;
+    const uint64_t fs = formation(leader.id);
+    if (!fs) return TSUCHI_NOT_READY;
+    t::fn::squad_select_of(pointer(fs), pointer(member));
     return TSUCHI_OK;
 }
 TSUCHI_Result held_selection(TSUCHI_Mod* mod, TSUCHI_Actor leader, const char* kind) {
@@ -716,5 +780,7 @@ void squad_content_backend(squad::Backend& backend) {
     backend.selected = selected;
     backend.hold_selection = held_selection, backend.release_selection = released_selection;
     backend.type_name = type_name;
+    backend.selected_pikmin_type = selected_pikmin_type, backend.select_type_of = select_type_of;
+    backend.hold_hud_leader = held_hud_leader, backend.release_hud_leader = released_hud_leader;
 }
 } // namespace tsuchi

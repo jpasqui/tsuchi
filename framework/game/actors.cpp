@@ -21,6 +21,21 @@ uint64_t component_at(uint64_t actor, uint64_t offset) {
     return component && live(component) ? component : 0;
 }
 
+// The place the game keeps of where an actor's body is (GActor+0x16C0), put where its body is now. The actor's own
+// update writes it after physics; the camera's lock-on, a charge's target and a creature's life gauge read it in
+// place of the root's. An actor whose update is held kept it where it was held (one spawned in the air, in the air),
+// so a move made here puts it where the move put the body. An actor without a body of its own has none.
+void keep_body_place(uint64_t actor) {
+    namespace a = t::game_actor;
+    if (!t::present(a::physics_place)) return;
+    const uint64_t body = component_at(actor, a::physics);
+    if (!body || read_or<uint64_t>(body + t::scene_component::owner) != actor) return;
+    float place[3];
+    for (int i = 0; i < 3; ++i)
+        if (!read(body + t::scene_component::location + 4 * i, place[i]) || place[i] != place[i] || place[i] - place[i] != 0) return;
+    for (int i = 0; i < 3; ++i) write(actor + a::physics_place + 4 * i, place[i]);
+}
+
 
 // A character turns one of its components, usually its body, and that
 // component's forward is +Y where an actor's is +X: a quarter turn apart.
@@ -112,6 +127,7 @@ TSUCHI_Result set_transform(uint64_t actor, const Transform& to) {
     t::fn::set_actor_location_and_rotation(reinterpret_cast<void*>(actor), false, hit, true, to.location[0], to.location[1], to.location[2],
                                            root_angles[0], root_angles[1], root_angles[2]);
     if (facing) turn_body(facing, to.angles);
+    keep_body_place(actor);
     return TSUCHI_OK;
 }
 
@@ -152,6 +168,15 @@ void halt(uint64_t actor) {
     write(actor + t::game_actor::keep_vertical, uint8_t(1)); // the request is for across the ground only
 }
 
+bool request_ground_velocity(uint64_t actor, const float velocity[3]) {
+    if (!t::bound(t::fn::request_velocity) || !body_awake(actor) || !can_launch(actor)) return false;
+    drop_velocity_requests(actor);
+    float across[3] = {velocity[0], velocity[1], 0};
+    t::fn::request_velocity(reinterpret_cast<void*>(actor), across);
+    write(actor + t::game_actor::keep_vertical, uint8_t(1)); // the request is for across the ground only
+    return true;
+}
+
 void drop_velocity_requests(uint64_t actor) {
     namespace a = t::game_actor;
     const uint64_t flags[] = {a::velocity_pending, a::velocity_added_1, a::velocity_added_2, a::velocity_added_3, a::keep_vertical};
@@ -189,6 +214,7 @@ TSUCHI_Result warp_actor(uint64_t actor, const Transform& to) {
     t::fn::warp_actor(reinterpret_cast<void*>(actor), location, angles, true, true, true);
     // The game's warp turns the root. A character faces with its body, which does not follow.
     if (const uint64_t facing = facing_component(actor, root); facing && t::fn::set_component_world_rotation) turn_body(facing, to.angles);
+    keep_body_place(actor);
     return TSUCHI_OK;
 }
 
@@ -451,6 +477,11 @@ uint32_t take_messages(uint64_t actor, void (*visit)(void*, const Message&), voi
             out.amount = read_or<float>(message + t::damage_message::amount);
             out.attack = read_or<uint8_t>(message + t::damage_message::attack);
             for (int i = 0; i < 3; ++i) out.vector[i] = read_or<float>(message + t::damage_message::origin + 4 * i);
+            // A thrown Pikmin's direct hit says whether it pressed, and where it touched. A build without them has neither.
+            if (out.attack == 1 && t::present(t::pikmin_hit::press) && t::present(t::pikmin_hit::point)) {
+                out.press = read_or<uint8_t>(message + t::pikmin_hit::press) != 0;
+                for (int i = 0; i < 3; ++i) out.point[i] = read_or<float>(message + t::pikmin_hit::point + 4 * i);
+            }
         } else if (table == base + t::data::knock_message_table && readable(message, t::knock_message::size)) {
             out.kind = 1;
             out.amount = read_or<float>(message + t::knock_message::damage);

@@ -37,6 +37,7 @@ const sidebars = {
         { label: 'Add settings', slug: 'develop/settings' },
         { label: 'Create a screen', slug: 'develop/screens' },
         { label: 'Save your mod data', slug: 'develop/save-data' },
+        { label: 'Use memory directly', slug: 'develop/memory' },
         { label: 'Check compatibility', slug: 'develop/versions' },
         { label: 'Publish your mod', slug: 'develop/publish' },
         { label: 'Glossary', slug: 'develop/glossary' },

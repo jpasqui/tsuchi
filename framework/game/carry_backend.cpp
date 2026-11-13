@@ -1,6 +1,7 @@
 // The carry service reads the game's own carrier records and selected receiver.
 // It does not infer delivery from an arrival state or from an actor leaving play.
 #include "actors.h"
+#include "carry_count.h"
 #include "carry_service.h"
 #include "content.h"
 #include "frame.h"
@@ -199,7 +200,7 @@ TSUCHI_Result carried_by(TSUCHI_Actor actor, TSUCHI_Actor* out) {
     return TSUCHI_OK;
 }
 
-const carry::Backend service{list, info, carriers, carried_by};
+const carry::Backend service{list, info, carriers, carried_by, hold_count, release_count};
 
 // Collection credit is distinct from arrival. The native dispatcher is reached
 // by the Onion and ship receiver message handlers. Preserve its return and both

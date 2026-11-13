@@ -38,6 +38,7 @@
 namespace tsuchi_js { void register_script_mods(); }
 extern "C" unsigned long long tsuchi_libc_ticks(); // script_library.cpp
 #include "services.h"
+#include "memory_backend.h"
 #include "network_transport.h"
 #include "https_jobs.h"
 #include "hidden.h"
@@ -47,6 +48,10 @@ extern "C" unsigned long long tsuchi_libc_ticks(); // script_library.cpp
 #include "mod_choices_game.h"
 #include "ui_screens.h"
 #include "ui_native.h"
+#include "ui_title.h"
+#include "ui_keyboard.h"
+#include "player_choice.h"
+#include "hud_prompts.h"
 #include "ui_widgets.h"
 #include "ui_settings.h"
 #include "ui_mod_list.h"
@@ -257,6 +262,7 @@ extern "C" void tsuchi_initialize() {
     tables_start();
     text_start();
     hud_start();
+    if (serves(t::family::voice)) voice_start();
     audio_start();
     world_start();
     anim_start();
@@ -282,7 +288,7 @@ extern "C" void tsuchi_initialize() {
     tsuchi_libc_ticks(); // scripts' clocks count from here
     cost_clock = [] { return uint64_t(tsuchi_libc_ticks()); }; // what the framework's own steps cost
     if (serves(t::family::compiled_mods)) register_compiled_mods();
-    if (serves(t::family::story)) story_start();
+    if (serves(t::family::story)) story_start(&self);
 
     // Publish the status first, so a tool can read why start-up stopped.
     auto* words = reinterpret_cast<uint64_t*>(status.game_base + t::data::status_words);
@@ -354,7 +360,9 @@ extern "C" void tsuchi_initialize() {
     if (serves(t::family::squad)) content_squad_start(self);
     if (serves(t::family::carry)) carry_start(self);
     if (serves(t::family::input)) input_start(self);
+    if (serves(t::family::character)) characters_start(self);
     if (serves(t::family::storage)) storage_start();
+    memory_start();
     if (serves(t::family::sd_card)) log_file_start();
     dev_folders_start();
     settings_start();
@@ -365,6 +373,10 @@ extern "C" void tsuchi_initialize() {
     // One entry for each register the request can be in, two instructions each.
     if (serves(t::family::dialog)) dialogs_start(self, reinterpret_cast<void*>(reinterpret_cast<uint64_t>(&tsuchi_dialog_setup_entries) + 8 * t::route_frame::dialog_setup_call::request));
     if (serves(t::family::ui)) ui_widgets_start(self);
+    hud_prompts_start(self); // the hud service's prompts hook for the framework's own mod
+    if (serves(t::family::title_menu)) ui_title_start(self);
+    if (serves(t::family::keyboard)) ui_keyboard_start();
+    if (serves(t::family::player_choice)) player_choice_start(self);
     if (serves(t::family::ui) && ui_native_start(self)) {
         ui_settings_start(self);
         ui_mod_list_start(self);

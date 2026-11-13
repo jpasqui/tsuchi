@@ -33,6 +33,8 @@ TSUCHI_Result suspend_parts(TSUCHI_Mod* mod, uint64_t actor, uint32_t parts);
 TSUCHI_Result resume_parts(TSUCHI_Mod* mod, uint64_t actor, uint32_t parts);
 // Which parts of the actor are suspended, by anyone.
 uint32_t suspended_parts(uint64_t actor);
+// The body parts a suspension stopped and will give back: physics that simulated, parts that blocked.
+uint32_t suspended_body(uint64_t actor);
 
 // A message taken from a suspended actor.
 enum class MessageKind : uint32_t { damage, knock, whistle, other };
@@ -42,6 +44,8 @@ struct TakenMessage {
     float amount;    // damage: how much. knock: the damage that comes with it
     uint32_t attack; // damage: the game's number for the kind of hit
     float vector[3]; // damage: where it came from. knock: the velocity to be thrown with
+    bool press;      // a thrown Pikmin's direct hit: its landing presses the target
+    float point[3];  // a thrown Pikmin's direct hit: where it touched the target
 };
 // One listener, told of every message as it is taken.
 void on_message_taken(void (*listener)(const TakenMessage& message));

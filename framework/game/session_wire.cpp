@@ -4,8 +4,12 @@ namespace tsuchi::session_wire {
 namespace {
 enum : uint8_t {T_JOIN=1,T_WELCOME=2,T_REFUSE=3,T_LINK=4,T_DATA=5,T_BYE=6};
 enum : uint8_t {C_PEER=1,C_CHANNELS=2};
-constexpr uint32_t HEADER=16,MESSAGE_HEADER=6,ENTRY_HEADER=6;
+constexpr uint32_t HEADER=SESSION_HEADER_BYTES,MESSAGE_HEADER=6,ENTRY_HEADER=6;
 constexpr double KEEP_EVERY=0.1,JOIN_EVERY=0.5;
+// A JOIN alone does not hold a guest slot or draw a stream of keep-alives: until the guest answers on its
+// link, the host sends it one LINK a second and drops it after UNCONFIRMED_FOR. A JOIN from the address of
+// a guest heard from within UNCONFIRMED_FOR does not replace it.
+constexpr double UNCONFIRMED_EVERY=1,UNCONFIRMED_FOR=5;
 // A peer that says it is busy loading is waited for this long. A machine that did not poll for longer than
 // STALL_AFTER was stopped itself (a load holds the game's thread), so it does not count that time against others.
 // The game says it changes scenes for a moment, then holds its thread for the load after it (seen in Eden: the
@@ -14,7 +18,7 @@ constexpr double KEEP_EVERY=0.1,JOIN_EVERY=0.5;
 constexpr double BUSY_GRACE=90,BUSY_HOLD=30,STALL_AFTER=2;
 constexpr uint8_t LINK_BUSY=1;
 constexpr uint32_t RECEIVE_BUDGET=512,SEND_BUDGET=64;
-constexpr uint32_t OP_SEND=1u,OP_QUERY=2u;
+constexpr uint32_t OP_SEND=1u,OP_QUERY=SESSION_OP_QUERY;
 constexpr uint8_t BROADCAST[4]{255,255,255,255};
 
 bool newer(uint32_t a,uint32_t b){return int32_t(a-b)>0;}
@@ -138,7 +142,7 @@ void Session::send_link(Link& l,double now,bool force){
     uint32_t cursor=l.acked+1;
     for(uint32_t sent=0;sent<SEND_BUDGET;++sent){
         uint8_t d[SESSION_DATAGRAM];
-        W w(d,SESSION_DATAGRAM,header(d,T_LINK));
+        W w(d,SESSION_ROOM,header(d,T_LINK));
         w.f32(t);w.f32(l.their_clock);w.f32(l.their_clock<0?0.0f:float(now-l.their_clock_at));w.u32(l.delivered);
         w.byte(busy_?LINK_BUSY:0);
         const uint32_t count_at=w.n;w.byte(0);
@@ -146,36 +150,39 @@ void Session::send_link(Link& l,double now,bool force){
         for(;cursor!=l.next&&count<255;++cursor){
             OutEntry& e=l.store->out[cursor%SESSION_OUT_SLOTS];
             if(e.sent>=0&&t-e.sent<resend)continue;
-            if(w.n+ENTRY_HEADER+e.length>SESSION_DATAGRAM)break;
+            if(w.n+ENTRY_HEADER+e.length>SESSION_ROOM)break;
             w.u32(e.sequence);w.u16(e.length);
             for(uint32_t i=0;i<e.length;++i)w.byte(l.store->bytes[(e.offset+i)%SESSION_OUT_BYTES]);
             e.sent=t;++count;
         }
         if(!count&&!force)break;
         d[count_at]=uint8_t(count);
-        send_raw(l.ip,l.port,d,w.n);
+        send_on(l,d,w.n);
         l.sent_at=now;l.ack_due=false;force=false;
         if(cursor==l.next)break;
     }
 }
 void Session::send_data(Link& l,uint32_t channel,uint32_t from,uint32_t to,const uint8_t* payload,uint32_t size){
     uint8_t d[SESSION_DATAGRAM];
-    W w(d,SESSION_DATAGRAM,header(d,T_DATA));
+    W w(d,SESSION_ROOM,header(d,T_DATA));
     w.u32(channel);w.byte(uint8_t(from));w.byte(uint8_t(to));w.raw(payload,size);
-    if(w.ok)send_raw(l.ip,l.port,d,w.n);
+    if(w.ok)send_on(l,d,w.n);
 }
 void Session::send_join(double now){
     uint8_t d[SESSION_DATAGRAM];
-    W w(d,SESSION_DATAGRAM,header(d,T_JOIN));
+    W w(d,SESSION_DATAGRAM-SESSION_NONCE_BYTES-SESSION_SEAL,header(d,T_JOIN));
     w.str(name_);
     Channel c[WIRE_SESSION_MAX_SUBSCRIPTIONS];const uint32_t n=own_channels(c);
     w.byte(uint8_t(n));for(uint32_t i=0;i<n;++i){w.u32(c[i].id);w.u32(c[i].version);}
-    send_raw(searching_?BROADCAST:target_ip_,target_port_,d,w.n);
+    if(secret_set_){                                                          // sealed with this JOIN's own nonce
+        uint8_t out[SESSION_DATAGRAM];const uint32_t m=seal_join(d,w.n,out);
+        if(m)send_raw(searching_?BROADCAST:target_ip_,target_port_,out,m);
+    }else send_raw(searching_?BROADCAST:target_ip_,target_port_,d,w.n);
     join_sent_=now;
 }
 void Session::send_bye(Link& l){
     uint8_t d[HEADER];const uint32_t n=header(d,T_BYE);
-    for(int i=0;i<2;++i)send_raw(l.ip,l.port,d,n);
+    for(int i=0;i<2;++i)send_on(l,d,n);
 }
 
 // ---- control messages -----------------------------------------------------------------------
@@ -259,6 +266,7 @@ void Session::end(uint32_t reason){
     for(auto& l:links_){tsuchi::release(l.store);l.store=nullptr;reset_link(l);}
     for(auto& p:peers_)p=PeerRecord{};
     state_=WIRE_SESSION_NONE;self_=WIRE_PEER_NONE;session_id_=0;refused_=0;owner_[0]=0;have_offset_=false;announced_count_=0;
+    reset_traversal();
 }
 
 // ---- receiving -----------------------------------------------------------------------------------
@@ -270,13 +278,17 @@ void Session::on_join(const uint8_t ip[4],uint16_t port,uint32_t instance,const 
     Channel c[WIRE_SESSION_MAX_SUBSCRIPTIONS];
     for(uint8_t i=0;i<count;++i){c[i].id=r.u32();c[i].version=r.u32();}
     if(!r.ok)return;
-    auto welcome=[&](Link& l){
-        uint8_t d[SESSION_DATAGRAM];W w(d,SESSION_DATAGRAM,header(d,T_WELCOME));
+    auto welcome=[&](Link& l,bool fresh){
+        uint8_t d[SESSION_DATAGRAM];W w(d,SESSION_DATAGRAM-SESSION_NONCE_BYTES-SESSION_SEAL,header(d,T_WELCOME));
         w.byte(uint8_t(l.peer));w.byte(uint8_t(max_peers_));w.str(name_);
-        send_raw(ip,port,d,w.n);
+        if(!secret_set_){send_raw(ip,port,d,w.n);return true;}
+        uint8_t out[SESSION_DATAGRAM];const uint32_t m=seal_welcome(l,joining_nonce_,d,w.n,out,fresh);
+        if(m)send_raw(ip,port,out,m);
+        return m!=0;
     };
     if(Link* l=link_from(ip,port)){
-        if(l->instance==instance&&l->acked==0&&l->delivered==0){l->heard=now;welcome(*l);return;}   // our welcome was lost
+        if(l->instance==instance&&!l->confirmed){welcome(*l,false);return;}                       // our welcome was lost
+        if(l->confirmed&&now-l->heard<UNCONFIRMED_FOR)return;                                     // a live guest is not replaced
         drop_link(*l,l->instance==instance?WIRE_SESSION_LEFT_TIMEOUT:WIRE_SESSION_LEFT_BYE);          // it started over
     }
     uint32_t guests=0;for(uint32_t p=1;p<WIRE_SESSION_MAX_PEERS;++p)guests+=peers_[p].present?1:0;
@@ -290,7 +302,7 @@ void Session::on_join(const uint8_t ip[4],uint16_t port,uint32_t instance,const 
     l.used=true;l.peer=peer;for(int i=0;i<4;++i)l.ip[i]=ip[i];l.port=port;l.instance=instance;l.heard=now;
     PeerRecord& p=peers_[peer];p=PeerRecord{};p.present=true;copy(p.name,name);p.link=index;
     p.channel_count=count;for(uint8_t i=0;i<count;++i)p.channels[i]=c[i];
-    welcome(l);
+    if(!welcome(l,true)){reset_link(l);peers_[peer]=PeerRecord{};return;}
     // The newcomer learns everyone else and their channels; everyone else learns it.
     announce_channels(WIRE_PEER_HOST,index,-1);
     for(uint32_t other=1;other<WIRE_SESSION_MAX_PEERS;++other){
@@ -313,7 +325,12 @@ void Session::on_welcome(const uint8_t ip[4],uint16_t port,uint32_t session,uint
     if(!store(l))return;
     reset_link(l);
     l.used=true;l.peer=WIRE_PEER_HOST;for(int i=0;i<4;++i){l.ip[i]=ip[i];target_ip_[i]=ip[i];}l.port=port;target_port_=port;
-    l.instance=instance;l.heard=now;
+    l.instance=instance;l.heard=now;l.confirmed=true;
+    if(welcome_keys_){
+        for(int i=0;i<32;++i){l.send_key[i]=welcome_keys_->send_key[i];l.receive_key[i]=welcome_keys_->receive_key[i];}
+        l.send_counter=welcome_keys_->send_counter;l.receive_top=welcome_keys_->receive_top;
+        l.receive_window=welcome_keys_->receive_window;l.received_any=welcome_keys_->received_any;
+    }
     searching_=false;
     state_=WIRE_SESSION_JOINED;self_=you;session_id_=session;max_peers_=max;refused_=0;
     PeerRecord& host=peers_[WIRE_PEER_HOST];host=PeerRecord{};host.present=true;copy(host.name,name);host.link=0;
@@ -328,6 +345,7 @@ void Session::on_message(Link& l,const uint8_t* message,uint32_t size,bool relia
     const uint32_t channel=r.u32();uint32_t from=r.byte();const uint32_t to=r.byte();
     if(!r.ok||size-MESSAGE_HEADER>WIRE_SESSION_MAX_MESSAGE)return;
     const uint8_t* payload=message+MESSAGE_HEADER;const uint32_t n=size-MESSAGE_HEADER;
+    if(!n)return;                                                                // send refuses an empty message, so none is real
     if(state_==WIRE_SESSION_HOSTING){
         from=l.peer;                                                             // a guest speaks only for itself
         if(to!=WIRE_PEER_HOST){                                                   // pass it on
@@ -385,14 +403,19 @@ void Session::on_link(Link& l,const uint8_t* body,uint32_t size,double now){
     }
 }
 void Session::receive(const uint8_t ip[4],uint16_t port,const uint8_t* data,uint32_t size,double now){
+    if(from_stun(ip,port)){on_stun(data,size);return;}
     R r(data,size);
     if(r.u32()!=SESSION_MAGIC)return;
-    const uint16_t protocol=r.u16();const uint8_t type=r.byte();r.byte();
+    const uint16_t protocol=r.u16();const uint8_t marked=r.byte();r.byte();
     const uint32_t session=r.u32(),instance=r.u32();
     if(!r.ok)return;
-    const uint8_t* body=data+HEADER;const uint32_t n=size-HEADER;
+    const bool sealed=(marked&SESSION_SEALED)!=0;const uint8_t type=uint8_t(marked&~SESSION_SEALED);
+    const uint8_t* body=data+HEADER;uint32_t n=size-HEADER;
+    uint8_t opened[SESSION_DATAGRAM];
+    if(type==SESSION_PUNCH)return;                                              // it only opened a router
     if(type==T_REFUSE){                                                          // any protocol: the reason is always here
-        if(state_==WIRE_SESSION_JOINING&&n>=1)refused_=body[0];
+        // Only the host this machine is joining may refuse it; a guest looking on the network takes anyone's.
+        if(state_==WIRE_SESSION_JOINING&&n>=1&&(searching_||(port==target_port_&&same_ip(ip,target_ip_))))refused_=body[0];
         return;
     }
     if(protocol!=SESSION_PROTOCOL){
@@ -401,15 +424,40 @@ void Session::receive(const uint8_t ip[4],uint16_t port,const uint8_t* data,uint
         }
         return;
     }
-    if(type==T_JOIN){if(state_==WIRE_SESSION_HOSTING)on_join(ip,port,instance,body,n,now);return;}
-    if(type==T_WELCOME){if(state_==WIRE_SESSION_JOINING)on_welcome(ip,port,session,instance,body,n,now);return;}
-    Link* l=link_from(ip,port);
-    if(!l||l->instance!=instance||session!=session_id_){
-        // A guest this host dropped (it timed out here first) is told, so it joins again at once.
-        if(state_==WIRE_SESSION_HOSTING&&session==session_id_&&type!=T_BYE){uint8_t d[HEADER];send_raw(ip,port,d,header(d,T_BYE));}
+    if(sealed!=secret_set_)return;                                               // not of this session's kind: no answer
+    if(type==T_JOIN){
+        if(state_!=WIRE_SESSION_HOSTING)return;
+        if(sealed){
+            if(!open_join(data,size,opened,n,joining_nonce_))return;                 // not sealed with this secret
+            body=opened;
+        }
+        on_join(ip,port,instance,body,n,now);
         return;
     }
+    if(type==T_WELCOME){
+        if(state_!=WIRE_SESSION_JOINING)return;
+        Link keys{};
+        if(sealed){
+            if(!open_welcome(keys,data,size,opened,n))return;
+            body=opened;welcome_keys_=&keys;
+        }
+        on_welcome(ip,port,session,instance,body,n,now);
+        welcome_keys_=nullptr;
+        return;
+    }
+    Link* l=link_from(ip,port);
+    if(!l||l->instance!=instance||session!=session_id_){
+        // A guest this host dropped (it timed out here first) is told, so it joins again at once. A secured host
+        // says nothing to a datagram it cannot open.
+        if(!secret_set_&&state_==WIRE_SESSION_HOSTING&&session==session_id_&&type!=T_BYE){uint8_t d[HEADER];send_raw(ip,port,d,header(d,T_BYE));}
+        return;
+    }
+    if(sealed){
+        if(!open_from(*l,data,size,opened,n))return;                                 // forged, damaged or replayed
+        body=opened;
+    }
     l->heard=now;
+    if(type==T_LINK||type==T_DATA)l->confirmed=true;
     if(type==T_LINK)on_link(*l,body,n,now);
     else if(type==T_DATA)on_message(*l,body,n,false);
     else if(type==T_BYE){
@@ -435,6 +483,9 @@ TSUCHI_Result Session::start(const char* owner,const WireOptions* options,double
     instance_=next();session_id_=0;
     for(auto& p:peers_)p=PeerRecord{};
     for(auto& l:links_)reset_link(l);
+    reset_traversal();
+    take_secret(owner);
+    new_nonce(join_nonce_);join_counter_=0;
     return TSUCHI_OK;
 }
 TSUCHI_Result Session::host(const char* owner,const WireOptions* options,double now){
@@ -581,16 +632,28 @@ void Session::poll(double now,bool busy){
         uint8_t data[1500];uint8_t ip[4]{};uint16_t port=0;
         const int32_t got=b->receive_from(socket_,ip,&port,data,sizeof data);
         if(got<0)break;
-        if(uint32_t(got)>=HEADER)receive(ip,port,data,uint32_t(got),now);
+        if(uint32_t(got)>=HEADER||from_stun(ip,port))receive(ip,port,data,uint32_t(got),now);
         if(state_==WIRE_SESSION_NONE){polling_=false;return;}
     }
     if(state_==WIRE_SESSION_HOSTING){
-        for(auto& l:links_)if(l.used&&now-l.heard>double(WIRE_SESSION_TIMEOUT)&&now>=l.grace_until)drop_link(l,WIRE_SESSION_LEFT_TIMEOUT);
+        for(auto& l:links_){
+            if(!l.used)continue;
+            if(!l.confirmed&&now-l.heard>UNCONFIRMED_FOR)drop_link(l,WIRE_SESSION_LEFT_TIMEOUT);
+            else if(now-l.heard>double(WIRE_SESSION_TIMEOUT)&&now>=l.grace_until)drop_link(l,WIRE_SESSION_LEFT_TIMEOUT);
+        }
     }else if(state_==WIRE_SESSION_JOINED){
         if(now-links_[0].heard>double(WIRE_SESSION_TIMEOUT)&&now>=links_[0].grace_until)lose_host(WIRE_SESSION_LEFT_TIMEOUT,now);
     }
+    poll_traversal(now);
     if(state_==WIRE_SESSION_JOINING&&(join_sent_<0||now-join_sent_>=JOIN_EVERY))send_join(now);
-    for(auto& l:links_)if(l.used)send_link(l,now,l.ack_due||l.sent_at<0||now-l.sent_at>=KEEP_EVERY);
+    for(auto& l:links_){
+        if(!l.used)continue;
+        if(!l.confirmed){                                                         // one a second until it answers
+            if(l.sent_at<0||now-l.sent_at>=UNCONFIRMED_EVERY)send_link(l,now,true);
+            continue;
+        }
+        send_link(l,now,l.ack_due||l.sent_at<0||now-l.sent_at>=KEEP_EVERY);
+    }
     polling_=false;
     if(stop_pending_){stop_pending_=false;end(WIRE_SESSION_LEFT_ENDED);}
 }

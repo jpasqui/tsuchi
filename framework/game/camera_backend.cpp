@@ -3,6 +3,7 @@
 #include "actors.h"
 #include "angles.h"
 #include "camera_service.h"
+#include "captain.h"
 #include "game.h"
 #include "holds.h"
 #include "objects.h"
@@ -179,8 +180,12 @@ TSUCHI_Result apply_look(const Hold& h, Look& s, const TSUCHI_Look& wanted, bool
         restore_look(h, s, HoldEnd::lost);
         return TSUCHI_OK;
     }
+    // The camera stays at its distance from the captain, or from the dog a captain rides: a rider's own
+    // transform stays where it got on.
+    const uint64_t rider = game::player_captain(uint32_t(h.what));
+    const uint64_t mount = rider ? game::mount_of(rider) : 0;
     game::Transform captain;
-    if (!game::get_transform(game::player_captain(uint32_t(h.what)), captain))
+    if (!game::get_transform(mount ? mount : rider, captain))
         return TSUCHI_NOT_READY;
     if (!game::writable(c + t::camera_service::follow, 1) || !game::writable(c + t::camera_service::look, sizeof point) ||
         !game::writable(c + t::camera_service::pole, sizeof point))

@@ -42,6 +42,10 @@ struct UiRenderer {
 void ui_start();
 uint32_t ui_events_dropped();
 void ui_set_renderer(const UiRenderer* renderer);
+// Tsuchi's own host over a game menu (ui_title_host.cpp), for screens opened with hold_open_over.
+void ui_set_title_renderer(const UiRenderer* renderer);
+// Whether the open screen is in that host.
+bool ui_active_over_menu();
 const UiScreen* ui_active_screen();
 void* ui_active_view();
 // Update this exact captured view through its retained Showing operation.

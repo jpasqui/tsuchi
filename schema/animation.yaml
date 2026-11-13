@@ -5,7 +5,7 @@ tutorials:
 layer: engine
 acts_on: component
 lifetime: world
-brief: "Plays an animation clip on a skeletal mesh and holds it there."
+brief: "Plays a clip on a skeletal mesh, or reads and holds the motions of the game's animation blueprints."
 description: |
   A skeletal mesh is normally animated by an animation blueprint, which blends
   clips however the game decides. Use this service to play a single clip on a
@@ -14,6 +14,17 @@ description: |
 
   The blueprint doesn't run while a clip is held. When the hold ends, the
   blueprint takes over again from its starting state.
+
+  The game's own animation blueprints play *motions*, which are animations
+  that the blueprint knows by name, like `Wait` or `Throw`. A blueprint has
+  several *state machines*, like `Default`, `UpperSM`, and `FacialSM`, and each
+  one plays one motion at a time. The blueprint also has a *move motion*, which
+  is the motion of the actor's movement, and a speed that it blends walking and
+  running by. The game sets these as an actor acts, and the blueprint blends to
+  whatever is set. Use this service to read them, or to hold a motion, a move
+  motion, or a speed of your own, which is useful if your mod makes one actor
+  copy another. The names are the game's own, and they are different for each
+  kind of actor. Use `state_machines` to list a mesh's state machines.
 
 structs:
   Clip:
@@ -88,3 +99,175 @@ functions:
     fails:
       not_found: "The component no longer exists, or your mod isn't holding a clip on it."
     users: [groink, groink-lua]
+
+  - name: state_machines
+    doc: "The names of the state machines of a mesh's animation blueprint, in no particular order."
+    params:
+      - {name: component, type: handle<component>, doc: A skeletal mesh.}
+    returns: {type: list<text>, doc: "The names, like `Default` and `UpperSM`."}
+    fails:
+      not_found: "The component no longer exists."
+      unsupported: "The component isn't a skeletal mesh, or it isn't animated by one of the game's animation blueprints right now."
+      not_ready: "The engine isn't ready."
+    users: [online-coop, puppet-demo]
+
+  - name: motion
+    doc: "The motion that a state machine of a mesh's animation blueprint is playing, whether the game or a mod set it."
+    params:
+      - {name: component, type: handle<component>, doc: A skeletal mesh.}
+      - {name: state_machine, type: text, doc: "The state machine, like `Default` or `UpperSM`."}
+    returns: {type: text, doc: "The motion's name. Empty if the state machine isn't playing a motion."}
+    fails:
+      not_found: "The component no longer exists, or its blueprint has no state machine with that name."
+      unsupported: "The component isn't a skeletal mesh, or it isn't animated by one of the game's animation blueprints right now."
+      not_ready: "The engine isn't ready."
+    users: [online-coop, puppet-demo]
+
+  - name: hold_motion
+    doc: |
+      Has a state machine of a mesh's animation blueprint play a motion, and holds it
+      there. Only one mod at a time can hold a state machine. If your mod is already
+      holding it, holding it again changes the motion.
+
+      The game keeps setting motions on an actor whose AI runs, so a held state machine
+      is checked every world step, and the held motion is set again if the game has set
+      another one. The game's motion can show for one world step before that. To keep
+      the game from setting motions at all, suspend the actor's AI with `entity` first.
+      While a clip is held on the mesh, the hold waits, and it sets the motion again once
+      the blueprint runs again.
+
+      The hold ends when your mod releases it or stops, or when the actor leaves the
+      world. The state machine then plays the motion that the game last set.
+    owns: true
+    params:
+      - {name: component, type: handle<component>, doc: A skeletal mesh.}
+      - {name: state_machine, type: text, doc: "The state machine, like `Default` or `UpperSM`."}
+      - {name: motion, type: text, doc: "The motion's name. An empty name stops the state machine's motion, as the game does when a motion ends."}
+    fails:
+      not_found: "The component no longer exists, or its blueprint has no state machine with that name."
+      unsupported: "The component isn't a skeletal mesh, it isn't animated by one of the game's animation blueprints right now, or the framework can't restore its actor's components when the actor leaves the world. Nothing is changed."
+      invalid: "The motion's name is too long to be a name."
+      busy: "Another mod is holding this state machine."
+      not_ready: "The engine isn't ready. Nothing is changed."
+    users: [online-coop, puppet-demo]
+
+  - name: release_motion
+    doc: "Ends your mod's hold on a state machine. The state machine plays the motion that the game last set, unless the game has set another one since."
+    owns: true
+    params:
+      - {name: component, type: handle<component>, doc: "The mesh that you passed to `hold_motion`."}
+      - {name: state_machine, type: text, doc: The state machine.}
+    fails:
+      not_found: "The component no longer exists, or your mod isn't holding this state machine."
+    users: [online-coop, puppet-demo]
+
+  - name: move_motion
+    doc: "The move motion that a mesh's animation blueprint is playing, whether the game or a mod set it."
+    params:
+      - {name: component, type: handle<component>, doc: A skeletal mesh.}
+    returns: {type: text, doc: "The move motion's name. Empty if the blueprint isn't playing one."}
+    fails:
+      not_found: "The component no longer exists."
+      unsupported: "The component isn't a skeletal mesh, or it isn't animated by one of the game's animation blueprints right now."
+      not_ready: "The engine isn't ready."
+    users: [online-coop, puppet-demo]
+
+  - name: hold_move_motion
+    doc: |
+      Has a mesh's animation blueprint play a move motion, and holds it there. Only one
+      mod at a time can hold a mesh's move motion. If your mod is already holding it,
+      holding it again changes the move motion.
+
+      The held move motion is set again every world step in which the game has set
+      another one, in the same way as `hold_motion`. The hold ends when your mod releases
+      it or stops, or when the actor leaves the world. The blueprint then plays the move
+      motion that the game last set.
+    owns: true
+    params:
+      - {name: component, type: handle<component>, doc: A skeletal mesh.}
+      - {name: motion, type: text, doc: "The move motion's name. An empty name stops the move motion."}
+    fails:
+      not_found: "The component no longer exists."
+      unsupported: "The component isn't a skeletal mesh, it isn't animated by one of the game's animation blueprints right now, or the framework can't restore its actor's components when the actor leaves the world. Nothing is changed."
+      invalid: "The move motion's name is too long to be a name."
+      busy: "Another mod is holding this mesh's move motion."
+      not_ready: "The engine isn't ready. Nothing is changed."
+    users: [online-coop, puppet-demo]
+
+  - name: release_move_motion
+    doc: "Ends your mod's hold on a mesh's move motion. The blueprint plays the move motion that the game last set, unless the game has set another one since."
+    owns: true
+    params:
+      - {name: component, type: handle<component>, doc: "The mesh that you passed to `hold_move_motion`."}
+    fails:
+      not_found: "The component no longer exists, or your mod isn't holding its move motion."
+    users: [online-coop, puppet-demo]
+
+  - name: speed
+    doc: "The speed that a mesh's animation blueprint blends its walking and running by, whether the game or a mod set it."
+    params:
+      - {name: component, type: handle<component>, doc: A skeletal mesh.}
+    returns: {type: f32, doc: "The speed, in the blueprint's own units. The game sets it from how fast the actor moves."}
+    fails:
+      not_found: "The component no longer exists."
+      unsupported: "The component isn't a skeletal mesh, or it isn't animated by one of the game's animation blueprints right now."
+      not_ready: "The engine isn't ready."
+    users: [online-coop, puppet-demo]
+
+  - name: hold_speed
+    doc: |
+      Sets the speed that a mesh's animation blueprint blends its walking and running by,
+      and holds it there. Only one mod at a time can hold a mesh's speed. If your mod is
+      already holding it, holding it again changes the speed.
+
+      Some blueprints ease toward a new speed over several world steps, so a held speed is
+      set again every world step, and `speed` can differ from it until the blueprint
+      catches up. The hold ends when your mod releases it or stops, or when the actor
+      leaves the world. The blueprint's speed then goes back to the speed that the game
+      last set.
+    owns: true
+    params:
+      - {name: component, type: handle<component>, doc: A skeletal mesh.}
+      - {name: speed, type: f32, doc: "The speed, in the blueprint's own units, as `speed` gives it."}
+    fails:
+      not_found: "The component no longer exists."
+      unsupported: "The component isn't a skeletal mesh, it isn't animated by one of the game's animation blueprints right now, or the framework can't restore its actor's components when the actor leaves the world. Nothing is changed."
+      busy: "Another mod is holding this mesh's speed."
+      not_ready: "The engine isn't ready. Nothing is changed."
+    users: [online-coop, puppet-demo]
+
+  - name: release_speed
+    doc: "Ends your mod's hold on a mesh's speed. The blueprint's speed goes back to the speed that the game last set."
+    owns: true
+    params:
+      - {name: component, type: handle<component>, doc: "The mesh that you passed to `hold_speed`."}
+    fails:
+      not_found: "The component no longer exists, or your mod isn't holding its speed."
+    users: [online-coop, puppet-demo]
+
+events:
+  - name: motion_changed
+    doc: |
+      Emitted when a state machine of an actor's animation blueprint starts playing a
+      different motion, whether the game or a mod set it. While a mod listens, the
+      skeletal mesh that is the body of each actor in the world is checked once per
+      world step, so a motion that starts and ends within one world step isn't
+      reported. The motions that a mesh has when it is first checked aren't reported
+      either. Other meshes, like a mesh that a mod added, aren't checked.
+    fields:
+      - {name: component, type: handle<component>, doc: The skeletal mesh.}
+      - {name: state_machine, type: text, doc: The state machine.}
+      - {name: motion, type: text, doc: "The motion it plays now. Empty if it stopped playing one."}
+      - {name: previous, type: text, doc: "The motion it played before. Empty if it wasn't playing one."}
+    users: [online-coop, puppet-demo]
+
+  - name: move_motion_changed
+    doc: |
+      Emitted when an actor's animation blueprint starts playing a different move
+      motion, whether the game or a mod set it. The same meshes are checked, once per
+      world step, as for `motion_changed`.
+    fields:
+      - {name: component, type: handle<component>, doc: The skeletal mesh.}
+      - {name: motion, type: text, doc: "The move motion it plays now. Empty if it stopped playing one."}
+      - {name: previous, type: text, doc: "The move motion it played before. Empty if it wasn't playing one."}
+    users: [online-coop, puppet-demo]

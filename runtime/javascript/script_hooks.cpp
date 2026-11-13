@@ -270,17 +270,29 @@ JSValue install(JSContext* ctx, int argc, JSValueConst* argv, DynamicKind kind) 
         if (JS_IsException(function)) return JS_EXCEPTION;
         Value entry(ctx, JS_GetPropertyStr(ctx, object, "entry_at"));
         if (JS_IsException(entry)) return JS_EXCEPTION;
-        const bool is_function = !JS_IsUndefined(function), is_entry = !JS_IsUndefined(entry);
-        if (is_function == is_entry) return fail(ctx, TSUCHI_INVALID);
-        target.site = is_function ? DynamicSite::function : DynamicSite::entry;
-        target.offset = u64(ctx, is_function ? function.value : entry.value);
-        if (JS_HasException(ctx)) return JS_EXCEPTION;
-        Value check(ctx, JS_GetPropertyStr(ctx, object, is_function ? "expected" : "stock"));
-        if (JS_IsException(check)) return JS_EXCEPTION;
-        // `stock` may be left out when the function the entry holds isn't known.
-        if (!is_function && JS_IsUndefined(check)) target.check = 0;
-        else target.check = is_function ? uint64_t(integer(ctx, check, 0, UINT32_MAX)) : u64(ctx, check);
-        if (JS_HasException(ctx)) return JS_EXCEPTION;
+        Value slot(ctx, JS_GetPropertyStr(ctx, object, "slot"));
+        if (JS_IsException(slot)) return JS_EXCEPTION;
+        const bool is_function = !JS_IsUndefined(function), is_entry = !JS_IsUndefined(entry), is_slot = !JS_IsUndefined(slot);
+        if (int(is_function) + int(is_entry) + int(is_slot) != 1) return fail(ctx, TSUCHI_INVALID);
+        if (is_slot) {
+            // A name from the game table: the same entry on every build the table knows.
+            String name(ctx, slot);
+            if (JS_HasException(ctx)) return JS_EXCEPTION;
+            if (!name.text || strlen(name.text) != name.size) return fail(ctx, TSUCHI_INVALID);
+            const TSUCHI_Result found = hook_slot_entry(name.text, target.offset, target.check);
+            if (found != TSUCHI_OK) return fail(ctx, found);
+            target.site = DynamicSite::entry;
+        } else {
+            target.site = is_function ? DynamicSite::function : DynamicSite::entry;
+            target.offset = u64(ctx, is_function ? function.value : entry.value);
+            if (JS_HasException(ctx)) return JS_EXCEPTION;
+            Value check(ctx, JS_GetPropertyStr(ctx, object, is_function ? "expected" : "stock"));
+            if (JS_IsException(check)) return JS_EXCEPTION;
+            // `stock` may be left out when the function the entry holds isn't known.
+            if (!is_function && JS_IsUndefined(check)) target.check = 0;
+            else target.check = is_function ? uint64_t(integer(ctx, check, 0, UINT32_MAX)) : u64(ctx, check);
+            if (JS_HasException(ctx)) return JS_EXCEPTION;
+        }
         Value signature(ctx, JS_GetPropertyStr(ctx, object, "signature"));
         if (JS_IsException(signature)) return JS_EXCEPTION;
         String text(ctx, signature);

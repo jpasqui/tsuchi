@@ -17,6 +17,7 @@
 //            count x (u32 sequence, u16 length, message)                      both ways
 //   DATA     message (unreliable)                                             both ways
 //   BYE      (nothing)                                                        both ways
+//   PUNCH    (nothing): opens the sender's router to the receiver, which ignores it (session_traversal.cpp)
 //
 //   message  u32 channel (FNV-1a of the mod ID; 0 is the framework's own), u8 from,
 //            u8 to (a peer or WIRE_PEER_ALL), payload
@@ -26,11 +27,19 @@
 namespace tsuchi::session_wire {
 
 constexpr uint32_t SESSION_MAGIC=0x534D3450u;   // "P4MS" read as bytes
-constexpr uint16_t SESSION_PROTOCOL=2;   // 2: LINK datagrams carry a flags byte (busy loading)
+constexpr uint16_t SESSION_PROTOCOL=3;   // 2: LINK datagrams carry a flags byte (busy loading); 3: sealed datagrams
 constexpr uint32_t SESSION_DATAGRAM=1200;       // stays under common path MTUs
 constexpr uint32_t SESSION_OUT_SLOTS=1024;      // reliable messages queued per link
 constexpr uint32_t SESSION_OUT_BYTES=192u*1024u;
 constexpr uint32_t SESSION_EARLY=64;            // reliable messages held ahead of a gap
+constexpr uint8_t SESSION_PUNCH=7;              // the datagram type of a punch
+constexpr uint8_t SESSION_SEALED=0x80;          // in the type byte: the rest is sealed (session_secure.cpp)
+constexpr uint32_t SESSION_SECRET_BYTES=32;
+constexpr uint32_t SESSION_NONCE_BYTES=16;
+constexpr uint32_t SESSION_SEAL=24;             // a sealed link datagram's counter and tag
+constexpr uint32_t SESSION_ROOM=SESSION_DATAGRAM-SESSION_SEAL;   // what a link datagram holds before sealing
+constexpr uint32_t SESSION_HEADER_BYTES=16;     // a datagram's header
+constexpr uint32_t SESSION_OP_QUERY=2u;         // calls that read, which an event callback may make
 
 uint32_t session_channel(const char* mod_id);   // FNV-1a, never 0
 
@@ -45,6 +54,15 @@ public:
     TSUCHI_Result peer(uint32_t peer,WirePeer* out,double now) const;
     TSUCHI_Result peer_channel(uint32_t peer,const char* mod_id,uint32_t* version) const;
     TSUCHI_Result send(const char* owner,uint32_t to,const void* data,uint32_t size,uint32_t flags,double now);
+    // Getting through routers (DESIGN.md): ask a STUN server what the internet sees for this session's socket,
+    // read the answer, and punch toward a guest from the hosting session.
+    // A secured session (DESIGN.md, "Secured sessions"): the secret the next session this mod starts seals its
+    // datagrams with. 32 bytes, or none (size 0) for an open session.
+    TSUCHI_Result set_secret(const char* owner,const uint8_t* secret,uint32_t size);
+    bool secured() const {return secret_set_;}
+    TSUCHI_Result discover(const char* owner,const WireAddress* server,double now);
+    TSUCHI_Result public_address(WireAddress* out) const;
+    TSUCHI_Result punch(const char* owner,const WireAddress* to,double now);
     TSUCHI_Result subscribe(const char* owner,uint32_t version,WireCallback callback,void* user,uint32_t* out);
     TSUCHI_Result unsubscribe(uint32_t subscription);
     // Once per frame: receive, deliver events, resend, keep in touch, time peers out. `busy`: this machine is
@@ -72,6 +90,12 @@ private:
     struct LinkStore {OutEntry out[SESSION_OUT_SLOTS];uint8_t bytes[SESSION_OUT_BYTES];Early early[SESSION_EARLY];};
     struct Link {
         bool used=false;
+        bool confirmed=false;        // the other end answered on this link (a LINK or DATA from it, or a WELCOME)
+        // Sealing (secured sessions): the link's keys, its counters, the window of counters received, and on the
+        // host the nonce and number its WELCOME was made with.
+        uint8_t send_key[32]{},receive_key[32]{};
+        uint64_t send_counter=0,receive_top=0,receive_window=0;bool received_any=false;
+        uint8_t host_nonce[SESSION_NONCE_BYTES]{};uint32_t link_number=0;
         uint32_t peer=WIRE_PEER_NONE;
         uint8_t ip[4]{};uint16_t port=0;
         uint32_t instance=0;
@@ -122,6 +146,24 @@ private:
     void lose_host(uint32_t reason,double now);
     void end(uint32_t reason);
     void emit(uint32_t type,uint32_t peer,uint32_t reason,uint32_t channel=0,const void* data=nullptr,uint32_t size=0);
+    // session_secure.cpp
+    void take_secret(const char* owner);
+    void new_nonce(uint8_t out[SESSION_NONCE_BYTES]);
+    uint32_t seal_for(Link& l,const uint8_t* d,uint32_t n,uint8_t* out);
+    bool open_from(Link& l,const uint8_t* data,uint32_t size,uint8_t* out,uint32_t& n);
+    uint32_t seal_join(const uint8_t* d,uint32_t n,uint8_t* out);
+    bool open_join(const uint8_t* data,uint32_t size,uint8_t* out,uint32_t& n,uint8_t nonce[SESSION_NONCE_BYTES]);
+    bool link_keys(Link& l,const uint8_t guest_nonce[SESSION_NONCE_BYTES],const uint8_t host_nonce[SESSION_NONCE_BYTES],uint32_t link_number,bool host);
+    uint32_t seal_welcome(Link& l,const uint8_t guest_nonce[SESSION_NONCE_BYTES],const uint8_t* d,uint32_t n,uint8_t* out,bool fresh);
+    bool open_welcome(Link& l,const uint8_t* data,uint32_t size,uint8_t* out,uint32_t& n);
+    void send_on(Link& l,const uint8_t* d,uint32_t n);
+    // session_traversal.cpp
+    struct Punch {uint8_t ip[4];uint16_t port;double until,sent;};
+    bool from_stun(const uint8_t ip[4],uint16_t port) const;
+    void on_stun(const uint8_t* data,uint32_t size);
+    void poll_traversal(double now);
+    void send_stun();
+    void reset_traversal();
 
     const NetBackend* (*net_)();
     uint32_t state_=WIRE_SESSION_NONE;
@@ -143,6 +185,19 @@ private:
     bool stop_pending_=false;
     Queued queued_[kQueued]{};uint32_t queued_count_=0;
     uint32_t seed_=0x9E3779B9u,dropped_=0;
+    // A secured session.
+    uint8_t secret_[SESSION_SECRET_BYTES]{};bool secret_set_=false;
+    uint8_t next_secret_[SESSION_SECRET_BYTES]{};bool next_secret_set_=false;char next_secret_owner_[WIRE_ID_BYTES]{};
+    uint8_t join_nonce_[SESSION_NONCE_BYTES]{};uint64_t join_counter_=0;uint32_t links_made_=0;
+    uint8_t joining_nonce_[SESSION_NONCE_BYTES]{};   // the host: the nonce of the JOIN being handled
+    const Link* welcome_keys_=nullptr;               // the guest: the keys of the WELCOME being handled
+    // Getting through routers.
+    uint8_t stun_ip_[4]{};uint16_t stun_port_=0;
+    uint8_t stun_id_[12]{};      // the question's transaction number
+    double stun_sent_=-1;uint32_t stun_tries_=0;
+    uint8_t public_ip_[4]{};uint16_t public_port_=0;
+    bool have_public_=false,stun_failed_=false;
+    Punch punches_[WIRE_SESSION_MAX_PEERS-1]{};
 };
 
 }

@@ -269,10 +269,21 @@ TSUCHI_Result read(uint32_t slot, const char* path, uint64_t offset, void* buffe
     });
 }
 
+// What one replacement slot may hold. A real slot is about 260 files and 10 MB.
+constexpr uint32_t kStandInFiles = 1024;
+constexpr uint64_t kStandInBytes = 64ull * 1024 * 1024;
+
+uint64_t stand_in_bytes() {
+    uint64_t total = 0;
+    for (uint32_t i = 0; i < stand.files.count; ++i) total += stand.files[i].size;
+    return total;
+}
+
 TSUCHI_Result stand_in_file(TSUCHI_Mod* mod, uint32_t slot, const char* path, const void* data, uint64_t size) {
     size_t units = 0;
     if (slot >= t::constant::save_slots || !game::path_stays_within(path) || !game::utf8_to_units(path, nullptr, 0, units)) return TSUCHI_INVALID;
     if (stand.mod && (stand.mod != mod || stand.slot != slot)) return TSUCHI_BUSY;
+    if (size > kStandInBytes || stand_in_bytes() + size > kStandInBytes || stand.files.count >= kStandInFiles) return TSUCHI_CAPACITY;
     auto* name = static_cast<char16_t*>(allocate((units + 1) * 2));
     auto* bytes = static_cast<uint8_t*>(allocate(size ? size : 1));
     const auto fail = [&](TSUCHI_Result result) {

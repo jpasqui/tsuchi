@@ -36,7 +36,7 @@ def absent_check(service, name, families):
 
 def checks(fn, structs=None, absent=()):
     """C++ lines that refuse bad arguments before the backend sees them."""
-    lines = ['if (!mod_usable(mod)) return TSUCHI_INVALID;']
+    lines = ['if (!mod_usable_in_hooks(mod)) return TSUCHI_INVALID;' if fn.in_hooks else 'if (!mod_usable(mod)) return TSUCHI_INVALID;']
     for p in fn.params:
         t = p.type
         if t.kind == 'handle' and not p.optional:

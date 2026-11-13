@@ -25,6 +25,11 @@ optional:
   - code_sites.placement_build       # without either, maps refuses a mod's placement_changes (maps.cpp asks
   - code_sites.placement_restore     # placement_changes_ready); the demo dropped build's world and inlined restore
   - code_sites.dialog_buttons_call   # dialogs_backend.cpp then puts a question's text on after set-up, as a message's
+  - data.dialog_result_table          # dialogs_backend.cpp: without these, dialog.close is unsupported
+  - data.dialog_result_header
+  - structs.dialog_result
+  - structs.dialog_widget.kind
+  - structs.ui_manager.open_dialog
   - structs.game_actor.physics_place # send_to_work then aims every target at its root
   - functions.world_follow_request_move  # the self-check build's world-follow check then fails as unavailable at its start
   - structs.world_follow_ai.fsm
@@ -40,6 +45,10 @@ optional:
   - route_frames.cursor_written.saved_widget # presenter_markers.cpp: without them the route is at the placement's return
   - route_frames.cursor_written.saved_component
   - route_frames.cursor_written.saved_return
+  - structs.pikmin_hit.press         # actors.cpp: without them an intercepted hit reports no press and no point
+  - structs.pikmin_hit.point
+  - structs.action_marker.actor              # presenter_markers.cpp asks t::present: without them the game's prompts are
+  - structs.ui_widget.visibility             # not watched, and hud.prompts_shown and hold_hidden_prompts are not ready
 
 # `mod_start` lists entries the mods' start waits on through a helper in a family's file, which the scan of core files
 # does not see. With one absent no mod ever starts, whatever the families say, so a build cannot mark one absent.
@@ -52,6 +61,8 @@ mod_start:
 core:
   files:
     - base/files.cpp
+    - base/memory_backend.cpp
+    - base/memory_backend.h
     - base/files.h
     - base/game.h
     - base/mods.cpp
@@ -93,6 +104,12 @@ families:
   animation:
     services: [animation]
     files: [game/clips.cpp]
+  motions:
+    # Only the motion calls: a build without the game's own blueprint layout keeps the clip calls.
+    calls: [animation.state_machines, animation.motion, animation.hold_motion, animation.release_motion,
+            animation.move_motion, animation.hold_move_motion, animation.release_move_motion, animation.speed,
+            animation.hold_speed, animation.release_speed]
+    files: [game/blueprint_motions.cpp]
   asset:
     services: [asset]
     files: [game/asset_bundles.cpp, game/assets_backend.cpp]
@@ -111,6 +128,18 @@ families:
   carry:
     services: [carry]
     files: [game/carry_backend.cpp]
+  carry_count:
+    calls: [carry.hold_count, carry.release_count]
+    files: [game/carry_count.cpp]
+  character:
+    services: [character]
+    files: [game/character_backend.cpp]
+  thrown_hit:
+    calls: [combat.thrown_hit]
+    files: [game/thrown_hit.cpp]
+  life_gauge:
+    calls: [combat.refresh_gauge]
+    files: [game/life_gauge.cpp]
   collision:
     services: [collision]
     files: [game/switched.cpp]
@@ -140,7 +169,10 @@ families:
     files: [game/gimmicks_backend.cpp]
   hud:
     services: [hud]
-    files: [game/hud_backend.cpp]
+    files: [game/hud_backend.cpp, game/hud_prompts.cpp]
+  voice:
+    services: [voice]
+    files: [game/voice_backend.cpp]
   input:
     services: [input]
     files: [game/input_backend.cpp]
@@ -169,6 +201,15 @@ families:
   ui:
     services: [ui]
     files: [game/ui_feedback.cpp, game/ui_label_layout.h, game/ui_mod_list.cpp, game/ui_mod_list_native.cpp, game/ui_native.cpp, game/ui_native_classes.h, game/ui_widgets.cpp]
+  player_choice:
+    calls: [game.hold_player_choice, game.release_player_choice, game.answer_player_choice]
+    files: [game/player_choice.cpp]
+  title_menu:
+    calls: [ui.hold_menu_entry, ui.release_menu_entry, ui.hold_open_over, ui.hold_menu_lock, ui.release_menu_lock, ui.hold_menu_note, ui.release_menu_note]
+    files: [game/ui_title.cpp, game/ui_title_host.cpp, game/ui_title_options.cpp]
+  keyboard:
+    calls: [ui.ask_text]
+    files: [game/ui_keyboard.cpp]
   world:
     services: [world]
     files: [game/world_backend.cpp]

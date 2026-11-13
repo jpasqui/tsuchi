@@ -110,11 +110,14 @@ inline void engine_process(void* object, void* function, void* arguments) {
     auto body = engine().bodies.find(reinterpret_cast<uint64_t>(function));
     if (body != engine().bodies.end()) body->second(reinterpret_cast<uint64_t>(object), reinterpret_cast<uint64_t>(arguments));
 }
-inline uint64_t engine_name(void* text, uint64_t length, uint64_t) {
+inline uint64_t engine_name(void* text, uint64_t length, uint64_t add) {
     const std::u16string wanted(static_cast<const char16_t*>(text), size_t(length));
-    uint64_t& known = engine().names[wanted];
-    if (!known) known = packed(name(wanted));
-    return known;
+    auto found = engine().names.find(wanted);
+    if (found != engine().names.end()) return found->second;
+    if (!add) return 0;
+    const uint64_t made = packed(name(wanted));
+    engine().names[wanted] = made;
+    return made;
 }
 inline void* engine_find_function(void* type, uint64_t function_name, uint64_t include_parents) {
     for (auto at = reinterpret_cast<uint64_t>(type); at; at = include_parents ? get<uint64_t>(at + t::struct_type::super) : 0) {

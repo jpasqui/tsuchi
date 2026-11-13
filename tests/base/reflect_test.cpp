@@ -728,6 +728,44 @@ void long_names() {
     CHECK(tsuchi::owned_count(mod) == 0);
 }
 
+// A field named as the engine names it is found by that name and remembered; the memory is checked each time,
+// so a class whose fields were made again, or a parent's, is looked through again.
+void engine_named_fields() {
+    const auto engine_named = [](uint64_t type, const std::u16string& text, int32_t offset) {
+        const uint64_t property = fake::field(type, text, u"FloatProperty", offset, 4);
+        const uint64_t engine = fake::engine_name(const_cast<char16_t*>(text.data()), text.size(), 1);
+        fake::put<Name>(property + fake::t::property::name, Name{uint32_t(engine), uint32_t(engine >> 32)});
+        return property;
+    };
+    const uint64_t parent = fake::engine_object(u"Pose", w.root);
+    fake::field(parent, u"Before", u"FloatProperty", 0x40, 4);
+    const uint64_t first = engine_named(parent, u"UpperRatio", 0x44);
+    const uint64_t child = fake::engine_object(u"PoseChild", w.root);
+    fake::set_super(child, parent);
+    fake::field(child, u"Own", u"FloatProperty", 0x50, 4);
+    const uint64_t posed = fake::engine_object(u"Posed", parent, 0x80);
+    const uint64_t child_posed = fake::engine_object(u"ChildPosed", child, 0x80);
+    const TSUCHI_Value half = number(0.5), quarter = number(0.25), eighth = number(0.125);
+    CHECK(set("UpperRatio", half, posed) == TSUCHI_OK && fake::get<float>(posed + 0x44) == 0.5f);
+    CHECK(set("UpperRatio", quarter, posed) == TSUCHI_OK && fake::get<float>(posed + 0x44) == 0.25f);
+    CHECK(is_number(get("UpperRatio", posed), 0.25));
+    // From the child, the parent's field.
+    CHECK(set("UpperRatio", eighth, child_posed) == TSUCHI_OK && fake::get<float>(child_posed + 0x44) == 0.125f);
+    // The parent's fields made again at the same address: the new field is the one written.
+    const uint64_t remade = engine_named(fake::memory(0x80), u"UpperRatio", 0x48);
+    fake::put<uint64_t>(parent + fake::t::struct_type::properties, remade);
+    CHECK(set("UpperRatio", half, posed) == TSUCHI_OK && fake::get<float>(posed + 0x48) == 0.5f && fake::get<float>(posed + 0x44) == 0.25f);
+    CHECK(set("UpperRatio", half, child_posed) == TSUCHI_OK && fake::get<float>(child_posed + 0x48) == 0.5f);
+    // A field renamed in place is not the remembered one any more.
+    fake::put<Name>(remade + fake::t::property::name, fake::name(u"Renamed"));
+    CHECK(set("UpperRatio", quarter, posed) == TSUCHI_NOT_FOUND && fake::get<float>(posed + 0x48) == 0.5f);
+    CHECK(set("Renamed", quarter, posed) == TSUCHI_OK && fake::get<float>(posed + 0x48) == 0.25f);
+    // The child no longer made from that parent: the parent's field is not its own.
+    fake::set_super(child, 0);
+    CHECK(set("Renamed", quarter, child_posed) == TSUCHI_NOT_FOUND);
+    (void)first;
+}
+
 #include "reflect_atomic_checks.h"
 
 } // namespace
@@ -744,6 +782,7 @@ int main() {
     resized();
     listed();
     long_names();
+    engine_named_fields();
     atomic_writes();
     lifetimes();
     ended_while_running();

@@ -63,6 +63,16 @@ assert(call_instruction() == 0x20000000); remove(h)
 h = assert(hook.instruction(0x900, 0x1a9f97e8, function(r) r.z = true; error('discard') end))
 assert(call_instruction() == 0x20000000); remove(h)
 
+-- Plain code checks and patches go to the same backend as a compiled mod's.
+assert(hook.check_code(0x900, '\xe8\x97\x9f\x1a') == true)
+local patched, refused = hook.patch_instruction(0x900, 0x1a9f97e8, 0xd503201f)
+assert(patched == nil and refused == 'not_ready')
+-- A named entry of the game table: a name it doesn't have, or a name and an address together, are refused.
+local missing, unknown = hook.wrap({slot='no_such_slot', signature='u64(u64)'}, function() end)
+assert(missing == nil and unknown == 'not_found')
+local both, mixed = hook.watch({slot='engine_tick', entry_at=entry, signature='u64(u64)'}, function() end)
+assert(both == nil and mixed == 'invalid')
+
 -- Text passed on unchanged reaches the game as its own pointer; changed text is a copy. `stock` can be left out.
 local pointer_target = {entry_at=pointer_entry, signature='u64(text16)'}
 h = assert(hook.wrap(pointer_target, function(original, text) return original(text) end))

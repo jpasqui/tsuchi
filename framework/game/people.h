@@ -23,7 +23,7 @@ bool is_riding(uint64_t captain);
 // one of the two. `at_once` skips the fade. TSUCHI_OK when the switch has begun or
 // the actor is steered already; TSUCHI_BUSY while one is fading in; TSUCHI_NOT_READY
 // when the game would refuse or cannot be asked.
-TSUCHI_Result switch_controlled(uint32_t player, uint64_t actor, bool at_once);
+TSUCHI_Result switch_controlled(uint32_t player, uint64_t actor, bool at_once, bool before_unlock = false);
 // Drops a switch that is fading in. The camera still fades.
 void drop_pending_switch();
 // True while one of the level's scripted events has the game's attention.

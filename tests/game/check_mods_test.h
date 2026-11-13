@@ -709,8 +709,7 @@ void check_world() {
     // A carryable object for the carry check, beside the first captain: the game's carry component with a weight
     // of one and empty carrier records.
     {
-        const uint64_t carry_class = fake::object(u"TestCarryAffordanceComponent", w.root);
-        fake::set_super(carry_class, w.component_class);
+        const uint64_t carry_class = carry_part_class();
         const uint64_t chief_root = fake::get<uint64_t>(w.chief + t::game_actor::root);
         const float x = chief_root ? fake::get<float>(chief_root + t::scene_component::location) + 100.0f : 100.0f;
         const uint64_t pellet = tabled(table_a(), u"Pellet", u"Pellet", 0, x);
@@ -738,6 +737,8 @@ void* check_spawn_now(void* framework, void* request) {
         fake::put(actor + t::game_actor::team, fake::get<int32_t>(check_spawn_source + t::game_actor::team));
     fake::put(mesh + t::scene_component::owner, actor);
     fake::put<uint8_t>(mesh + kAnimationModeAt, uint8_t(t::constant::animation_by_blueprint));
+    choreograph(mesh, {u"Default"});
+    fake::put(actor + t::game_actor::body, mesh);
     parts_of[actor].push_back(mesh);
     const uint64_t body = physical(actor), root = fake::get<uint64_t>(actor + t::game_actor::root), table = fake::memory(0x60);
     std::memcpy(reinterpret_cast<void*>(table), reinterpret_cast<const void*>(primitive_table), 0x60);
@@ -857,9 +858,10 @@ void check_kill_actor(void* record_pointer, void* which) {
 void check_eject_pikmin(void* leader, void* transform, int32_t type, int32_t leaf, int32_t count, uint64_t sublevel, bool not_counted, int32_t decoration) {
     game_eject_pikmin(leader, transform, type, leaf, count, sublevel, not_counted, decoration);
     const uint64_t owner = reinterpret_cast<uint64_t>(leader), head = w.framework + t::game_framework::pikmin_list;
-    const auto* at = static_cast<const float*>(transform);
+    float at[3];
+    memcpy(at, static_cast<const uint8_t*>(transform) + uint64_t(t::engine_transform::translation), sizeof at);
     for (int32_t i = 0; i < count; ++i) {
-        const uint64_t made = actor(u"CheckAdded", w.pikmin_class, u"Pikmin", fake::get<int32_t>(owner + t::game_actor::team), ~uint64_t(0), component(at[4], at[5], at[6], 0));
+        const uint64_t made = actor(u"CheckAdded", w.pikmin_class, u"Pikmin", fake::get<int32_t>(owner + t::game_actor::team), ~uint64_t(0), component(at[0], at[1], at[2], 0));
         fake::put(made, table_a());
         const uint64_t part = fake::object(u"CheckAddedPikmin", w.component_class, 0x40), node = fake::memory(t::actor_node::size);
         fake::put(made + t::game_actor::pikmin, part);
@@ -1147,6 +1149,24 @@ void checking_fixtures(bool ai_only = false) {
     fake::put(collision_part + t::scene_component::owner, captain_object);
     part_states[collision_part] = {false, kCollisionBoth, 0};
     parts_of[captain_object].push_back(collision_part);
+    // The captain's and the dog's bodies run blueprints of the game's own, with the game's state machines.
+    const uint64_t old_captain_body = fake::get<uint64_t>(captain_object + t::game_actor::body);
+    const auto give_body = [](uint64_t owner, const std::vector<std::u16string>& machines) {
+        const uint64_t mesh = fake::engine_object(u"CheckBody", skeletal_class, 0xC0);
+        fake::put(mesh + t::scene_component::owner, owner);
+        fake::put<uint8_t>(mesh + kAnimationModeAt, uint8_t(t::constant::animation_by_blueprint));
+        choreograph(mesh, machines);
+        parts_of[owner].push_back(mesh);
+        fake::put(owner + t::game_actor::body, mesh);
+    };
+    give_body(captain_object, {u"Default", u"UpperSM", u"FacialSM", u"DemoSM", u"StemSM"});
+    TSUCHI_Actor first_dog{};
+    CHECK(tsuchi::host.player->dog(mod, 0, &first_dog) == TSUCHI_OK && first_dog.id);
+    const uint64_t first_dog_object = tsuchi::game::from_handle(first_dog.id);
+    const auto old_first_dog_parts = parts_of[first_dog_object];
+    const uint64_t old_first_dog_body = fake::get<uint64_t>(first_dog_object + t::game_actor::body), old_first_dog_table = fake::get<uint64_t>(first_dog_object);
+    fake::put(first_dog_object, fake::engine().vtable); // its parts are listed through the engine, as the captain's are
+    give_body(first_dog_object, {u"Default", u"HeadSM", u"TailSM", u"DemoSM", u"EyeSM", u"BigSM"});
     const uint64_t collision_tree = fake::object(u"CheckTree", w.component_class, 0x80), collision_record = fake::memory(t::collision_record::size);
     fake::put(collision_tree + t::scene_component::owner, captain_object), fake::put(collision_tree + t::collision_tree::actor, captain_object);
     fake::put(collision_tree + t::collision_tree::records, collision_record);
@@ -1285,7 +1305,7 @@ void checking_fixtures(bool ai_only = false) {
         bool startup_control = true;
         CHECK(tsuchi::host.game->mode(mod, &startup_mode) == TSUCHI_OK && startup_mode == TSUCHI_MODE_TITLE);
         CHECK(tsuchi::host.game->has_control(mod, &startup_control) == TSUCHI_OK && !startup_control);
-        for (const char* id : {"check.story", "check.actors", "check.behavior", "check.combat", "check.game", "check.players", "check.spawn", "check.anim", "check.body", "check.motion", "check.fight", "check.aim", "check.crew", "check.switch", "check.death", "check.work", "check.throw", "check.ride", "check.revive"}) {
+        for (const char* id : {"check.story", "check.actors", "check.behavior", "check.combat", "check.game", "check.players", "check.spawn", "check.anim", "check.motions", "check.body", "check.motion", "check.fight", "check.aim", "check.crew", "check.switch", "check.death", "check.work", "check.throw", "check.ride", "check.revive"}) {
             if (!selected_check_fixture(id, selected)) continue;
             const Reported startup = reported_by(logged.lines, id);
             CHECK(!startup.planned.empty() && startup.passed.empty() && startup.failed.empty());
@@ -1413,7 +1433,9 @@ void checking_fixtures(bool ai_only = false) {
     CHECK(part_states[collision_part].mode == kCollisionBoth && tsuchi::parts_switched_off() == 0);
     for (uint64_t flag : t::tables::collision_record_flags) CHECK(fake::get<uint8_t>(collision_record + flag) == 1);
     fake::put(captain_object + t::game_actor::collision_tree, old_captain_tree);
-    parts_of[captain_object] = old_captain_parts;
+    parts_of[captain_object] = old_captain_parts, parts_of[first_dog_object] = old_first_dog_parts;
+    fake::put(captain_object + t::game_actor::body, old_captain_body), fake::put(first_dog_object + t::game_actor::body, old_first_dog_body);
+    fake::put(first_dog_object, old_first_dog_table);
     body_log = old_body_log;
     part_states.erase(collision_part);
     CHECK(check_throws.empty());

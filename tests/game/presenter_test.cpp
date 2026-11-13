@@ -198,6 +198,10 @@ static constexpr uint32_t kBones = 3;
 static tsuchi::presenter::BonePose bones[kBones] = {};
 static struct { uint64_t data; int32_t count, room; } bone_array{};
 static std::vector<float> renderer_x, kernel_x; // the place the renderer got, and the first bone the kernel got
+static std::vector<std::vector<float>> kernel_q;  // the first bone's turn the kernel got, while kept
+static bool keep_kernel_q = false;
+// The first bone's turn about up, in degrees a step, and the loop it wraps at (0: none); and its place's loop.
+static float bone_spin = 0, bone_spin_loop = 0, bone_yaw = 0, bone_loop = 0;
 static void mark(uint32_t bits) { put<uint32_t>(part + t::primitive::flags, get<uint32_t>(part + t::primitive::flags) | bits); }
 static void original_scene_update(void* at, void* sent) {
     const uint64_t s = reinterpret_cast<uint64_t>(at), p = reinterpret_cast<uint64_t>(sent);
@@ -220,6 +224,10 @@ static void original_kernel(void*, const void* given, void*, void*, void*, void*
     const uint64_t array = reinterpret_cast<uint64_t>(given);
     kernel_lod = lod;
     kernel_x.push_back(get<float>(get<uint64_t>(array) + 0x10));
+    if (keep_kernel_q) {
+        const uint64_t data = get<uint64_t>(array);
+        kernel_q.push_back({get<float>(data), get<float>(data + 4), get<float>(data + 8), get<float>(data + 12)});
+    }
     if (change_revision_in_kernel) {
         put<uint32_t>(part + t::skinned_pose::revision, get<uint32_t>(part + t::skinned_pose::revision) + 1);
         change_revision_in_kernel = false;
@@ -258,7 +266,16 @@ static void send_pose(void* sent) {
     }
     native_pose_pending = presenter_pose_pending = false;
 }
-static void mark_end(void*) {}
+// The carry counters' component: one counter whose point moves 30 a step along x, and the point each time the
+// component's data is sent between steps.
+static uint64_t counter_numbers = 0, counter_item = 0;
+static bool counters_on = false;
+static float counter_x = 0; // where its carried thing is: the game puts the point there each step
+static std::vector<float> counter_sent;
+static void mark_end(void* p) {
+    if (counter_numbers && reinterpret_cast<uint64_t>(p) == counter_numbers && (get<uint32_t>(counter_numbers + t::actor_component::lifecycle_flags) & 0x80))
+        counter_sent.push_back(get<float>(counter_item + t::carry_number::place)), put<uint32_t>(counter_numbers + t::actor_component::lifecycle_flags, 3u);
+}
 static void mark_pose(void* p) {
     const uint64_t at = reinterpret_cast<uint64_t>(p);
     if ((get<uint32_t>(at + t::primitive::flags) & t::constant::render_ready) == t::constant::render_ready) {
@@ -408,11 +425,12 @@ static void place_icon(float point) {
                                                                                  reinterpret_cast<void*>(icon_slot));
     callers.clear();
 }
+static uint64_t action_projector = 0; // the controller the action marker is projected through, or 0 for the first's
 static void original_action(void* marker) {
     const uint64_t m = reinterpret_cast<uint64_t>(marker);
     float out[3];
     hook_of<bool (*)(float, float, float, void*, void*, bool)>(site_key(t::code_site::world_to_screen))(
-        get<float>(m + t::life_gauge::anchor), 0, 0, reinterpret_cast<void*>(controller), out, false);
+        get<float>(m + t::life_gauge::anchor), 0, 0, reinterpret_cast<void*>(action_projector ? action_projector : controller), out, false);
     put<float>(m + t::life_gauge::position, out[0] / 2 + 3);
 }
 static void place_marks() {
@@ -433,7 +451,7 @@ static void place_marks() {
 // of it: the last vector and scalar each push gave it.
 static uint64_t line_material = 0;
 static bool line_on = false;
-static float line_x = 0, line_speed = 60;
+static float line_x = 0, line_speed = 60, line_loop = 0; // line_loop: the value wraps back by this past it
 static float rendered[4] = {}, rendered_scalar = 0;
 static uint8_t line_info[16] = {7, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 0xFF, 0xFF, 0xFF, 0xFF};
 static void original_vector_push(void* material, const void* parameter) {
@@ -461,8 +479,17 @@ static void move_part() {
     ++steps_seen;
     if (!part_registered) return;
     if (part_speed != 0) part_x += part_speed, mark(uint32_t(t::constant::render_transform_dirty));
-    const bool changed = bone_speed != 0 && steps_seen % bone_every == 0;
-    if (changed) bones[0].t[0] += bone_speed;
+    const bool changed = (bone_speed != 0 || bone_spin != 0) && steps_seen % bone_every == 0;
+    if (changed) {
+        bones[0].t[0] += bone_speed;
+        if (bone_loop > 0 && bones[0].t[0] >= bone_loop) bones[0].t[0] -= bone_loop;
+        if (bone_spin != 0) {
+            bone_yaw += bone_spin;
+            if (bone_spin_loop > 0 && bone_yaw >= bone_spin_loop) bone_yaw -= bone_spin_loop;
+            const float angles[3] = {0, bone_yaw, 0};
+            tsuchi::math::to_quaternion(angles, bones[0].q);
+        }
+    }
     if (bone_send_every ? steps_seen % bone_send_every == 0 : changed) {
         native_pose_pending = true;
         put<uint32_t>(part + t::skinned_pose::revision, get<uint32_t>(part + t::skinned_pose::revision) + 1);
@@ -537,6 +564,9 @@ static float world_given = 0;
 static double app_delta_within = 0;
 static float location_x = 0; // the camera moves 30 a step
 static void original_npad(void* reader) { put<uint64_t>(reinterpret_cast<uint64_t>(reader) + t::npad_device::buttons, raw_buttons); }
+static uint64_t hung_actor = 0, hung_root = 0; // an actor a mod's widget hangs from, and its root
+static float hung_speed = 0;                  // and how far it goes a step
+static float hung_x() { return get<float>(hung_root + t::scene_component::location); }
 static void original_world(void* at, uint32_t, float seconds) {
     ++world_updates;
     now_us += world_cost_us;
@@ -549,9 +579,11 @@ static void original_world(void* at, uint32_t, float seconds) {
     location_x += 30;
     move_part();
     if (marks_on) place_marks();
+    if (hung_actor) put<float>(hung_root + t::scene_component::location, hung_x() + hung_speed);
     if (cursor_on) place_cursor();
-    if (line_on) set_line(line_x + line_speed);
+    if (line_on) set_line(line_loop > 0 && line_x + line_speed >= line_loop ? line_x + line_speed - line_loop : line_x + line_speed);
     if (crowds_on) crowd_x += 30, hook_of<void (*)(void*)>(site_key(t::code_site::instance_drawer_update))(reinterpret_cast<void*>(drawer_object));
+    if (counters_on) counter_x += 30, put<float>(counter_item + t::carry_number::place, counter_x);
     // The game reads its controllers while it updates.
     hook_or_game<void (*)(void*)>(slot_key(t::slot::npad_read))(reinterpret_cast<void*>(device));
     ++npad_reads_in_world;
@@ -730,6 +762,13 @@ static void build() {
     put<uint64_t>(crowd_part + t::instanced_mesh::instances, crowd_data);
     put<int32_t>(crowd_part + t::instanced_mesh::count, 2);
     t::fn::mark_render_state = &mark_render_state;
+    counter_numbers = block(0x100), counter_item = block(0x80);
+    const uint64_t counter_entries = block(0x18);
+    put<uint64_t>(framework + t::game_framework::carry_numbers, counter_numbers);
+    put<uint64_t>(counter_numbers + t::carry_numbers::entries, counter_entries);
+    put<int32_t>(counter_numbers + t::carry_numbers::count, 1);
+    put<uint32_t>(counter_numbers + t::actor_component::lifecycle_flags, 3u);
+    put<uint64_t>(counter_entries, counter_item);
     t::fn::widget_scale = &widget_scale;
     marker_widget = block(0x800), gauge_widget = block(0x800), action_widget = block(0x800), bar_widget = block(0x800);
     icon_slot = block(0x100), icon_widget = block(0x800), hud_slot = block(0x100);
@@ -872,6 +911,147 @@ static void camera_alone() {
     CHECK(!history.paired());
     history.capture(7, far, false);
     CHECK(history.paired());
+}
+
+// The yaw of a turn about up, in degrees from -180 to 180.
+static float yaw_of(const float q[4]) {
+    float angles[3];
+    tsuchi::math::to_angles(q, angles);
+    return angles[1];
+}
+static float within_half(float degrees) { return tsuchi::math::within_half_turn(degrees); }
+
+static void snaps_alone() {
+    // A bone spun the same each step, its angle wrapping past 180 and its quaternion's sign flipping every step,
+    // however fast: never a snap, and every picture between is the short way, halfway at a half step.
+    for (float spin : {19.0f, 100.0f, 170.0f}) {
+        BonePose a{}, b{}, shown;
+        BoneMotion motion{};
+        b.q[3] = 1, b.s[0] = b.s[1] = b.s[2] = 1;
+        float yaw = 0;
+        uint32_t snaps = 0;
+        bool short_way = true;
+        for (unsigned step = 0; step < 60; ++step) {
+            a = b;
+            yaw = within_half(yaw + spin);
+            const float angles[3] = {0, yaw, 0};
+            tsuchi::math::to_quaternion(angles, b.q);
+            if (step & 1) for (float& q : b.q) q = -q;
+            snaps += mark_snaps(&a, &b, 1, 1, true, &motion);
+            blend_bones(&a, &b, 1, 0.5f, &shown, &motion);
+            short_way = short_way && std::fabs(within_half(yaw_of(shown.q) - (yaw - spin / 2))) < 0.05f;
+        }
+        CHECK(snaps == 0 && short_way);
+    }
+    // A flower that spins a share of a turn and starts again, as one whose petals look alike after a third or a
+    // fifth of a turn does: each wrap is a snap, shown at the newer step at once, and no other step is.
+    for (float loop : {120.0f, 72.0f}) {
+        for (float spin : {4.0f, 10.0f}) {
+            BonePose a{}, b{}, shown;
+            BoneMotion motion{};
+            b.q[3] = 1, b.s[0] = b.s[1] = b.s[2] = 1;
+            float yaw = 0;
+            unsigned wraps = 0, cut_wraps = 0, other_cuts = 0;
+            for (unsigned step = 0; step < 200; ++step) {
+                a = b;
+                yaw += spin;
+                const bool wrap = yaw >= loop;
+                if (wrap) yaw -= loop;
+                const float angles[3] = {0, yaw, 0};
+                tsuchi::math::to_quaternion(angles, b.q);
+                const bool cut = mark_snaps(&a, &b, 1, 1, true, &motion) == 1;
+                if (step == 0) continue; // a bone's first change is not judged
+                wraps += wrap, cut_wraps += wrap && cut, other_cuts += !wrap && cut;
+                blend_bones(&a, &b, 1, 0.5f, &shown, &motion);
+                const float expected = wrap ? yaw : yaw - spin / 2;
+                CHECK(std::fabs(within_half(yaw_of(shown.q) - expected)) < 0.05f);
+            }
+            CHECK(wraps >= 5 && cut_wraps == wraps && other_cuts == 0);
+        }
+    }
+    // A place that slides and starts again, and a size that pops back from nothing: each wrap is a snap.
+    {
+        BonePose a{}, b{}, shown;
+        BoneMotion motion{};
+        b.q[3] = 1, b.s[0] = b.s[1] = b.s[2] = 1;
+        unsigned wraps = 0, cut_wraps = 0, other_cuts = 0;
+        for (unsigned step = 0; step < 200; ++step) {
+            a = b;
+            b.t[0] += 10;
+            bool wrap = b.t[0] >= 300;
+            if (wrap) b.t[0] -= 300;
+            // Shrinks to nothing over 20 steps and stays so, then is whole again at once.
+            const unsigned phase = step % 40;
+            const float size = phase < 20 ? 1 - float(phase) / 20 : phase < 39 ? 0 : 1;
+            wrap = wrap || phase == 39;
+            for (float& part : b.s) part = size;
+            const bool cut = mark_snaps(&a, &b, 1, 1, true, &motion) == 1;
+            if (step == 0) continue;
+            wraps += wrap, cut_wraps += wrap && cut, other_cuts += !wrap && cut;
+            blend_bones(&a, &b, 1, 0.5f, &shown, &motion);
+            if (wrap) CHECK(!std::memcmp(&shown, &b, sizeof shown));
+        }
+        CHECK(wraps >= 10 && cut_wraps == wraps && other_cuts == 0);
+    }
+    // Ordinary motion is never a snap: a swing to and fro, a turn that speeds up from rest to 120 degrees a step
+    // and keeps on, and a fast start from that.
+    {
+        BonePose a{}, b{};
+        BoneMotion motion{};
+        b.q[3] = 1, b.s[0] = b.s[1] = b.s[2] = 1;
+        uint32_t snaps = 0;
+        float yaw = 0, speed = 0;
+        for (unsigned step = 0; step < 220; ++step) {
+            a = b;
+            if (step < 100) yaw = 60 * tsuchi::math::sine(float(step) * 2 * tsuchi::math::kPi / 40);
+            else if (step < 120) speed = speed > 0 ? speed * 1.8f : 2, yaw = within_half(yaw + (speed > 120 ? 120 : speed));
+            else if (step < 200) yaw = within_half(yaw + 120);
+            else if (step == 200) b.t[0] += 90, yaw = within_half(yaw + 120); // a move from rest, still turning
+            else yaw = within_half(yaw + 120);
+            const float angles[3] = {0, yaw, 0};
+            tsuchi::math::to_quaternion(angles, b.q);
+            snaps += mark_snaps(&a, &b, 1, 1, true, &motion);
+        }
+        CHECK(snaps == 0);
+        // A pose made every four steps, turning 20 degrees a step: 80 between its two steps is not a snap.
+        BoneMotion every{};
+        a = b = BonePose{};
+        b.q[3] = 1;
+        yaw = 0;
+        for (unsigned update = 0; update < 20; ++update) {
+            a = b;
+            yaw = within_half(yaw + 80);
+            const float angles[3] = {0, yaw, 0};
+            tsuchi::math::to_quaternion(angles, b.q);
+            snaps += mark_snaps(&a, &b, 1, 4, true, &every);
+        }
+        CHECK(snaps == 0);
+        // A zeroed bone, as the unused rows of a pose are: no turn, no snap.
+        BonePose zero{};
+        BoneMotion none{};
+        for (unsigned step = 0; step < 4; ++step) snaps += mark_snaps(&zero, &zero, 1, 1, true, &none);
+        CHECK(snaps == 0 && none.now.turn == 0);
+    }
+    // The same step made again: the newest change is taken again against the same step before.
+    {
+        BonePose a{}, b{};
+        BoneMotion motion{};
+        a.q[3] = b.q[3] = 1;
+        b.t[0] = 5;
+        mark_snaps(&a, &b, 1, 1, true, &motion);
+        a = b, b.t[0] = 10;
+        CHECK(mark_snaps(&a, &b, 1, 1, true, &motion) == 0);
+        b.t[0] = 300; // remade at once far away
+        CHECK(mark_snaps(&a, &b, 1, 1, false, &motion) == 1 && motion.before.move == 5);
+        b.t[0] = 15; // and remade again where it should be
+        CHECK(mark_snaps(&a, &b, 1, 1, false, &motion) == 0);
+    }
+    // A part's place, as a root's: the same rule.
+    {
+        const Change steady{0.1f, 0, 0}, wrapped{1.5f, 0, 0}, swing{0.3f, 0, 0}, popped{0, 0, 1};
+        CHECK(!snapped(steady, steady) && snapped(wrapped, steady) && !snapped(wrapped, Change{0.5f, 0, 0}) && !snapped(swing, Change{}));
+        CHECK(snapped(popped, Change{}) && !snapped(Change{0, 99, 0}, Change{}) && snapped(Change{0, 101, 0}, Change{}));
+    }
 }
 
 static void widgets_alone() {
@@ -1500,6 +1680,80 @@ static void scene_in_game() {
     put<uint64_t>(part + t::primitive::proxy, 0);
 }
 
+// Consecutive values the kernel or the renderer was given: each step's move split between the pictures, or a wrap
+// shown at once. A wrap blended would show a value part of the way back.
+static bool forward_or_wrapped(const std::vector<float>& values, float step, float loop, unsigned& wraps) {
+    bool ok = values.size() > 4;
+    wraps = 0;
+    for (size_t i = 1; i < values.size(); ++i) {
+        const float d = values[i] - values[i - 1];
+        const bool forward = d > -0.01f && d < step + 0.01f;
+        const bool wrapped = d < -loop / 2 && d > -loop - 0.01f;
+        wraps += wrapped;
+        if (!forward && !wrapped) std::printf("not forward or wrapped: %.3f then %.3f\n", values[i - 1], values[i]), ok = false;
+    }
+    return ok;
+}
+
+static void pose_wrap_in_game() {
+    // A pose whose first bone spins four degrees a step and starts again every 120, as the flower on an Onion: each
+    // wrap is shown at once, every other picture goes on the short way, and the pictures between steps go on.
+    put<uint64_t>(part + t::primitive::proxy, 0xABC0);
+    part_registered = true, part_drawn = true, part_speed = 30, part_x = location_x;
+    mark(uint32_t(t::constant::render_transform_dirty));
+    const BonePose saved = bones[0];
+    bones[0].q[0] = bones[0].q[1] = bones[0].q[2] = 0, bones[0].q[3] = 1;
+    bone_every = 1, bone_speed = 0, bone_yaw = 0, bone_spin = 4, bone_spin_loop = 120;
+    presenter_cut(actor);
+    for (int i = 0; i < 12; ++i) engine_frame(1.0f / 60);
+    keep_kernel_q = true;
+    kernel_q.clear();
+    for (int i = 0; i < 160; ++i) engine_frame(1.0f / 60);
+    std::vector<float> yaws;
+    for (const std::vector<float>& q : kernel_q) yaws.push_back(yaw_of(q.data()));
+    unsigned wraps = 0;
+    CHECK(kernel_q.size() >= 150 && forward_or_wrapped(yaws, 2, 120, wraps) && wraps == 2);
+    bool between_steps = false;
+    for (size_t i = 1; i < yaws.size(); ++i) between_steps = between_steps || std::fabs(yaws[i] - yaws[i - 1] - 2) < 0.01f;
+    CHECK(between_steps);
+    // Spun 19 degrees a step, its angle wrapping past 180 and its turn back to the start at 360: a whole turn is the
+    // same pose, so nothing is shown at once. Every picture is half a step on.
+    bone_spin = 19, bone_spin_loop = 360;
+    for (int i = 0; i < 12; ++i) engine_frame(1.0f / 60);
+    kernel_q.clear();
+    for (int i = 0; i < 160; ++i) engine_frame(1.0f / 60);
+    bool even = kernel_q.size() >= 150;
+    for (size_t i = 1; i < kernel_q.size(); ++i)
+        even = even && std::fabs(within_half(yaw_of(kernel_q[i].data()) - yaw_of(kernel_q[i - 1].data()) - 9.5f)) < 0.05f;
+    CHECK(even);
+    keep_kernel_q = false;
+    // A place that slides 10 a step and starts again every 300.
+    bone_spin = 0, bone_speed = 10, bone_loop = 300, bones[0].t[0] = 0;
+    for (int i = 0; i < 12; ++i) engine_frame(1.0f / 60);
+    kernel_x.clear();
+    for (int i = 0; i < 160; ++i) engine_frame(1.0f / 60);
+    CHECK(forward_or_wrapped(kernel_x, 5, 300, wraps) && wraps == 2);
+    bone_speed = 0, bone_loop = 0, bone_spin_loop = 0, bones[0] = saved;
+    part_registered = false, part_speed = 0;
+    put<uint64_t>(part + t::primitive::proxy, 0);
+}
+
+static void material_wrap_in_game() {
+    // A value that goes 60 a step and starts again every 600, as a looping clip's time given to a material: each
+    // wrap reaches the renderer at once, and every other picture is 30 on.
+    line_on = true, line_speed = 60, line_loop = 600;
+    for (int i = 0; i < 12; ++i) engine_frame(1.0f / 60);
+    std::vector<float> xs, widths;
+    for (int i = 0; i < 80; ++i) {
+        engine_frame(1.0f / 60);
+        xs.push_back(rendered[0]), widths.push_back(rendered_scalar);
+    }
+    unsigned wraps = 0, width_wraps = 0;
+    CHECK(forward_or_wrapped(xs, 30, 600, wraps) && wraps == 4);
+    CHECK(forward_or_wrapped(widths, 3, 60, width_wraps) && width_wraps == 4);
+    line_on = false, line_loop = 0, line_speed = 60;
+}
+
 static void pose_plateau_in_game() {
     // Both arms hold identical bone bytes, at a real nonzero LOD. What differs is whether the native game
     // still publishes every step or actually evaluates only every second step. Presenter resends are counted
@@ -1888,6 +2142,29 @@ static void effects_in_game() {
     crowds_on = false;
     for (int i = 0; i < 4; ++i) engine_frame(1.0f / 60);
 
+    // A carry counter's point moves evenly too: 15 a picture at 60, its quads sent again for each picture between
+    // steps; one that jumped is shown where it went.
+    counters_on = true;
+    for (int i = 0; i < 6; ++i) engine_frame(1.0f / 60);
+    counter_sent.clear();
+    for (int i = 0; i < 12; ++i) engine_frame(1.0f / 60);
+    bool counted = counter_sent.size() >= 5;
+    for (size_t i = 1; i < counter_sent.size(); ++i) {
+        const float d = counter_sent[i] - counter_sent[i - 1];
+        counted = counted && (std::fabs(d - 15) < 0.01f || std::fabs(d - 30) < 0.01f);
+    }
+    CHECK(counted);
+    const float counter_base = counter_x;
+    counter_x += 1000;
+    counter_sent.clear();
+    for (int i = 0; i < 6; ++i) engine_frame(1.0f / 60);
+    bool counter_slid = false;
+    for (float x : counter_sent) counter_slid = counter_slid || between(x, counter_base + 60, counter_base + 1000);
+    CHECK(!counter_slid);
+    counters_on = false;
+    put<int32_t>(counter_numbers + t::carry_numbers::count, 0);
+    for (int i = 0; i < 4; ++i) engine_frame(1.0f / 60);
+
     // A particle drawn halfway between steps is drawn halfway between its two locations, with its old location
     // moved the same; drawn at a step, at its old one. Each route of a mesh particle gives the same place.
     rendering = true;
@@ -1950,6 +2227,278 @@ static void markers_in_game() {
     const float left = get<float>(marker_widget + t::life_gauge::position);
     for (int i = 0; i < 4; ++i) engine_frame(1.0f / 60);
     CHECK(get<float>(marker_widget + t::life_gauge::position) == left);
+}
+
+// A mod's widget hung from an actor (ui.hold_mark): the actor's root, the widget's canvas slot, and the widget's own
+// visibility as the engine keeps it.
+static uint64_t hung_slot = 0, hung_widget = 0;
+static uint32_t hung_visibility = 0;
+static std::vector<uint32_t> visibility_sets;
+static void hung_set_visibility(void*, uint32_t visibility) { hung_visibility = visibility, visibility_sets.push_back(visibility); }
+static uint32_t hung_get_visibility(void*) { return hung_visibility; }
+static float hung_slot_x() { return get<float>(hung_slot + t::canvas_slot::position); }
+
+static void hung_in_game() {
+    hung_actor = block(0x200), hung_root = block(0x300), hung_slot = block(0x100), hung_widget = block(0x100);
+    const uint64_t functions = block(0x400);
+    put<uint64_t>(functions + t::widget_table::set_visibility.offset, reinterpret_cast<uint64_t>(&hung_set_visibility));
+    put<uint64_t>(hung_widget, functions);
+    put<uint64_t>(hung_slot + t::canvas_slot::content, hung_widget);
+    put<uint64_t>(hung_actor + t::engine_actor::root, hung_root);
+    put<float>(hung_root + t::scene_component::location, 1000);
+    put<float>(hung_root + t::scene_component::location + 4, 0);
+    const auto visibility_was = t::fn::ui_get_visibility;
+    t::fn::ui_get_visibility = &hung_get_visibility;
+    // Hung 40 to the side and 150 over an actor that stands still while the camera goes 30 a step: on the screen it
+    // goes 15 at every picture, 7.5 in its canvas, whose units are the screen's over the scale of 2. A widget placed
+    // from the step's projection would stand still for a picture and go 15 at the next.
+    const float offset[3] = {0, 40, 150};
+    CHECK(markers_hang(hung_slot, hung_actor, controller, offset) && markers_hung(hung_slot));
+    for (int i = 0; i < 6; ++i) engine_frame(1.0f / 60);
+    std::vector<float> xs;
+    for (int i = 0; i < 12; ++i) {
+        engine_frame(1.0f / 60);
+        xs.push_back(hung_slot_x());
+        CHECK(get<float>(hung_slot + t::canvas_slot::position + 4) == 20);
+    }
+    bool even = true;
+    for (size_t i = 1; i < xs.size(); ++i) even = even && std::fabs(xs[i] - xs[i - 1] + 7.5f) < 0.01f;
+    CHECK(even);
+    // Where the picture's view sees the point: the actor's place against the camera's, which a picture shows up to
+    // a step behind.
+    CHECK(std::fabs(xs.back() * 2 - (hung_x() - (location_x - 30 * (1 - pictures.back().first)) + 500)) < 0.01f);
+    // The actor goes 60 a step: 30 more on the screen at every step, so 15 at every picture, 7.5 in the canvas.
+    float* moving = reinterpret_cast<float*>(hung_root + t::scene_component::location);
+    hung_speed = 60;
+    for (int i = 0; i < 4; ++i) engine_frame(1.0f / 60);
+    xs.clear();
+    for (int i = 0; i < 12; ++i) engine_frame(1.0f / 60), xs.push_back(hung_slot_x());
+    hung_speed = 0;
+    even = true;
+    for (size_t i = 1; i < xs.size(); ++i) even = even && std::fabs(xs[i] - xs[i - 1] - 7.5f) < 0.01f;
+    CHECK(even);
+    // A jump is shown at once, with no picture between where it was and where it went.
+    const float before_jump = hung_slot_x();
+    *moving += 5000;
+    presenter_cut(hung_actor);
+    xs.clear();
+    for (int i = 0; i < 6; ++i) engine_frame(1.0f / 60), xs.push_back(hung_slot_x());
+    bool slid = false;
+    for (float x : xs) slid = slid || between(x, before_jump + 20, before_jump + 2400);
+    CHECK(!slid);
+    // Behind the camera its widget is hidden and left where it was; in front again it is shown as it was.
+    visibility_sets.clear();
+    projection_front = false;
+    engine_frame(1.0f / 60);
+    const float hidden_at = hung_slot_x();
+    engine_frame(1.0f / 60);
+    CHECK(hung_visibility == 2 && visibility_sets.size() == 1 && hung_slot_x() == hidden_at);
+    projection_front = true;
+    engine_frame(1.0f / 60);
+    CHECK(hung_visibility == 0 && visibility_sets.size() == 2 && hung_slot_x() != hidden_at);
+    // A widget the mod collapsed itself is left so behind the camera.
+    hung_visibility = 1, visibility_sets.clear();
+    projection_front = false;
+    engine_frame(1.0f / 60), engine_frame(1.0f / 60);
+    projection_front = true;
+    engine_frame(1.0f / 60);
+    CHECK(hung_visibility == 1 && visibility_sets.empty());
+    hung_visibility = 0;
+    // Hidden when its actor goes, it is shown again and let go.
+    projection_front = false;
+    engine_frame(1.0f / 60);
+    CHECK(hung_visibility == 2);
+    projection_front = true;
+    expired_pose_weak = hung_actor;
+    engine_frame(1.0f / 60);
+    CHECK(!markers_hung(hung_slot) && hung_visibility == 0);
+    const float left = hung_slot_x();
+    engine_frame(1.0f / 60);
+    CHECK(hung_slot_x() == left && !markers_unhang(hung_slot));
+    expired_pose_weak = 0;
+    // Hung again, then let go: it stays where it was last put.
+    CHECK(markers_hang(hung_slot, hung_actor, controller, offset));
+    for (int i = 0; i < 4; ++i) engine_frame(1.0f / 60);
+    CHECK(markers_unhang(hung_slot) && !markers_hung(hung_slot));
+    const float released = hung_slot_x();
+    for (int i = 0; i < 4; ++i) engine_frame(1.0f / 60);
+    CHECK(hung_slot_x() == released);
+    // A number that is not finite is refused.
+    const float bad[3] = {0, 0, NAN};
+    CHECK(!markers_hang(hung_slot, hung_actor, controller, bad) && !markers_hung(hung_slot));
+    t::fn::ui_get_visibility = visibility_was;
+}
+
+// The game's action prompts: two widgets placed each frame through the action marker's placement, one over Oatchi
+// and one over the captain. The made-up game shows or collapses each through the engine's setter of a widget's
+// visibility, every frame or only when its own wish changes, and projects each through a player's controller.
+struct GamePrompt {
+    uint64_t widget;
+    uint8_t wanted;     // what the game wants it to show: 3 shown, 1 collapsed
+    uint8_t told = 255; // what it last told the widget, for a game that tells only changes
+    bool every_frame = true;
+    bool after = false; // it tells the widget after the placement, as a widget's own tick later in the frame would
+};
+static GamePrompt ride{}, captain_prompt{};
+static uint64_t oatchi_actor = 0, captain_actor = 0, second_controller = 0, prompt_functions = 0;
+static std::vector<uint8_t> drawn_ride, drawn_captain; // the visibility each had when the picture was drawn
+static void prompt_set_visibility(void* widget, uint32_t visibility) {
+    put<uint8_t>(reinterpret_cast<uint64_t>(widget) + t::ui_widget::visibility, uint8_t(visibility));
+}
+static void* prompt_controller(void*, int32_t player) {
+    return reinterpret_cast<void*>(player == 0 ? controller : player == 1 ? second_controller : 0);
+}
+static void tell_prompt(GamePrompt& prompt) {
+    if (prompt.every_frame || prompt.told != prompt.wanted) prompt_set_visibility(reinterpret_cast<void*>(prompt.widget), prompt.wanted);
+    prompt.told = prompt.wanted;
+}
+static void place_prompt(GamePrompt& prompt) {
+    if (!prompt.after) tell_prompt(prompt);
+    hook_of<void (*)(void*)>(site_key(t::code_site::action_marker_place))(reinterpret_cast<void*>(prompt.widget));
+    if (prompt.after) tell_prompt(prompt);
+}
+static unsigned prompt_every = 1, prompt_frames = 0; // the game places its prompts on every this many frames
+static void prompt_frame() {
+    presenter_frame(1.0f / 60);
+    presenter_frame_done();
+    hook_of<void (*)(void*, uint32_t, float)>(site_key(t::code_site::world_tick))(reinterpret_cast<void*>(world), 2, 1.0f / 60);
+    if (prompt_frames++ % prompt_every == 0) place_prompt(ride), place_prompt(captain_prompt);
+    hook_of<void (*)(void*, bool)>(slot_key(t::slot::redraw_viewports))(reinterpret_cast<void*>(engine), true);
+    drawn_ride.push_back(get<uint8_t>(ride.widget + t::ui_widget::visibility));
+    drawn_captain.push_back(get<uint8_t>(captain_prompt.widget + t::ui_widget::visibility));
+}
+static uint8_t shown_of(const GamePrompt& prompt) { return get<uint8_t>(prompt.widget + t::ui_widget::visibility); }
+
+static void prompts_in_game() {
+    prompt_functions = block(0x400);
+    put<uint64_t>(prompt_functions + t::widget_table::set_visibility.offset, reinterpret_cast<uint64_t>(&prompt_set_visibility));
+    oatchi_actor = block(0x200), captain_actor = block(0x200), second_controller = block(0x300);
+    for (GamePrompt* prompt : {&ride, &captain_prompt}) {
+        prompt->widget = block(0xA00);
+        put<uint64_t>(prompt->widget, prompt_functions);
+    }
+    put<uint64_t>(ride.widget + t::action_marker::actor, oatchi_actor);
+    put<uint64_t>(captain_prompt.widget + t::action_marker::actor, captain_actor);
+    ride.wanted = 3, captain_prompt.wanted = 3;
+    const auto controller_was = t::fn::camera_controller;
+    t::fn::camera_controller = &prompt_controller;
+    // Watching starts with the first question, from the next frame on.
+    CHECK(markers_watch_prompts(nullptr) == 2 && markers_watch_prompts(nullptr) == 1);
+    prompt_frame();
+    // Ride over Oatchi shows on the first player's screen, and is not shown 9 m away, where the game collapses it.
+    CHECK(markers_prompt_screens(oatchi_actor) == 1 && markers_prompt_screens(captain_actor) == 1);
+    ride.wanted = 1;
+    prompt_frame();
+    CHECK(markers_prompt_screens(oatchi_actor) == 0 && markers_prompt_screens(captain_actor) == 1);
+    ride.wanted = 3;
+    // Projected through the second player's view, it is on the second player's screen.
+    action_projector = second_controller;
+    prompt_frame();
+    CHECK(markers_prompt_screens(oatchi_actor) == 2 && markers_prompt_screens(captain_actor) == 2);
+    action_projector = 0;
+    prompt_frame();
+    CHECK(markers_prompt_screens(captain_actor) == 1);
+    // Hidden on the first player's screen: every picture draws the captain's prompt hidden, though the game shows it
+    // every frame, and it still reads as shown by the game. Oatchi's is left as it is.
+    drawn_ride.clear(), drawn_captain.clear();
+    CHECK(markers_hide_prompts(7, captain_actor, 1));
+    CHECK(shown_of(captain_prompt) == 2); // at once
+    for (int i = 0; i < 6; ++i) prompt_frame();
+    bool hidden = true, ride_shown = true;
+    for (uint8_t value : drawn_captain) hidden = hidden && value == 2;
+    for (uint8_t value : drawn_ride) ride_shown = ride_shown && value == 3;
+    CHECK(hidden && ride_shown && markers_prompt_screens(captain_actor) == 1);
+    // So does a game that shows it after the placement: the picture is drawn with it hidden all the same.
+    captain_prompt.after = true;
+    drawn_captain.clear();
+    for (int i = 0; i < 4; ++i) prompt_frame();
+    hidden = true;
+    for (uint8_t value : drawn_captain) hidden = hidden && value == 2;
+    CHECK(hidden);
+    captain_prompt.after = false;
+    // The game collapses it meanwhile: left collapsed, and read as not shown; shown by the game again, hidden again.
+    captain_prompt.wanted = 1;
+    prompt_frame();
+    CHECK(shown_of(captain_prompt) == 1 && markers_prompt_screens(captain_actor) == 0);
+    captain_prompt.wanted = 3;
+    prompt_frame();
+    CHECK(shown_of(captain_prompt) == 2 && markers_prompt_screens(captain_actor) == 1);
+    // Let go: the game's own visibility comes back at once.
+    markers_show_prompts(7);
+    CHECK(shown_of(captain_prompt) == 3);
+    prompt_frame();
+    CHECK(shown_of(captain_prompt) == 3);
+    // A game that tells its prompt only when its wish changes gets it back as well.
+    captain_prompt.every_frame = false;
+    CHECK(markers_hide_prompts(8, captain_actor, 1));
+    for (int i = 0; i < 4; ++i) prompt_frame();
+    CHECK(shown_of(captain_prompt) == 2 && markers_prompt_screens(captain_actor) == 1);
+    markers_show_prompts(8);
+    CHECK(shown_of(captain_prompt) == 3);
+    captain_prompt.every_frame = true;
+    // Hidden on the second player's screen only, a prompt on the first player's is left.
+    CHECK(markers_hide_prompts(9, captain_actor, 2));
+    for (int i = 0; i < 3; ++i) prompt_frame();
+    CHECK(shown_of(captain_prompt) == 3);
+    action_projector = second_controller;
+    prompt_frame();
+    CHECK(shown_of(captain_prompt) == 2);
+    action_projector = 0;
+    prompt_frame();
+    CHECK(shown_of(captain_prompt) == 3);
+    // Changed to every screen with the same key.
+    CHECK(markers_hide_prompts(9, captain_actor, 15));
+    CHECK(shown_of(captain_prompt) == 2);
+    // The widget comes to point at another actor: it gets its own visibility back.
+    put<uint64_t>(captain_prompt.widget + t::action_marker::actor, oatchi_actor);
+    prompt_frame();
+    CHECK(shown_of(captain_prompt) == 3 && markers_prompt_screens(oatchi_actor) == 1 && markers_prompt_screens(captain_actor) == 0);
+    put<uint64_t>(captain_prompt.widget + t::action_marker::actor, captain_actor);
+    prompt_frame();
+    CHECK(shown_of(captain_prompt) == 2);
+    markers_show_prompts(9);
+    CHECK(shown_of(captain_prompt) == 3);
+    // Placed only on some frames, as above 30 the game places a prompt once a step: between its placements it reads
+    // as it was last seen, every frame, until the game changes it.
+    prompt_every = 4;
+    std::vector<uint32_t> reads;
+    for (int i = 0; i < 16; ++i) prompt_frame(), reads.push_back(markers_prompt_screens(oatchi_actor));
+    bool steady = true;
+    for (uint32_t players : reads) steady = steady && players == 1;
+    CHECK(steady);
+    // Collapsed by the game on a frame it does not place it: read as not shown from that frame's picture on.
+    prompt_frames = 1; // the next frame places nothing
+    prompt_set_visibility(reinterpret_cast<void*>(ride.widget), 1);
+    ride.wanted = 1, ride.told = 1;
+    prompt_frame();
+    CHECK(markers_prompt_screens(oatchi_actor) == 0);
+    ride.wanted = 3;
+    for (int i = 0; i < 4; ++i) prompt_frame();
+    CHECK(markers_prompt_screens(oatchi_actor) == 1);
+    // Hidden by a hold, it stays hidden on the frames between placements, even shown by the game on one of them.
+    CHECK(markers_hide_prompts(11, oatchi_actor, 1));
+    drawn_ride.clear();
+    for (int i = 0; i < 8; ++i) {
+        if (i == 5) prompt_set_visibility(reinterpret_cast<void*>(ride.widget), 3); // outside its placement
+        prompt_frame();
+    }
+    bool hidden_between = true;
+    for (uint8_t value : drawn_ride) hidden_between = hidden_between && value == 2;
+    CHECK(hidden_between && markers_prompt_screens(oatchi_actor) == 1);
+    markers_show_prompts(11);
+    CHECK(shown_of(ride) == 3);
+    prompt_every = 1;
+    // A widget that is gone is forgotten.
+    expired_pose_weak = ride.widget;
+    prompt_frame();
+    CHECK(markers_prompt_screens(oatchi_actor) == 0);
+    expired_pose_weak = 0;
+    // No room past 32 holds, and no hold without an actor or a screen.
+    unsigned taken = 0;
+    for (uint64_t key = 100; key < 140; ++key) taken += markers_hide_prompts(key, oatchi_actor, 1);
+    CHECK(taken == 32 && !markers_hide_prompts(200, 0, 1) && !markers_hide_prompts(201, oatchi_actor, 0));
+    for (uint64_t key = 100; key < 140; ++key) markers_show_prompts(key);
+    t::fn::camera_controller = controller_was;
 }
 
 static void materials_in_game() {
@@ -2412,6 +2961,7 @@ int main(int argc, char** argv) {
     camera_alone();
     widgets_alone();
     animation_periods_alone();
+    snaps_alone();
     build();
     presenter_start(reinterpret_cast<TSUCHI_Mod*>(0x1), &clock_us, &wait_us);
     CHECK(presenter_draws());
@@ -2439,12 +2989,16 @@ int main(int argc, char** argv) {
     controllers();
     scene_alone();
     scene_in_game();
+    pose_wrap_in_game();
     pose_plateau_in_game();
     pose_identity_in_game();
     pose_policy_in_game();
     effects_in_game();
     markers_in_game();
+    hung_in_game();
+    prompts_in_game();
     materials_in_game();
+    material_wrap_in_game();
     parts_left_out();
     cursor_inline_in_game();
     cursor_identity_guards();

@@ -89,4 +89,14 @@ check(reflection.set(wordy,"Shape",{[long]:8}) && reflection.get(wordy,"Shape."+
 [result,written]=reflection.call(wordy,long); check(result===null && written[long]===41n && written.Tail===42n);
 for (const [code,fn] of [["not_found",()=>reflection.call(red,"Fly")],["not_found",()=>reflection.call(red,"Heal",{Speed:1})],["invalid",()=>reflection.call(red,"Heal",{Amount:"plenty"})],["invalid",()=>reflection.call(red,"Heal",{1:2})],["not_found",()=>reflection.call(body,"Heal")]]) check(fails(code,fn));
 for (const fn of [()=>reflection.call(red,"Heal",5),()=>reflection.call(red),()=>reflection.get(5,"Health"),()=>reflection.get(red),()=>reflection.set(red,"Health"),()=>combat.life(body)]) check(fails("TypeError",fn));
+check(reflection.field_at(red,"",0)==="Anger" && reflection.field_at(red,"",3)==="Health" && reflection.field_at(red,"Location",2)==="Z");
+check(fails("not_found",()=>reflection.field_at(red,"Location",3)) && fails("invalid",()=>reflection.field_at(red,"Health",0)));
+check(memory.main() > 0n);
+const block=memory.allocate(16n,8,false), at=memory.address(block);
+check(typeof at==="bigint" && new Uint8Array(memory.read(at,16n)).every(b=>b===0));
+const packed=new DataView(new ArrayBuffer(6)); packed.setUint32(0,4242,true); packed.setInt16(4,-7,true);
+check(memory.write(at,new Uint8Array(packed.buffer))===true);
+const back=new DataView(new Uint8Array(memory.read(at,6n)).buffer); check(back.getUint32(0,true)===4242 && back.getInt16(4,true)===-7);
+check(fails("not_found",()=>memory.read(16n,4n)) && fails("invalid",()=>memory.write(memory.main(),new Uint8Array(4))));
+check(memory.free(block)===true && fails("not_found",()=>memory.address(block)));
 print("reflection same stand-in passed");

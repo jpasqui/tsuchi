@@ -13,6 +13,10 @@ TSUCHI_Result ui_set_root_widget(TSUCHI_Mod*, TSUCHI_Object widget, TSUCHI_Objec
 TSUCHI_Result ui_add_child(TSUCHI_Mod*, TSUCHI_Object panel, TSUCHI_Object child, TSUCHI_Object* out);
 TSUCHI_Result ui_hold_widget(TSUCHI_Mod*, TSUCHI_Object widget, int32_t z_order);
 TSUCHI_Result ui_release_widget(TSUCHI_Mod*, TSUCHI_Object widget);
+// A widget hung from a point over an actor, placed on every picture by the presenter's markers.
+TSUCHI_Result ui_hold_mark(TSUCHI_Mod*, TSUCHI_Object widget, TSUCHI_Actor actor, uint32_t player, const TSUCHI_Vec3* offset,
+                           float align_x, float align_y);
+TSUCHI_Result ui_release_mark(TSUCHI_Mod*, TSUCHI_Object widget);
 TSUCHI_Result ui_hold_button_events(TSUCHI_Mod*, TSUCHI_Object widget);
 TSUCHI_Result ui_release_button_events(TSUCHI_Mod*, TSUCHI_Object widget);
 }

@@ -35,13 +35,18 @@ uint64_t controller_manager() {
     return instance ? read_or<uint64_t>(instance + t::game_instance::controllers) : 0;
 }
 
-// True when the game's own rules let a player switch to `actor` now.
-bool may_switch(uint64_t captain, uint64_t actor) {
+uint64_t story_save_now() {
+    const uint64_t instance = global<uint64_t>(t::data::game_instance);
+    return instance ? read_or<uint64_t>(instance + t::game_instance::story_save) : 0;
+}
+
+// True when the game's own rules let a player switch to `actor` now. `before_unlock` leaves out the story's unlock.
+bool may_switch(uint64_t captain, uint64_t actor, bool before_unlock) {
     const uint64_t instance = global<uint64_t>(t::data::game_instance);
     const uint64_t config = instance ? read_or<uint64_t>(instance + t::game_instance::config_save) : 0;
-    const uint64_t story = instance ? read_or<uint64_t>(instance + t::game_instance::story_save) : 0;
+    const uint64_t story = story_save_now();
     if (!config || read_or<uint8_t>(config + t::config_save::play_mode) == t::constant::play_mode_two) return false;
-    if (!story || !read_or<uint8_t>(story + t::story_save::switch_unlocked)) return false;
+    if (!story || (!before_unlock && !read_or<uint8_t>(story + t::story_save::switch_unlocked))) return false;
     return !read_or<uint8_t>(actor + t::game_actor::removed) && !is_riding(captain);
 }
 
@@ -82,14 +87,22 @@ bool is_riding(uint64_t captain) {
     return held && steering && held == read_or<uint64_t>(steering + t::player_component::ridden_dog);
 }
 
-TSUCHI_Result switch_controlled(uint32_t player, uint64_t actor, bool at_once) {
+TSUCHI_Result switch_controlled(uint32_t player, uint64_t actor, bool at_once, bool before_unlock) {
     const uint64_t block = player_block(), captain = player_captain(player);
     uint64_t now = 0;
     if (!block || !captain || !t::bound(t::fn::request_control_switch) || !player_controlled(player, now)) return TSUCHI_NOT_READY;
     if (now == actor) return TSUCHI_OK;
     if (read_or<uint8_t>(block + t::player_block::switch_pending)) return TSUCHI_BUSY;
-    if (!may_switch(captain, actor)) return TSUCHI_NOT_READY;
-    return t::fn::request_control_switch(reinterpret_cast<void*>(block), actor_team(captain), false, at_once) ? TSUCHI_OK : TSUCHI_NOT_READY;
+    if (!may_switch(captain, actor, before_unlock)) return TSUCHI_NOT_READY;
+    // The game's one story check in a switch request is the saved unlock, read only while the request is taken
+    // (nothing after it reads it again). For a switch before the unlock it is set for that call and put back, and
+    // the switch is made at once: the fade's path has a check of its own.
+    const uint64_t story = story_save_now();
+    const bool lift = before_unlock && story && !read_or<uint8_t>(story + t::story_save::switch_unlocked);
+    if (lift) write(story + t::story_save::switch_unlocked, uint8_t(1));
+    const bool begun = t::fn::request_control_switch(reinterpret_cast<void*>(block), actor_team(captain), false, at_once || lift);
+    if (lift) write(story + t::story_save::switch_unlocked, uint8_t(0));
+    return begun ? TSUCHI_OK : TSUCHI_NOT_READY;
 }
 
 void drop_pending_switch() {

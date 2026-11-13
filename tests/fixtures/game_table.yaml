@@ -14,6 +14,18 @@ build_names: [game_container, shader_format]
 
 
 data:
+  options_direction_delegate_table: 0x9600
+  options_input_delegate_table: 0x9608
+  dialog_answer_yes: 0x9400
+  dialog_answer_no: 0x9408
+  dialog_answer_cancel: 0x9410
+  title_answer_load: 0x9430
+  save_slot_paths: 0x9438
+  dialog_answer_return: 0x9418
+  dialog_result_table: 0x9420
+  dialog_result_header: 0x9428
+  title_input_delegate_table: 0x9100
+  title_direction_delegate_table: 0x9108
   wwise_audio_manager: 0x610
   wwise_parameter_manager: 0x618
   ui_select_sound: 0x600 # native common UI focus FName, initialized as Select
@@ -93,6 +105,22 @@ data:
   status_words: 17920
   content_icon_size: 17928
 constants:
+  title_note_lift: 130
+  options_entry_icon: 3
+  options_row_pitch: 143
+  options_up_key: 0
+  options_down_key: 1
+  options_last_stock: 3
+  title_flow_players_wait: 0x24
+  title_flow_menu: 2
+  title_flow_story: 6
+  fade_out_in_front: 3
+  fade_role_title: 1
+  play_mode_one: 4
+  dialog_result_message: 0x45
+  title_confirm_key: 0x16
+  title_back_key: 0x17
+  title_menu_state: 5
   stream_block_load: 0x80
   stream_source_cdo: 0x10
   physics_dynamic_kind: 9
@@ -167,11 +195,12 @@ constants:
   team_story: 9
   sort_dog: 2
   state_carcass: 0x4
+  state_target_collection: 0x200
   dismiss_keep_none: 0x7
   play_mode_two: 5
   pad_none: 6
   pause_stops_control: 0x5
-  max_objects: 4096
+  max_objects: 8192
   objects_per_chunk: 64
   unreachable_flags: 0x30
   kept_flag: 0x40
@@ -198,6 +227,7 @@ constants:
   request_from_menu: 9
   leave_request_id: 21
   portal_request_id: 13
+  travel_request_id: 15
   dialog_question: 0x9
   dialog_message: 0x2B
   dialog_accept: 6
@@ -282,6 +312,32 @@ constants:
   effect_spawn_blocked: 0x80040
   ui_keyboard_characters: 31
 names:
+  title_text_part: Description
+  title_text_text: Text
+  options_button_icon_child: Icon
+  options_panel_child: Panel
+  options_view_class: OptionsView
+  title_view_class: TitleView
+  title_buttons_child: Buttons
+  title_canvas_child: TitleCanvas
+  title_input_class: InputMap
+  title_buttons_box_class: VerticalBox
+  title_button_slot_class: VerticalBoxSlot
+  title_button_normal: Normal
+  host_page_article: Article
+  host_page_scroll: Scroll
+  host_page_scrollbar: ScrollBar
+  host_page_pager: Pager
+  host_page_canvas: Canvas
+  host_page_header: Header
+  host_header_text: HeaderText
+  host_page_footer: Footer
+  host_button_text: Text
+  host_button_new: New
+  host_button_selected: Focus
+  host_button_focus: Normal2Focus
+  host_button_unfocus: Focus2Normal
+  host_line_text: LineText
   content_texture_class: Texture2D
   save_class: CarrotSaveGame
   navigation_system_class: NavigationSystemV1
@@ -345,6 +401,7 @@ names:
   material_class: MaterialInterface
   skeletal_class: SkeletalMeshComponent
   clip_class: AnimationAsset
+  motion_blueprint_class: Choreography
   map_rule_class: CarrotGameRule
   level_class: Level
   streaming_class: LevelStreamingDynamic
@@ -367,6 +424,7 @@ names:
   primitive_class: PrimitiveComponent   # a part that can collide
   avatar_class: AvatarComponent     # the part of a captain that decides for it
   life_class: LifeComponent         # the part that keeps life
+  creature_ai_class: TekiAIComponent
   data_table_class: DataTable
   navmesh_class: RecastNavMesh
   nav_modifier_class: NavModifierComponent    # a part that marks the navmesh under it
@@ -400,6 +458,11 @@ names:
   gimmick_vent_class: HibaBaseAIComponent
   gimmick_warp_class: WarpCarryAIComponent
 assets:
+  title_text_class: /G/Description.Description_C
+  options_button_class: /G/MenuButton.MenuButton_C
+  title_button_class: /G/TitleButton.TitleButton_C
+  host_page_class: /G/Page.Page_C
+  host_line_class: /G/Line.Line_C
   ui_mod_list_tab_class: /Game/Carrot4/UI/InGame/Tablet/Parts/WBP_ui_Tablet_PA_Tab_Item.WBP_ui_Tablet_PA_Tab_Item_C
   tick_state_actor: /G/Revive.Revive_C
   ai_order_map: /G/ReleaseAI_P
@@ -425,6 +488,16 @@ rows:
   area_messages: [Note_More, Note_Base, Note_Done]
 
 structs:
+  options_button: {fields: {look: 0x4D8, look_bytes: 0x15}}
+  options_presenter: {fields: {input: 0x78, view: 0x80}}
+  options_view: {fields: {state: 0x4D8, buttons: 0x4F8, count: 0x500, room: 0x504, selected: 0x508}}
+  title_flow: {fields: {state: 0xD8, answered: 0xE8, answer: 0xEC, slot: 0xF4}}
+  dialog_result: {size: 0x50, fields: {self: 0x18, header: 0x28, message: 0x38, dialog_kind: 0x3C, as_flow: 0x4D}}
+  title_presenter: {fields: {cursor: 0x80, view: 0x88, input: 0xA8, state: 0xB0}}
+  title_view: {fields: {description: 0x560, buttons: 0x568, count: 0x570, room: 0x574, hidden_select: 0x5AB, hide: 0x5AC, hidden: 0x5B0, hidden_other: 0x5B4}}
+  title_button: {fields: {id: 0x300, label: 0x528, mark: 0x540}}
+  title_input: {fields: {data: 0xC8, count: 0xD0, capacity: 0xD4}}
+  title_handler: {fields: {key: 0, instance: 8, kind: 0x10, presenter_index: 24, presenter_serial: 28, function: 32, zero: 40}}
   console_manager_table:
     fields: {find_variable: {at: 0x40, returns: pointer, args: [pointer, const_pointer, bool]}}
   console_variable_table:
@@ -433,7 +506,7 @@ structs:
       set: {at: 0x28, args: [pointer, const_pointer, u32]}
       value: {at: 0x30, returns: f32, args: [pointer]}
   ui_widget:
-    fields: {render_x: 0xA0, render_y: 0xA4, render_scale_x: 0xA8, render_scale_y: 0xAC, render_pivot_x: 0xBC, render_pivot_y: 0xC0, clipping: 0xD2, cached_slate: 0xD8, remove_from_parent: {at: 0x298, args: [pointer]}}
+    fields: {render_x: 0xA0, render_y: 0xA4, render_scale_x: 0xA8, render_scale_y: 0xAC, render_pivot_x: 0xBC, render_pivot_y: 0xC0, clipping: 0xD2, cached_slate: 0xD8, remove_from_parent: {at: 0x298, args: [pointer]}, visibility: 0xD3}
   ui_user_widget:
     fields: {tree: 0x1E8}
   ui_widget_tree:
@@ -656,9 +729,13 @@ structs:
     size: 0x90
     fields: {kind: 0x14, answerer: 0x20, shape: 0x58, mode: 0x5D, player: 0x60}
   dialog_widget:
-    fields: {text: 0x50}
+    fields: {text: 0x50, kind: 0x60}
   ui_manager:
-    fields: {announcer: 0x48}
+    fields: {announcer: 0x48, actor_access: 0x58, open_dialog: 0x70, face_messages: 0x78}
+  face_message_manager:
+    fields: {labels: 0x30, label_buckets: 0x68}
+  ui_actor_access:
+    fields: {captain: 0x30}
   announcer:
     fields: {banner: 0x50}
   banner_widget:
@@ -721,9 +798,9 @@ structs:
     size: 0x40
     fields: {child: 0x8, name: 0x10, stopped: 0x20, status: 0x24, pending: 0x28}
   game_instance:
-    fields: {scene_manager: 0x18, pause_manager: 0x20, config_save: 0x28, story_save: 0x30, controllers: 0x38, saves: 0x28}
+    fields: {scene_manager: 0x18, pause_manager: 0x20, config_save: 0x28, story_save: 0x30, controllers: 0x38, fade: 0x40, saves: 0x28}
   config_save:
-    fields: {play_mode: 0x4, slot: 0x8}
+    fields: {play_mode: 0x4, slot: 0x8, difficulty: 0x10, difficulty_count: 0x18, difficulty_set: 0x20, difficulty_set_count: 0x28}
   story_save:
     fields: {night: 0xBC,summary: 0x200, onyon_leaves: 0x300, onyon_deco: 0x310, outside_deco: 0x320, switch_unlocked: 0x5, day: 0x48, treasure_records: 0x50, sparklium: 0x58, area_bases: 0x38, saved_portal: 0xA0, return_portal: 0x140, reserved_flow: 0x1E0, reserved_travel_type: 0x1E1}
   portal_move:
@@ -762,6 +839,15 @@ structs:
     fields: {whistle: 0x90, whistling: 0x98, ride_reach: 0x9C, ride_asked: 0xA0}
   avatar_table:
     fields: {squad: {at: 0x30, returns: u64, args: [pointer]}}
+  character_part:
+    fields: {controller: 0x758, move: 0x744}
+  game_controller:
+    fields: {unpaused_frames: 0x80, lock_mask: 0x88, lock_timer: 0x90, press_ages: 0x98, press_age_count: 0xA0}
+  press_age:
+    size: 0x10
+    fields: {seconds: 0x4}
+  game_controller_table:
+    fields: {locked: {at: 0xD8, returns: bool, args: [pointer]}, pressed: {at: 0x60, returns: bool, args: [pointer, i32, pointer, pointer]}}
   whistle_part:
     fields: {radius: 0x84, center: 0x88, count: 0x94}
   cursor:
@@ -823,6 +909,10 @@ structs:
     fields: {drawer: 0x8}
   instance_drawer:
     fields: {components: 0x10, count: 0x18}
+  carry_numbers:
+    fields: {entries: 0x30, count: 0x38}
+  carry_number:
+    fields: {place: 0xC}
   instanced_mesh:
     fields: {instances: 0x40, count: 0x48, edits: 0x4C}
   scene_renderer:
@@ -833,6 +923,8 @@ structs:
     fields: {anchor: 0x720, shown: 0x730, position: 0x230}
   life_bar:
     fields: {anchor: 0x6B0, shown: 0x69C, position: 0x230}
+  action_marker:
+    fields: {actor: 0x9C8}
   canvas_slot:
     fields: {content: 0x30, position: 0x38}
   material_instance_values:         # a material instance's own parameter values, which its setters keep
@@ -851,11 +943,21 @@ structs:
   skinned_pose:
     fields: {master: 0x4D0, arrays: 0x4F8, read_index: 0x53C, revision: 0x540}
   game_framework:
-    fields: {actor_list: 0x50, instance_holder: 0xD0, ground_query: 0x70, world_begun: 0x78, events: 0x80, pikmin_list: 0x88, ui: 0xA8, clock: 0xB0, generators: 0xB8, pikmin_counters: 0xC0}
+    fields: {actor_list: 0x50, instance_holder: 0xD0, ground_query: 0x70, world_begun: 0x78, events: 0x80, pikmin_list: 0x88, ui: 0xA8, clock: 0xB0, generators: 0xB8, pikmin_counters: 0xC0, carry_numbers: 0xC8}
   engine_actor:
     fields: {root: 0x48, play_state: 0x69}
   actor_component:
     fields: {lifecycle_flags: 0x7C}
+  skeletal_mesh:
+    fields: {blueprint: 0xB0}
+  motion_blueprint:
+    fields: {speed: 0x44, motions: 0x48, move_motion: 0x80}
+  motion_entry:
+    size: 0x18
+    fields: {state_machine: 0x8, motion: 0x10}
+  motion_blueprint_table:
+    fields: {set_motion: {at: 0x48, args: [pointer, u64, u64]}, set_move_motion: {at: 0x50, args: [pointer, u64]},
+             set_speed: {at: 0x58, args: [pointer, f32]}}
   instanced_static_mesh_component:
     fields: {start_cull_distance: 0x59C, end_cull_distance: 0x5A0}
   ordinary_actor_vtable:
@@ -871,7 +973,7 @@ structs:
              physics: 0x78, body_awake: 0x80, simulating: 0x81, simulating_known: 0x82, speed_clamp: 0x83, keep_vertical: 0x84,
              velocity_pending: 0x85, velocity_added_1: 0x86, velocity_added_2: 0x87, velocity_added_3: 0x88, freeze_delay: 0x8C,
              awake_holds: 0x90, velocity: 0x94, air_steps: 0xA0, rest: 0xA4, movement: 0xA8, ai: 0xB0, collision_tree: 0xB8,
-             rigid_body: 0xC0, tick_requested: 0x6E, support_contact: 0x100, contact_step: 0x101}
+             rigid_body: 0xC0, tick_requested: 0x6E, support_contact: 0x100, contact_step: 0x101, body: 0x108}
   spawn_request:
     size: 0x90
     fields: {class: 0x8, object_flags: 0x10, location: 0x14, rotation: 0x20, velocity: 0x2C, scale: 0x38, team: 0x44,
@@ -915,7 +1017,12 @@ structs:
     size: 0x9EC
     fields: {classify_child: 0x9E4, messages: 0x48, actions: 0x50}
   life_component:
-    fields: {max: 0x40, current: 0x48, extra: 0x44, max_extra: 0x4C}
+    fields: {max: 0x40, current: 0x48, extra: 0x44, max_extra: 0x4C, actor: 0x50, gauge_enabled: 0x58, gauge_views: 0x5C,
+             gauge_list_1: 0x70, gauge_list_2: 0x80, gauge_list_3: 0x90, gauge_full: 0xA0}
+  gauge_actor:                      # past the end of the made-up game's 0x110-byte actors: a creature needs room
+    fields: {part_1: 0x110, part_2: 0x118}
+  gauge_stick:
+    fields: {clung: 0x40}
   action:
     fields: {child: 0x18, name: 0x28}
   message_queue_table:
@@ -925,8 +1032,10 @@ structs:
   message_table:
     fields: {destroy: {at: 0x8, args: [pointer]}}
   damage_message:
-    size: 0x40
+    size: 0x60
     fields: {amount: 0x18, attack: 0x1C, origin: 0x20, riding_applies: 0x2C}
+  pikmin_hit:
+    fields: {point: 0x40, press: 0x4C, part: 0x50, freeze_scaled: 0x58}
   knock_message:
     size: 0x40
     fields: {velocity: 0x18, damage: 0x24}
@@ -995,7 +1104,7 @@ structs:
   carry_actor:                      # inside the made-up game's 0x100-byte actors
     fields: {component: 0x40}
   carry_component:
-    fields: {weight: 0x560, maximum: 0x564, carriers: 0x600, info: 0x620}
+    fields: {weight: 0x560, maximum: 0x564, carriers: 0x600, info: 0x620, shown_count: 0x6B0}
   carry_info:
     fields: {destination: 0xE0, arrival_destination: 0xF0}
   carry_stick:
@@ -1032,6 +1141,8 @@ structs:
     fields:
       maximum: 948
       minimum: 952
+      input_form: 960
+      new_lines: 964
       utf8: 965
       work: 1240
       work_bytes: 1248
@@ -1245,6 +1356,29 @@ structs:
 
   # carry: stand-in fields for the attachment-list backend.
 functions:
+  options_button_icon: {address: 0x9750, returns: void, args: [pointer, i32]}
+  os_current_thread: {address: 0x9760, returns: pointer, args: []}
+  os_thread_priority: {address: 0x9770, returns: i32, args: [pointer]}
+  os_create_thread: {address: 0x9780, returns: u32, args: [pointer, pointer, pointer, pointer, u64, i32]}
+  os_set_thread_name: {address: 0x9790, returns: void, args: [pointer, const_pointer]}
+  os_start_thread: {address: 0x97A0, returns: void, args: [pointer]}
+  os_sleep_thread: {address: 0x97B0, returns: void, args: [i64]}
+  os_thread_core_mask: {address: 0x97C0, returns: void, args: [pointer, pointer, pointer]}
+  os_set_thread_core_mask: {address: 0x97D0, returns: void, args: [pointer, i32, u64]}
+  options_direction: {address: 0x9700, returns: bool, args: [pointer, bool]}
+  options_confirm: {address: 0x9710, returns: bool, args: [pointer]}
+  set_slot_difficulty: {address: 0x9718, returns: void, args: [pointer, u32, i32]}
+  fade_request: {address: 0x9728, returns: void, args: [pointer, u32, u32, bool, f32]}
+  face_message_request: {address: 0x9738, returns: void, args: [pointer, pointer, u32, u32]}
+  options_gate: {address: 0x9720, returns: bool, args: [pointer]}
+  options_list_grow: {address: 0x9730, returns: void, args: [pointer]}
+  options_button_highlight: {address: 0x9740, returns: void, args: [pointer, bool, bool]}
+  title_confirm: {address: 0x9200, returns: bool, args: [pointer]}
+  title_back: {address: 0x9210, returns: bool, args: [pointer]}
+  title_direction: {address: 0x9220, returns: bool, args: [pointer, i32]}
+  title_list_grow: {address: 0x9230, returns: void, args: [pointer]}
+  ui_vertical_slot_sync: {address: 0x9240, returns: void, args: [pointer]}
+  ui_set_render_opacity: {address: 0x9250, returns: void, args: [pointer, f32]}
   map_add_stream: {address: 0x3D30, args: [pointer, pointer]}
   map_remove_stream: {address: 0x3D40, returns: bool, args: [pointer, pointer]}
   map_duplicate_stream: {address: 0x3D50, returns: pointer, args: [const_pointer, pointer, u64, u32, pointer, i32, u32]}
@@ -1407,6 +1541,7 @@ functions:
   kill_actor: {address: 0x2AC0, returns: void, args: [pointer, pointer]}
   kill_record_destroy: {address: 0x2B00, returns: void, args: [pointer]}
   set_life: {address: 0x2E00, returns: void, args: [pointer, bool, u64, f32]}
+  life_refresh_gauge: {address: 0x4D80, returns: void, args: [pointer, f32]}
   pause_change: {address: 0x2F40, returns: void, args: [pointer, u32, bool]}
   start_whistle: {address: 0x2140, returns: void, args: [pointer, bool]}
   end_whistle: {address: 0x2180, returns: void, args: [pointer]}
@@ -1731,6 +1866,12 @@ tables:
   free_areas: [5, 7, 8, 9]
   collision_record_flags: [0x4, 0x5, 0x9]
   ai_part_tables: [0x1B00, 0x1B40, 0x1B80]
+  # The character service's sites: offsets, the words there, and the registers that name the character.
+  character_sites: [0xE800, 0xE804, 0xE808, 0xE80C, 0xE810, 0xE814, 0xE818, 0xE81C, 0xE820, 0xE824, 0xE828, 0xE82C, 0xE830, 0xE834, 0xE838, 0xE83C, 0xE840, 0xE844, 0xE848, 0xE84C, 0xE850, 0xE854, 0xE858]
+  character_site_words: [0xD63F0100, 0xD63F0100, 0xD63F0100, 0xD61F0040, 0xD63F0100, 0x37000BA0, 0xD63F0100, 0xD63F0100,
+                         0xD63F0100, 0xD63F0100, 0xD63F0100, 0xD61F0080, 0xD61F0040, 0xD63F0100, 0xBD412500, 0xD63F0100,
+                         0xBD414500, 0xD63F0100, 0xD63F0100, 0xD63F0100, 0xD63F0100, 0xB50037F4, 0xF9417D16]
+  character_site_registers: [19, 19, 19, 31, 19, 19, 19, 23, 23, 23, 31, 31, 31, 31, 53, 31, 53, 31, 31, 31, 31, 19, 19]
   widget_tick_tables: [0x4200, 0x4240]
 
 slot_groups:
@@ -1742,6 +1883,9 @@ slot_groups:
   widget_tick: {tables: widget_tick_tables, offset: 0x10, stock: [0x4280, 0x42C0], args: [pointer, const_pointer, f32]}
 
 slots:
+  options_presenter_tick: {table: 0x9800, offset: 0x280, stock: 0x9810, args: [pointer, f32]}
+  title_flow_update: {table: 0x9500, offset: 0x28, stock: 0x9510, args: [pointer, f32]}
+  title_presenter_tick: {table: 0x9300, offset: 0x280, stock: 0x9310, args: [pointer, f32]}
   physics_contacts: {table: 0x6820, offset: 0x18, stock: 0x6840, args: [pointer, pointer]}
   ui_mod_list_construct:
     table: 23040
@@ -1771,6 +1915,10 @@ slots:
   redraw_viewports: {table: 0x4300, offset: 0x10, stock: 0x4340, args: [pointer, bool]}
   view_point: {table: 0x4300, offset: 0x18, stock: 0x4380, args: [pointer, pointer, i32]}
   npad_read: {table: 0x4300, offset: 0x20, stock: 0x43C0, args: [pointer]}
+  controller_held: {table: 0xE900, offset: 0x38, stock: 0xEA00, returns: bool, args: [pointer, i32]}
+  controller_pressed: {table: 0xE900, offset: 0x60, stock: 0xEA10, returns: bool, args: [pointer, i32, pointer, pointer]}
+  controller_released: {table: 0xE900, offset: 0x68, stock: 0xEA20, returns: bool, args: [pointer, i32]}
+  controller_update: {table: 0xE900, offset: 0x90, stock: 0xEA30, args: [pointer, f32]}
   scene_update: {table: 0x4300, offset: 0x28, stock: 0x4400, args: [pointer, pointer]}
   scene_remove: {table: 0x4300, offset: 0x30, stock: 0x4440, args: [pointer, pointer]}
   mesh_update: {table: 0x4300, offset: 0x38, stock: 0x4480, args: [pointer, i32, pointer, pointer, pointer, u32]}

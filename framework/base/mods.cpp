@@ -403,6 +403,11 @@ TSUCHI_Result log(TSUCHI_Mod* mod, const char* text) {
     return TSUCHI_OK;
 }
 
+// The running build of the game, by the name a manifest's "game" list uses.
+TSUCHI_Result game_build(char* buffer, uint64_t capacity, uint64_t* out) {
+    return give_text(game::table::build_key, buffer, capacity, out);
+}
+
 // The version a manifest's "framework" is judged against, and the one a compiled mod's mark is.
 TSUCHI_Result framework(uint32_t* out) {
     *out = TSUCHI_API_VERSION;
@@ -936,7 +941,7 @@ uint64_t dev_print_of(const char* id) {
     return hash;
 }
 
-const mod::Backend mods_backend{id, name, version, version_of, log, framework, restart, state, problem};
+const mod::Backend mods_backend{id, name, version, version_of, log, framework, game_build, restart, state, problem};
 
 } // namespace
 
