@@ -6,6 +6,7 @@
 // The list of mods then shows in it alone (ui_mod_list.cpp), and the title menu takes no presses until the
 // presenter has called back.
 #include "ui_mod_page.h"
+#include "ui_mod_list.h"
 #include "ui_screens.h"
 #include "ui_title.h"
 #include "frame.h"
@@ -75,7 +76,7 @@ void step() {
     if (alone && (!game::from_handle(presenter) || !mod_usable(framework_mod))) { alone = false; presenter = 0; }
     if (alone && titled < kTitleFrames) { ++titled; title(); }
 }
-bool covered() { return alone; }
+bool covered() { return alone || ui_menu_input_held(); }
 } // namespace
 
 bool ui_mod_page_alone() { return alone; }

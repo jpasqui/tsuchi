@@ -97,6 +97,65 @@ void mods_page_checks(uint64_t host) {
     listener(0); assert(stock_backs == 2);
     callbacks.host_lost(host); active = 0; page_alone = false; message.clear();
 
+    // A mod's own page over the list: while it holds the menus' input, no action and no press reaches the
+    // list, another mod is refused, and after it lets go nothing acts until every button is up.
+    TSUCHI_Mod* pager = mod_create("pager"); TSUCHI_Mod* rival = mod_create("rival");
+    callbacks.host_ready(host); assert(ui_mod_list_native_hold(host) == TSUCHI_OK && active == host);
+    assert(!ui_menu_input_held() && ui::table.release_menu_input(pager) == TSUCHI_NOT_FOUND);
+    assert(ui::table.hold_menu_input(pager) == TSUCHI_OK && ui_menu_input_held());
+    assert(ui::table.hold_menu_input(pager) == TSUCHI_OK && ui::table.hold_menu_input(rival) == TSUCHI_BUSY);
+    const unsigned calls_held = menu_calls; const uint64_t asked_held = asked.id;
+    handled = result = false;
+    assert(dispatcher(host, 5, handled, result) && handled && result && active == host && asked.id == asked_held);
+    handled = result = false;
+    assert(dispatcher(host, 100, handled, result) && handled && result && active == host);
+    listener(uint64_t(game::table::constant::ui_confirm_button)); listener(0);
+    listener(uint64_t(game::table::constant::ui_details_button)); listener(0);
+    assert(menu_calls == calls_held && !ui_active_screen());
+    // Let go with Back still down: that press is not the list's either.
+    listener(uint64_t(game::table::constant::ui_confirm_button));
+    assert(ui::table.release_menu_input(pager) == TSUCHI_OK && ui_menu_input_held());
+    handled = result = false;
+    assert(dispatcher(host, 5, handled, result) && handled && active == host);
+    listener(uint64_t(game::table::constant::ui_confirm_button)); assert(menu_calls == calls_held && ui_menu_input_held());
+    listener(0); assert(!ui_menu_input_held());
+    assert(callbacks.action(host, 0, 102, false) && ui_active_screen());   // the list acts again
+    ui_action(5); step();
+    // A holder that stops lets go the same way.
+    assert(ui::table.hold_menu_input(rival) == TSUCHI_OK);
+    mod_stop(rival); listener(0); listener(0);
+    assert(!ui_menu_input_held());
+    // With an input service the game is shown no button while the page is held, and after the release not
+    // until the controller is at rest: the listener hears nothing meanwhile, since everything is hidden.
+    can_hide = true;
+    assert(ui::table.hold_menu_input(pager) == TSUCHI_OK && buttons_are_hidden && hides == 1);
+    assert(ui::table.hold_menu_input(pager) == TSUCHI_OK && hides == 1);
+    physical_buttons = uint64_t(game::table::constant::ui_confirm_button);
+    listener(0);
+    assert(ui::table.release_menu_input(pager) == TSUCHI_OK && buttons_are_hidden && ui_menu_input_held());
+    listener(0); listener(0);
+    assert(buttons_are_hidden && ui_menu_input_held() && shows == 0);
+    physical_buttons = 0;
+    listener(0);
+    assert(!buttons_are_hidden && !ui_menu_input_held() && shows == 1);
+    // A holder that stops is shown its buttons again the same way.
+    assert(ui::table.hold_menu_input(pager) == TSUCHI_OK && buttons_are_hidden && hides == 2);
+    mod_stop(pager); listener(0); listener(0);
+    assert(!buttons_are_hidden && !ui_menu_input_held() && shows == 2);
+    // Another mod's presses or hides on that controller: the game would still see the buttons, so nothing is
+    // held.
+    TSUCHI_Mod* late = mod_create("late");
+    pad_taken = true;
+    assert(ui::table.hold_menu_input(late) == TSUCHI_BUSY && !buttons_are_hidden && hides == 2 && !ui_menu_input_held());
+    assert(ui::table.release_menu_input(late) == TSUCHI_NOT_FOUND);
+    pad_taken = false;
+    assert(ui::table.hold_menu_input(late) == TSUCHI_OK && buttons_are_hidden && hides == 3);
+    assert(ui::table.release_menu_input(late) == TSUCHI_OK);
+    listener(0);
+    assert(!buttons_are_hidden && !ui_menu_input_held() && shows == 3);
+    can_hide = false;
+    callbacks.host_lost(host); active = 0;
+
     // ui.open_mods: the page on its own when Settings is not up, and the Mods tab when it takes input.
     assert(ui::table.open_mods(framework) == TSUCHI_OK && page_opens == 2 && tab_shows == 0);
     page_open_result = TSUCHI_NOT_READY;

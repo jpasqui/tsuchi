@@ -186,6 +186,9 @@ families:
   mods_page:
     calls: [ui.open_mods]
     files: [game/ui_mod_page.cpp]
+  textures:
+    calls: [ui.create_texture, ui.release_texture, ui.decode_texture]
+    files: [game/ui_textures.cpp]
   world:
     services: [world]
     files: [game/world_backend.cpp]

@@ -113,6 +113,22 @@ ui.on("entry_chosen", (event) => {
 on its own and **B** returns to the title. While **Settings** is open, the call shows the **Mods**
 tab. Anywhere else it returns `not_ready`.
 
+## A page of your own
+
+To show a page of your own over a menu, such as a full-screen browser opened from your button on the Mods
+page, hold the menus' input and show your widget:
+
+1. Call [`ui.hold_menu_input`](/reference/ui/#hold_menu_input). The game's menus under your page stop
+   acting on presses: the game is shown no button while you hold it.
+2. Show your [authored widget](/develop/screens/#authored-widgets) with `ui.hold_widget` at a high draw
+   order, such as 100000. The game's own menus draw far above the low numbers.
+3. Read the presses yourself with [`input.pad`](/develop/input/), which still shows them to your mod.
+4. To leave, release the widget and call [`ui.release_menu_input`](/reference/ui/#release_menu_input).
+   The menu acts again once every button has been let go, so the press that closed your page isn't its
+   first.
+
+One mod holds the input at a time. The hold ends when your mod stops.
+
 ## Screens and typed text
 
 [`ui.hold_open_over`](/reference/ui/#hold_open_over) opens a [screen](/develop/screens/) over the

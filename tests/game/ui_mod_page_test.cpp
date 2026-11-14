@@ -22,7 +22,7 @@ namespace t = game::table;
 namespace {
 std::vector<void (*)()> frames;
 std::vector<std::string> calls, notes;
-bool title_ready = true;
+bool title_ready = true, input_held = false;
 UiScreen open_screen{};
 bool screen_open = false;
 bool (*title_cover)() = nullptr;
@@ -96,6 +96,7 @@ namespace tsuchi {
 bool each_engine_frame(void (*fn)()) { frames.push_back(fn); return true; }
 void mod_note(const char*, const char* text) { notes.emplace_back(text); }
 bool ui_title_menu_ready() { return title_ready; }
+bool ui_menu_input_held() { return input_held; }
 void ui_title_cover(bool (*covered)()) { title_cover = covered; }
 const UiScreen* ui_active_screen() { return screen_open ? &open_screen : nullptr; }
 namespace game {
@@ -146,6 +147,8 @@ int main() {
     assert(title_cover && !title_cover() && !ui_mod_page_supported() && ui_mod_page_open() == TSUCHI_UNSUPPORTED);
     t::fn::ui_presenter_find = find; t::fn::presenter_begin = begin; t::fn::game_menu_open_page = open_page;
     assert(ui_mod_page_supported());
+    // A mod that holds the menus' input for its own page covers the title menu too.
+    input_held = true; assert(title_cover()); input_held = false; assert(!title_cover());
 
     // Away from the title menu, and with a screen open over it: not ready and busy, and nothing is called.
     title_ready = false; assert(ui_mod_page_open() == TSUCHI_NOT_READY);
