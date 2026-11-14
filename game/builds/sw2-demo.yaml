@@ -20,6 +20,7 @@ data:
   dialog_result_header: absent
   title_input_delegate_table: absent
   title_direction_delegate_table: absent
+  academy_schedule: absent
   wwise_audio_manager: 133386464
   wwise_parameter_manager: 133386520
   ui_select_sound: 133926408
@@ -304,6 +305,39 @@ structs:
   title_button: {fields: {id: absent, label: absent, mark: absent}}
   title_input: {fields: {data: absent, count: absent, capacity: absent}}
   title_handler: {fields: {key: absent, instance: absent, kind: absent, presenter_index: absent, presenter_serial: absent, function: absent, zero: absent}}
+  academy_schedule:
+    fields:
+      status: absent
+      record: absent
+      valid: absent
+      set: absent
+      latest: absent
+      prev: absent
+      first_period: absent
+      refresh_pending: absent
+      uses_schedule: absent
+      tab_checked: absent
+  academy_period:
+    fields:
+      stage: absent
+      delivery: absent
+      starts: absent
+      ends: absent
+      ticket: absent
+      ticket_limit: absent
+      closed: absent
+  academy_save:
+    fields:
+      held_ids: absent
+      disable_test_guide: absent
+      update_delivery: absent
+      delivery_text: absent
+      service_end: absent
+  academy_course_entry:
+    size: absent
+    fields:
+      key: absent
+      row: absent
   console_manager_table:
     fields:
       find_variable: 176
@@ -630,9 +664,14 @@ structs:
     fields:
       kind: absent
       text: 1416
+  academy_data:
+    fields:
+      test_courses: absent
   ui_manager:
     fields:
       open_dialog: absent
+      academy_data: absent
+      academy_courses: absent
       announcer: 760
   announcer:
     fields:
@@ -806,6 +845,7 @@ structs:
       controllers: 768
       pause_manager: 1360
       saves: 496
+      academy_save: absent
   config_save:
     fields:
       play_mode: 128
@@ -1748,6 +1788,8 @@ functions:
   ui_arrow_left: 59209792
   ui_arrow_right: 59209872
   ui_post_sound: 5999312
+  academy_open_periods: absent
+  academy_period_start: absent
   ui_context_world: 2916048
   ui_widget_in_viewport: 10006944
   texture_create_transient: absent

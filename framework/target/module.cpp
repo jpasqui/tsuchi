@@ -285,6 +285,8 @@ extern "C" void tsuchi_initialize() {
     content_service_start();
     if (serves(t::family::shaders)) shaders_start();
     else add_manifest_key_off("shaders", t::families[t::family::shaders]);
+    if (serves(t::family::academy)) academy_start();
+    else add_manifest_key_off("academy_schedule", t::families[t::family::academy]);
     tsuchi_lua::register_script_mods();
     tsuchi_js::register_script_mods();
     tsuchi_libc_ticks(); // scripts' clocks count from here

@@ -4853,6 +4853,37 @@ void tabling() {
     CHECK(sheet.override(mod, sheet_of, "KOCHAPPY", "maxlife", &most) == TSUCHI_OK && life(dwarf) == 300 && tsuchi::owned_count(mod) == owned + 1 && tsuchi::table_changes() == 1);
     CHECK(sheet.restore(mod, sheet_of, "KOCHAPPY", "MAXLIFE") == TSUCHI_OK && life(dwarf) == 100 && tsuchi::owned_count(mod) == owned && tsuchi::table_changes() == 0 &&
           sheet.restore(mod, sheet_of, "KOCHAPPY", "MaxLife") == TSUCHI_NOT_FOUND);
+    // A copy the game keeps of a row gets each field written into the row, and what the row holds again when the
+    // change is taken back. A copy of another row, or of a row of another table, is left alone.
+    static uint64_t copied_row = 0, copied_table = 0, copied_name = 0;
+    copied_row = fake::memory(kRowBytes);
+    std::memcpy(reinterpret_cast<void*>(copied_row), reinterpret_cast<void*>(dwarf), kRowBytes);
+    copied_table = creatures, copied_name = row_name(u"KOCHAPPY");
+    tsuchi::add_row_copies([](uint64_t table, uint64_t row) { return table == copied_table && row == copied_name ? copied_row : uint64_t(0); });
+    CHECK(sheet.override(mod, sheet_of, "KOCHAPPY", "MaxLife", &more) == TSUCHI_OK && life(dwarf) == 200 && life(copied_row) == 200);
+    CHECK(sheet.override(mod, sheet_of, "CHAPPY", "MaxLife", &most) == TSUCHI_OK && life(big) == 300 && life(copied_row) == 200);
+    CHECK(sheet.override_text(mod, sheet_of, "KOCHAPPY", "Species", "OOCHAPPY") == TSUCHI_OK && fake::get<uint64_t>(copied_row + 0x8) == row_name(u"OOCHAPPY"));
+    CHECK(sheet.restore(mod, sheet_of, "KOCHAPPY", "MaxLife") == TSUCHI_OK && sheet.restore(mod, sheet_of, "KOCHAPPY", "Species") == TSUCHI_OK &&
+          sheet.restore(mod, sheet_of, "CHAPPY", "MaxLife") == TSUCHI_OK && life(copied_row) == 100 && life(big) == 750 &&
+          fake::get<uint64_t>(copied_row + 0x8) == row_name(u"KOCHAPPY") && tsuchi::table_changes() == 0 && tsuchi::owned_count(mod) == owned);
+    // Text of any length reaches the copy whole, and so does what the row holds again.
+    const auto copied_title = [] {
+        const uint64_t data = fake::get<uint64_t>(copied_row + 0x10 + t::array::data);
+        const int32_t count = fake::get<int32_t>(copied_row + 0x10 + t::array::count);
+        std::string units;
+        for (int32_t i = 0; i + 1 < count; ++i) units += char(fake::get<char16_t>(data + uint64_t(i) * 2));
+        return units;
+    };
+    const std::string long_title(600, 't');
+    TSUCHI_Mod* titler = tsuchi::mod_create("actor.titler");
+    CHECK(sheet.override_text(mod, sheet_of, "KOCHAPPY", "Title", "Short") == TSUCHI_OK && copied_title() == "Short" &&
+          sheet.override_text(mod, sheet_of, "KOCHAPPY", "Title", long_title.c_str()) == TSUCHI_OK && copied_title() == long_title);
+    CHECK(sheet.override_text(titler, sheet_of, "KOCHAPPY", "Title", "Short") == TSUCHI_OK && copied_title() == "Short" &&
+          sheet.restore(titler, sheet_of, "KOCHAPPY", "Title") == TSUCHI_OK && copied_title() == long_title);
+    tsuchi::mod_stop(titler);
+    CHECK(sheet.restore(mod, sheet_of, "KOCHAPPY", "Title") == TSUCHI_OK && copied_title().empty() && tsuchi::table_changes() == 0 &&
+          tsuchi::owned_count(mod) == owned);
+    copied_table = 0; // the checks below change the table with no copy of it
     // A change that cannot be made leaves nothing behind.
     TSUCHI_Value flag{TSUCHI_VALUE_BOOLEAN, 0, {}};
     flag.as.boolean = true;

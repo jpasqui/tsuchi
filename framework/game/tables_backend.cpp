@@ -106,6 +106,41 @@ TSUCHI_Result field_at(TSUCHI_Object table, const char* row, const char* path, u
     return found == TSUCHI_OK ? field_name_at(at.type, at.base, path, index, true, buffer, capacity, out) : found;
 }
 
+// ---- Copies the game keeps of rows ------------------------------------------------------------------
+// Some of the game's systems copy rows of a table once and read only their copy from then on. A family that knows
+// of such a copy says where it is, and each field written into a row, or put back, is written into its copy too.
+// The lengths of arrays are not: a copy keeps the lengths it was made with.
+constexpr uint32_t kMostRowCopies = 4;
+uint64_t (*row_copies[kMostRowCopies])(uint64_t table, uint64_t row) = {};
+uint32_t row_copy_count = 0;
+
+void copy_field(uint64_t handle, uint64_t row, const char* path, bool is_text) {
+    const uint64_t table = row_copy_count ? game::from_handle(handle) : 0;
+    const uint64_t type = table ? game::read_or<uint64_t>(table + t::data_table::row_struct) : 0;
+    const auto base = type && t::bound(t::fn::find_table_row) ? reinterpret_cast<uint64_t>(t::fn::find_table_row(reinterpret_cast<void*>(table), row)) : 0;
+    if (!base) return;
+    for (uint32_t i = 0; i < row_copy_count; ++i) {
+        const uint64_t copy = row_copies[i](table, row);
+        if (!copy || copy == base) continue;
+        if (is_text) {
+            char text[512];
+            uint64_t needed = 0;
+            const TSUCHI_Result read = text_at(type, base, path, text, sizeof text, &needed);
+            if (read == TSUCHI_OK) {
+                write_text_at(type, copy, path, text);
+            } else if (read == TSUCHI_CAPACITY) {
+                Text whole; // text longer than the room on the stack
+                if (whole.reserve(size_t(needed)) && text_at(type, base, path, whole.data, whole.capacity, &needed) == TSUCHI_OK)
+                    write_text_at(type, copy, path, whole.data);
+                whole.clear();
+            }
+        } else {
+            TSUCHI_Value value{};
+            if (read_at(type, base, path, &value) == TSUCHI_OK) write_at(type, copy, path, &value);
+        }
+    }
+}
+
 // Writes into the row what is in force for a field: the say of the mod started last, or with no say left, what
 // the field held at first, which is then forgotten. Nothing is written when the table or the row is gone.
 void put_in_force(uint64_t handle, uint64_t row, const char* path) {
@@ -123,6 +158,7 @@ void put_in_force(uint64_t handle, uint64_t row, const char* path) {
             else write_at(type, base, path, &original->before);
         }
     }
+    if (last || original) copy_field(handle, row, path, last ? last->is_text : original->was_text);
     if (!last && original) {
         original->path.clear(), original->before_text.clear();
         originals.remove(original);
@@ -273,6 +309,8 @@ TSUCHI_Result script_override(TSUCHI_Mod* mod, const ScriptTarget& target, const
     }
     next_change += fresh_changes;
     plan.commit();
+    for (uint32_t i = 0; i < plan.fields.count; ++i)
+        copy_field(target.object.id, row.name, plan.fields[i].path.get(), plan.fields[i].wanted->kind == ScriptWriteKind::text);
     return TSUCHI_OK;
 }
 TSUCHI_Result set(TSUCHI_Mod* mod, TSUCHI_Object table, const char* row, const char* path, const TSUCHI_Value* value) {
@@ -548,5 +586,8 @@ void tables_start() {
 }
 unsigned table_changes() { return changes.count; }
 unsigned table_lengths() { return lengths.count; }
+void add_row_copies(uint64_t (*copy_of)(uint64_t table, uint64_t row)) {
+    if (row_copy_count < kMostRowCopies) row_copies[row_copy_count++] = copy_of;
+}
 
 } // namespace tsuchi

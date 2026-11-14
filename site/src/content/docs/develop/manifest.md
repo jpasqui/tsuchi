@@ -87,6 +87,7 @@ reads settings only at startup should explain that a game restart applies change
 | `new_maps` | New areas and their builds, pictures, radar, and totals. See [Add a map](/develop/add-a-map/). |
 | `content` | New treasure series, treasures, creatures, and Pikmin types. See [Add a treasure](/develop/add-a-treasure/) and [Add a creature](/develop/add-a-creature/). |
 | `shaders` | A binary set of compiled game shaders. See [Add shader sets](/develop/add-shaders/). |
+| `academy_schedule` | Switch 2 Edition: the Dandori Academy's exam schedule, as a JSON file. See [Set the Academy's exam schedule](/develop/exam-schedule/). |
 
 Tsuchi applies table and text changes before your mod's code runs and restores them when
 the mod stops. Follow the save and removal rules in the map and content guides, as your

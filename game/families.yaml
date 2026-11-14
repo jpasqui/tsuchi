@@ -225,3 +225,5 @@ families:
     files: [game/shader_archive_manifest.h, game/shader_materials.cpp]
   self_check:
     files: [target/selfcheck.cpp, target/world_follow_check.cpp]
+  academy:                          # the manifest's "academy_schedule" (Switch 2 Edition's Dandori Academy)
+    files: [game/academy.cpp]

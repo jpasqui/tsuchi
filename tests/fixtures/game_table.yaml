@@ -7,7 +7,7 @@ version: "0.0"
 # containers of the engine and numbers the framework itself owns belong here, never a gameplay layout.
 fixed:
   constants: [native_jump_offset, player_slots]
-  structs: [array, text_value, enum_name, frozen_name]
+  structs: [array, text_value, enum_name, frozen_name, sparse_array]
 
 # Names a build file may change. A build gives exactly these under `names`.
 build_names: [game_container, shader_format]
@@ -24,6 +24,7 @@ data:
   dialog_result_header: 0x9428
   title_input_delegate_table: 0x9100
   title_direction_delegate_table: 0x9108
+  academy_schedule: absent
   wwise_audio_manager: 0x610
   wwise_parameter_manager: 0x618
   ui_select_sound: 0x600 # native common UI focus FName, initialized as Select
@@ -732,7 +733,7 @@ structs:
   dialog_widget:
     fields: {text: 0x50, kind: 0x60}
   ui_manager:
-    fields: {announcer: 0x48, open_dialog: 0x70}
+    fields: {announcer: 0x48, open_dialog: 0x70, academy_courses: absent, academy_data: absent}
   announcer:
     fields: {banner: 0x50}
   banner_widget:
@@ -787,6 +788,21 @@ structs:
   array:
     size: 0x10
     fields: {data: 0x0, max: 0x8, count: 0xC}
+  sparse_array:
+    size: 0x38
+    fields: {data: 0x0, count: 0x8, bits: 0x10, more_bits: 0x20, bit_count: 0x28}
+  academy_schedule:
+    fields: {status: absent, record: absent, valid: absent, set: absent, latest: absent, prev: absent, first_period: absent,
+             refresh_pending: absent, uses_schedule: absent, tab_checked: absent}
+  academy_period:
+    fields: {stage: absent, delivery: absent, starts: absent, ends: absent, ticket: absent, ticket_limit: absent, closed: absent}
+  academy_save:
+    fields: {held_ids: absent, disable_test_guide: absent, update_delivery: absent, delivery_text: absent, service_end: absent}
+  academy_course_entry:
+    size: absent
+    fields: {key: absent, row: absent}
+  academy_data:
+    fields: {test_courses: absent}
   game_context:
     fields: {night_start: 0xFC,snapshot_owner: 0, rule: 0x10, flow: 0x20, players: 0x30, requests: 0x68, dialogs: 0x70, level_removal_guard: 0x78}
   player_block:
@@ -795,7 +811,8 @@ structs:
     size: 0x40
     fields: {child: 0x8, name: 0x10, stopped: 0x20, status: 0x24, pending: 0x28}
   game_instance:
-    fields: {scene_manager: 0x18, pause_manager: 0x20, config_save: 0x28, story_save: 0x30, controllers: 0x38, saves: 0x28}
+    fields: {scene_manager: 0x18, pause_manager: 0x20, config_save: 0x28, story_save: 0x30, controllers: 0x38, saves: 0x28,
+             academy_save: absent}
   config_save:
     fields: {play_mode: 0x4, slot: 0x8}
   story_save:
@@ -1334,6 +1351,8 @@ functions:
   game_menu_open_page: {address: 0x9780, returns: void, args: [pointer, pointer, u32]}
   ui_vertical_slot_sync: {address: 0x9240, returns: void, args: [pointer]}
   ui_set_render_opacity: {address: 0x9250, returns: void, args: [pointer, f32]}
+  academy_open_periods: {address: absent, returns: engine_array, args: [const_pointer]}
+  academy_period_start: {address: absent, returns: i64, args: [const_pointer, u32]}
   map_add_stream: {address: 0x3D30, args: [pointer, pointer]}
   map_remove_stream: {address: 0x3D40, returns: bool, args: [pointer, pointer]}
   map_duplicate_stream: {address: 0x3D50, returns: pointer, args: [const_pointer, pointer, u64, u32, pointer, i32, u32]}
