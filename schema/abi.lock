@@ -289,7 +289,8 @@
    "wrap_function",
    "wrap_inline",
    "patch_instruction",
-   "check_code"
+   "check_code",
+   "wrap_call"
   ],
   "hud": [
    "banner"
@@ -336,7 +337,8 @@
    "list",
    "info",
    "add",
-   "work_on"
+   "work_on",
+   "type_count"
   ],
   "player": [
    "count",
@@ -375,7 +377,10 @@
    "end_call",
    "console_variable",
    "hold_console_variable",
-   "release_console_variable"
+   "release_console_variable",
+   "hold_field",
+   "update_field",
+   "release_field"
   ],
   "save": [
    "slot",
@@ -419,7 +424,12 @@
    "set_text",
    "set_has",
    "reset",
-   "on_changed"
+   "on_changed",
+   "controllers",
+   "set_integer_range",
+   "hold",
+   "update_hold",
+   "release_hold"
   ],
   "squad": [
    "leader",

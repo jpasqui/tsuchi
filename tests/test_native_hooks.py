@@ -122,7 +122,7 @@ class NativeHooks(unittest.TestCase):
                          'zero-rx', 'zero-rw', 'unaligned-rx', 'unaligned-rw', 'wrong-size',
                          'overflow-rx', 'overflow-rw', 'overlap-rx-main', 'overlap-rw-main',
                          'overlap-rx-rw', 'unreachable', 'branch-endpoint', 'hook-capacity',
-                         'publication-race', 'late-alias-refused', 'backward-branch'):
+                         'publication-race', 'late-alias-refused', 'backward-branch', 'call'):
             with self.subTest(scenario=scenario):
                 self.assertIn('PASS', run([exe, scenario]).stdout)
 
@@ -183,6 +183,33 @@ class NativeHooks(unittest.TestCase):
 
     def emitted(self, mode, word, at=0x100000, gateway=0x7000000, shared=0x7001000):
         return bytes.fromhex(run([self.dump, mode, hex(word), hex(at), hex(gateway), hex(shared)]).stdout)
+
+    @unittest.skipUnless(unicorn, 'needs Unicorn for ARM64 execution')
+    def test_call_gateway_preserves_arguments_and_returns_after_callee(self):
+        at, gateway, wrapper, target, stop, stack = 0x100000, 0x7000000, 0x7100000, 0x120000, 0x130000, 0x9000000
+        for wrapped in (False, True):
+            cpu = unicorn.Uc(unicorn.UC_ARCH_ARM64, unicorn.UC_MODE_ARM)
+            for address in (at, gateway, wrapper, target, stop, stack): cpu.mem_map(address, 4096)
+            # Save the outer LR, BL the gateway, consume the return, restore LR.
+            caller = [0xa9bf7bfd, 0x94000000 | ((gateway - at - 4) // 4 & 0x3ffffff),
+                      0x91001000, 0xa8c17bfd, 0xd65f03c0]
+            cpu.mem_write(at, struct.pack('<5I', *caller))
+            cpu.mem_write(gateway, self.emitted('call', 0, at + 4, gateway, wrapper if wrapped else target))
+            # Callee adds x1 to x0; Q0 and callee-saved registers remain intact.
+            cpu.mem_write(target, struct.pack('<II', 0x8b010000, 0xd65f03c0))
+            # Wrapper calls the original, then adds three, like a scoped after-hook.
+            cpu.mem_write(wrapper, struct.pack('<6IQ', 0xa9bf7bfd, 0x580000b0, 0xd63f0200,
+                0x91000c00, 0xa8c17bfd, 0xd65f03c0, target))
+            for i in range(30): cpu.reg_write(getattr(arm, f'UC_ARM64_REG_X{i}'), 0x1000 + i)
+            cpu.reg_write(arm.UC_ARM64_REG_X0, 9); cpu.reg_write(arm.UC_ARM64_REG_X1, 5)
+            cpu.reg_write(arm.UC_ARM64_REG_Q0, 0x123456789abcdef)
+            cpu.reg_write(arm.UC_ARM64_REG_SP, stack + 0xF00); cpu.reg_write(arm.UC_ARM64_REG_LR, stop)
+            cpu.emu_start(at, stop, count=100)
+            self.assertEqual(cpu.reg_read(arm.UC_ARM64_REG_PC), stop)
+            self.assertEqual(cpu.reg_read(arm.UC_ARM64_REG_X0), 18 + 3 * wrapped)
+            self.assertEqual(cpu.reg_read(arm.UC_ARM64_REG_Q0), 0x123456789abcdef)
+            self.assertEqual(cpu.reg_read(arm.UC_ARM64_REG_SP), stack + 0xF00)
+            self.assertEqual([cpu.reg_read(getattr(arm, f'UC_ARM64_REG_X{i}')) for i in range(19,30)], list(range(0x1013,0x101e)))
 
     @unittest.skipUnless(unicorn, 'needs Unicorn for ARM64 execution')
     def test_relocated_instructions_match_stock_execution(self):

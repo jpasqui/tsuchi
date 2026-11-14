@@ -40,10 +40,21 @@ void deliver() {
             if (mod_usable(notice.mod)) ui::emit_changed_to(notice.mod, {{notice.screen}, notice.control, 2});
         } else if (notice.kind == 4) ui::emit_closed_to(notice.mod, {{notice.screen}});
         else if (notice.kind == 5) ui::emit_reset_requested_to(notice.mod, {{notice.screen}});
+        else if (notice.kind == 6) ui::emit_changed_to(notice.mod, {{notice.screen}, notice.control, 2});
     }
     telling.clear();
 }
 void clear(UiControl& control) { control.label.clear(); control.text.clear(); control.choices.clear(); control.labels.clear(); }
+bool number_value(UiControl& control, double value) {
+    char text[48]; control.number.format(static_cast<float>(value), text);
+    if (!control.text.set(text)) return false;
+    control.number.value = value;
+    control.integer = control.integer ? 0 : 1;
+    control.minimum = control.integer - (value > control.number.minimum ? 1 : 0);
+    control.maximum = control.integer + (value < control.number.maximum ? 1 : 0);
+    control.step = 1;
+    return true;
+}
 void free_screen(UiScreen* screen) {
     for (uint32_t i = 0; i < screen->controls.count; ++i) clear(screen->controls[i]);
     screen->controls.clear(); screen->title.clear(); screen->footer.clear(); release(screen);
@@ -382,6 +393,47 @@ ui::Backend backend{create, load, destroy, add_button, add_choice, add_integer, 
     glyph, set_footer, nullptr};
 } // namespace
 ui::Backend& ui_screen_backend() { return backend; }
+TSUCHI_Result ui_screen_add_number(TSUCHI_Mod* mod, TSUCHI_Screen screen,
+    const char* id, const char* label, double minimum, double maximum,
+    double step, double initial, void (*format)(float, char*)) {
+    if (!format || !(step > 0) || minimum > initial || initial > maximum ||
+        minimum - minimum != 0 || maximum - maximum != 0 ||
+        initial - initial != 0 || step - step != 0) return TSUCHI_INVALID;
+    UiControl control{}; control.kind = UiKind::integer;
+    control.number = {true, minimum, maximum, step, initial, format};
+    auto result = number_value(control, initial) ? add(mod, screen, id, label, control) : TSUCHI_NO_MEMORY;
+    clear(control); return result;
+}
+TSUCHI_Result ui_screen_number(TSUCHI_Mod* mod, TSUCHI_Screen handle, const char* id, double* out) {
+    if (!out) return TSUCHI_INVALID;
+    UiScreen* screen = nullptr; auto result = own_screen(mod, handle, screen);
+    if (result != TSUCHI_OK) return result;
+    auto* control = find_control(screen, id, UiKind::integer);
+    if (!control || !control->number.enabled) return TSUCHI_NOT_FOUND;
+    *out = control->number.value; return TSUCHI_OK;
+}
+TSUCHI_Result ui_screen_set_number(TSUCHI_Mod* mod, TSUCHI_Screen handle, const char* id, double value) {
+    UiScreen* screen = nullptr; auto result = own_screen(mod, handle, screen);
+    if (result != TSUCHI_OK) return result;
+    auto* control = find_control(screen, id, UiKind::integer);
+    if (!control || !control->number.enabled) return TSUCHI_NOT_FOUND;
+    if (value - value != 0 || value < control->number.minimum || value > control->number.maximum) return TSUCHI_INVALID;
+    if (value == control->number.value) return TSUCHI_OK;
+    if (!number_value(*control, value)) return TSUCHI_NO_MEMORY;
+    ++screen->revision; return TSUCHI_OK;
+}
+TSUCHI_Result ui_screen_integer_range(TSUCHI_Mod* mod, TSUCHI_Screen handle, const char* id,
+    int64_t minimum, int64_t maximum, int64_t value) {
+    UiScreen* screen = nullptr; auto result = own_screen(mod, handle, screen);
+    if (result != TSUCHI_OK) return result;
+    auto* control = find_control(screen, id, UiKind::integer);
+    if (!control || control->number.enabled) return TSUCHI_NOT_FOUND;
+    if (minimum > maximum || value < minimum || value > maximum || control->step != 1) return TSUCHI_INVALID;
+    if (control->minimum != minimum || control->maximum != maximum || control->integer != value) {
+        control->minimum = minimum; control->maximum = maximum; control->integer = value; ++screen->revision;
+    }
+    return TSUCHI_OK;
+}
 void ui_screen_resettable(TSUCHI_Screen handle) { if (auto* screen = find(handle.id)) { screen->resettable = true; ++screen->revision; } }
 void ui_start() { ui_native_prepare_input(); definitions.start(); showing.start(); ui::set_backend(&backend); each_frame(deliver); }
 uint32_t ui_events_dropped() { return notices_dropped; }
@@ -469,6 +521,21 @@ bool ui_action(uint32_t action) {
         else if (!previous && control.selected + 1 < count_options) ++control.selected;
         if (old == control.selected) return true;
         notice.kind = 2; const char* after = at_word(control.choices, control.selected); memcpy(notice.choice, after, strlen(after) + 1);
+    } else if (control.kind == UiKind::integer && control.number.enabled) {
+        auto& number = control.number;
+        double value = number.value + (previous ? -number.step : number.step);
+        const double position = (number.value - number.minimum) / number.step;
+        if (position > -1e12 && position < 1e12) {
+            const int64_t nearest = static_cast<int64_t>(position + (position < 0 ? -0.5 : 0.5));
+            const double difference = position - double(nearest);
+            if (difference > -0.0001 && difference < 0.0001)
+                value = number.minimum + (double(nearest) + (previous ? -1 : 1)) * number.step;
+        }
+        if (value < number.minimum) value = number.minimum;
+        if (value > number.maximum) value = number.maximum;
+        if (static_cast<float>(value) == static_cast<float>(number.value)) return true;
+        notice.kind = 6;
+        if (!number_value(control, value)) return true;
     } else if (control.kind == UiKind::integer) {
         notice.kind = 3; notice.previous_integer = control.integer;
         const uint64_t distance = previous ? uint64_t(control.integer) - uint64_t(control.minimum) : uint64_t(control.maximum) - uint64_t(control.integer);

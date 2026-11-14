@@ -19,7 +19,7 @@ def build_fixture():
     binary = ROOT / 'build' / ('ui_mod_list_test.exe' if sys.platform == 'win32' else 'ui_mod_list_test')
     sources = ['framework/core/registry.cpp', 'framework/core/ids.cpp', 'framework/core/text.cpp',
                'framework/core/texts.cpp', 'framework/core/json.cpp', 'framework/base/mod_choices.cpp',
-               'framework/base/mod_manager.cpp', 'framework/base/external_mods.cpp',
+               'framework/base/mod_manager.cpp', 'framework/base/settings.cpp', 'framework/base/external_mods.cpp',
                'framework/game/holds.cpp', 'framework/game/ui_screens.cpp',
                'framework/game/ui_mod_list.cpp', 'tests/game/ui_mod_list_test.cpp']
     command = [shutil.which('clang++'), '-std=c++17', '-Wall', '-Wextra', '-Werror']
