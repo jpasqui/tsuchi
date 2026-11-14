@@ -20,7 +20,7 @@ int depth = 0;
 bool fail_receipt = false, refuse_queue = false;
 TSUCHI_Result install_result = TSUCHI_OK; // what the manifest check says
 std::vector<std::string> checked_incoming, checked_existing, checked_replaced;
-std::vector<std::string> mounted;
+std::vector<std::string> mounted, mounted_folders;
 tsuchi::https::HttpsJob* queued = nullptr;
 TSUCHI_Result (*listing)(tsuchi::Texts&) = nullptr;
 std::vector<void (*)()> steps;
@@ -67,8 +67,12 @@ int64_t fixed_clock() { return 1700000000; }
 
 namespace tsuchi {
 bool container_mounted_for(const char*) { return false; }
+bool container_mounted_from(const char* prefix) {
+    for (const auto& folder : mounted_folders) if (folder.rfind(prefix, 0) == 0) return true;
+    return false;
+}
 TSUCHI_Result validate_downloaded_assets(const char*, const char*, Text&) { return TSUCHI_OK; }
-TSUCHI_Result mount_downloaded_assets(const char* id, const char*, Text&) { mounted.push_back(id); return TSUCHI_OK; }
+TSUCHI_Result mount_downloaded_assets(const char* id, const char* folder, Text&) { mounted.push_back(id); mounted_folders.push_back(folder); return TSUCHI_OK; }
 const ModChoices& mod_choices() { static ModChoices c; return c; }
 bool ModChoices::enabled(const char*) const { return true; }
 bool each_engine_frame(void (*fn)()) { steps.push_back(fn); return true; }
@@ -173,7 +177,7 @@ TSUCHI_Package package(uint32_t i) { TSUCHI_Package p{}; assert(service.at(downl
 uint32_t count() { uint32_t n = 0; assert(service.count(downloader, &n) == TSUCHI_OK); return n; }
 
 void reset() {
-    disk.clear(); dirs.clear(); records.clear(); mounted.clear(); progressed.clear(); finished.clear();
+    disk.clear(); dirs.clear(); records.clear(); mounted.clear(); mounted_folders.clear(); progressed.clear(); finished.clear();
     fail_receipt = refuse_queue = false; install_result = TSUCHI_OK;
     listed.clear(); cleaned = false; install_state = {};
 }
@@ -402,9 +406,10 @@ void cooked_ids_come_from_source_and_key() {
     assert(disk.count(root_of(first.c_str()) + "/mods/" + expected + "/Map_P.pak") && disk.count(root_of(first.c_str()) + "/mods/" + expected + "/mod.json"));
     assert(disk.at(root_of(first.c_str()) + "/mods/" + expected + "/mod.json").find("Example \\\"mod\\\"") != std::string::npos);
     assert(mounted.size() == 1 && mounted[0] == expected); // enabled: mounted for new loads at once
-    // A renamed container in a new release is the same mod: it replaces the first.
+    // A renamed container in a new release is the same mod: it replaces the first. The engine still reads the
+    // container mounted from the first, so its files stay, marked, until the next start.
     assert(run(zip("cooked_renamed"), {.source = "gamebanana", .key = "12345"}) == TSUCHI_OK && count() == 1 && !strcmp(package(0).mods, expected) &&
-           installed_package(0)->revision == 1 && !package_files(first.c_str()));
+           installed_package(0)->revision == 1 && package_files(first.c_str()) && disk.count(root_of(first.c_str()) + "/removed"));
     assert(disk.count(root_of(installed_package(0)->folder) + "/mods/" + expected + "/Map_Renamed_P.pak"));
     // Another key is another mod.
     char other[package_store::kModIdBytes];
@@ -412,6 +417,14 @@ void cooked_ids_come_from_source_and_key() {
     assert(strcmp(other, expected) && run(zip("cooked"), {.source = "gamebanana", .key = "777"}) == TSUCHI_OK && count() == 2);
     // Two containers cannot share the one ID.
     assert(run(zip("cooked_two"), {.source = "gamebanana", .key = "888"}) == TSUCHI_OK && last_finished().find(" 4 unsupported") != std::string::npos && count() == 2);
+    // Removing a package whose container was mounted this session marks it and keeps its files.
+    const uint32_t at = strcmp(package(0).mods, other) ? 1 : 0;
+    const std::string mounted_here = installed_package(at)->folder;
+    assert(service.remove(downloader, at) == TSUCHI_OK && count() == 1 && package_files(mounted_here.c_str()) && disk.count(root_of(mounted_here.c_str()) + "/removed"));
+    // One whose container was not mounted goes at once.
+    mounted_folders.clear();
+    const std::string unmounted = installed_package(0)->folder;
+    assert(service.remove(downloader, 0) == TSUCHI_OK && count() == 0 && !package_files(unmounted.c_str()));
 }
 
 void cheats_install() {

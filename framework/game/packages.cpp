@@ -156,10 +156,12 @@ bool mark_removed(const char* folder) {
     char marker[128];
     return path(marker, sizeof marker, folder, "/removed") && write_file(marker, "", 0);
 }
-// A mod the loader found in this folder is loaded: its files and container can be in use until the game stops.
+// A mod the loader found in this folder is loaded, or a container installed from it this session is
+// mounted: its files and container can be in use until the game stops.
 bool in_use(const char* folder) {
     char prefix[96];
     if (!path(prefix, sizeof prefix, folder, "/")) return true;
+    if (container_mounted_from(prefix)) return true;
     const size_t n = strlen(prefix);
     for (uint32_t i = 0; i < mod_count(); ++i)
         if (const ModRecord* record = mod_at(i); record && strlen(record->folder) >= n && !memcmp(record->folder, prefix, n)) return true;

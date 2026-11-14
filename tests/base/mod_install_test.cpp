@@ -30,6 +30,7 @@ TSUCHI_Result file_size(const char* p,uint64_t& n){auto it=disk.find(p);if(it==d
 TSUCHI_Result read_whole_file(const char* p,char*& out,uint64_t& n){if(file_size(p,n)!=TSUCHI_OK)return TSUCHI_NOT_FOUND;out=static_cast<char*>(allocate(size_t(n)));if(!out)return TSUCHI_NO_MEMORY;memcpy(out,disk[p].data(),size_t(n));return TSUCHI_OK;}
 TSUCHI_Result read_file_part(const char* p,uint64_t off,void* out,uint64_t room,uint64_t& n){uint64_t size=0;if(file_size(p,size)!=TSUCHI_OK)return TSUCHI_NOT_FOUND;n=off>=size?0:std::min(room,size-off);if(n)memcpy(out,disk[p].data()+off,size_t(n));return TSUCHI_OK;}
 TSUCHI_Result list_folder(const char* p,Texts& files,Texts& folders){std::string prefix=std::string(p)+"/";std::set<std::string> dirs;bool any=false;for(const auto& f:disk)if(f.first.rfind(prefix,0)==0){any=true;auto rest=f.first.substr(prefix.size());auto slash=rest.find('/');if(slash==std::string::npos){if(!files.add(rest.c_str()))return TSUCHI_NO_MEMORY;}else dirs.insert(rest.substr(0,slash));}for(const auto& d:dirs)if(!folders.add(d.c_str()))return TSUCHI_NO_MEMORY;return any?TSUCHI_OK:TSUCHI_NOT_FOUND;}
+TSUCHI_Result list_folder(const char* p,Texts& files,Texts& folders,List<uint64_t>&){return list_folder(p,files,folders);} // no sizes: mods.cpp asks each file
 }
 int main(){
     set_allocator({std::malloc,std::free});Texts incoming,existing;Text problem;

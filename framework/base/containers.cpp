@@ -1470,6 +1470,13 @@ bool container_mounted_for(const char* id) {
     return false;
 }
 
+bool container_mounted_from(const char* prefix) {
+    const size_t n = strlen(prefix);
+    for (uint32_t i = 0; i < holders.count; ++i)
+        if (strlen(holders[i].folder) >= n && !memcmp(holders[i].folder, prefix, n)) return true;
+    return false;
+}
+
 void tell_containers_left_mounted() {
     for (uint32_t i = 0; i < mod_count(); ++i)
         if (mod_at(i)->state == ModState::blocked && container_mounted_for(mod_at(i)->id))

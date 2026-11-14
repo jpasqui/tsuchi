@@ -358,12 +358,12 @@ bool insert(uint64_t object, uint64_t widget, Entry& entry) {
     const uint64_t above = game::read_or<uint64_t>(slots + 8);
     if (!game::live(above) || !game::is_a(above, slot_class)) return insert_failed("the box's slot is not a vertical box slot");
     struct Margin { float left, top, right, bottom; };
-    const Margin padding = game::read_or<Margin>(above + 0x40);
+    const Margin padding = game::read_or<Margin>(above + t::ui_panel_slot::padding);
     const uint64_t button = reinterpret_cast<uint64_t>(t::fn::ui_create_widget(reinterpret_cast<void*>(widget), reinterpret_cast<void*>(kind), nullptr));
     if (!game::live(button)) return insert_failed("the button was not created");
     const uint64_t slot = reinterpret_cast<uint64_t>(t::fn::ui_add_child(reinterpret_cast<void*>(box), reinterpret_cast<void*>(button)));
     if (!game::live(slot)) return insert_failed("the button did not go in the box");
-    game::write<Margin>(slot + 0x40, padding);
+    game::write<Margin>(slot + t::ui_panel_slot::padding, padding);
     t::fn::ui_vertical_slot_sync(reinterpret_cast<void*>(slot));
     if (!buttons_of(widget, list)) return insert_failed("the button list changed");
     game::write<int32_t>(widget + t::title_view::count, list.count + 1);

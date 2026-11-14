@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include "game.h"
+#include "list.h"
 #include "tsuchi/core.h"
 #include "texts.h"
 
@@ -53,5 +54,9 @@ TSUCHI_Result read_whole_file(const char* path, char*& data, uint64_t& size);
 // What one folder holds: the names of its files and of its folders, each added to its list. One folder is open at
 // a time. TSUCHI_NOT_FOUND when there is no such folder, TSUCHI_NO_MEMORY when there is no memory for the names.
 TSUCHI_Result list_folder(const char* path, Texts& files, Texts& folders);
+// The same, with each file's size added to `sizes` in the order of `files`, as the listing gives it: no file is
+// opened for it. kSizeUnknown for each file on a build whose listing has no sizes.
+constexpr uint64_t kSizeUnknown = UINT64_MAX;
+TSUCHI_Result list_folder(const char* path, Texts& files, Texts& folders, List<uint64_t>& sizes);
 
 } // namespace tsuchi::game

@@ -59,7 +59,7 @@ enums:
     values:
     - {name: title, value: 1, doc: "The title screen's menu, under Press Start."}
     - {name: title_options, value: 2, doc: "The menu that Plus opens on the title screen, with Co-op Mode and Controls."}
-    - {name: mods, value: 3, doc: "The Mods page, Tsuchi's list of the installed mods. A mod has one entry there, as a row after the mods."}
+    - {name: mods, value: 3, doc: "The Mods page, where Tsuchi lists the installed mods. A mod has one entry there, as a row after the mods."}
   TextKind:
     open: false
     doc: Which keys the software keyboard offers.
@@ -584,15 +584,16 @@ functions:
 - name: hold_open_over
   doc: |
     Opens a screen in Tsuchi's own host over one of the game's menus, as after its entry was chosen. Buttons,
-    choices, integer selectors and text show. Back closes it and returns to that menu.
+    choices, integer selectors and text show. Back closes it and returns to that menu. The hold ends when
+    you or the player close it, your mod stops, or its host closes.
   owns: true
   params:
     - {name: screen, type: handle<screen>, doc: The populated screen.}
-    - {name: menu, type: enum<Menu>, doc: The menu it opens over.}
+    - {name: menu, type: enum<Menu>, doc: "The menu it opens over. Only `title` takes a screen."}
   fails:
     not_found: "The screen no longer exists."
     denied: "Another mod owns the screen."
-    invalid: "The screen has no controls."
+    invalid: "The menu is not `title`, or the screen has no controls."
     busy: "A screen is already open."
     not_ready: "That menu is not on the screen and taking input."
     unsupported: "This build of the game has no adapter for that menu."
@@ -631,8 +632,9 @@ functions:
     mod's entries stay usable. It ends when released or your mod stops.
   owns: true
   params:
-    - {name: menu, type: enum<Menu>, doc: The menu.}
+    - {name: menu, type: enum<Menu>, doc: "The menu. Only `title` takes a lock."}
   fails:
+    invalid: "The menu is not `title`."
     unsupported: "This build of the game has no adapter for that menu."
   users: [online-coop, custom-mod-menus]
 - name: release_menu_lock
@@ -641,6 +643,7 @@ functions:
   params:
     - {name: menu, type: enum<Menu>, doc: The menu.}
   fails:
+    invalid: "The menu is not `title`."
     not_found: "Your mod does not lock that menu."
   completes: hold_menu_lock
 - name: hold_menu_note
@@ -649,10 +652,10 @@ functions:
     session's code. Holding it again changes the text. It ends when released or your mod stops.
   owns: true
   params:
-    - {name: menu, type: enum<Menu>, doc: The menu.}
+    - {name: menu, type: enum<Menu>, doc: "The menu. Only `title` takes a note."}
     - {name: note, type: text, doc: "The text, at most 300 bytes. A new line starts a second line."}
   fails:
-    invalid: "The text isn't valid UTF-8, or it is empty or longer than 300 bytes."
+    invalid: "The menu is not `title`, or the text isn't valid UTF-8, or it is empty or longer than 300 bytes."
     busy: "Another mod's note is beside that menu."
     unsupported: "This build of the game has no adapter for that menu."
   users: [online-coop, custom-mod-menus]
@@ -662,13 +665,15 @@ functions:
   params:
     - {name: menu, type: enum<Menu>, doc: The menu.}
   fails:
+    invalid: "The menu is not `title`."
     not_found: "Your mod has no note beside that menu."
   completes: hold_menu_note
 - name: ask_text
   doc: |
     Shows the system's software keyboard and emits `text_entered` with what the player typed. It opens
     at the start of the next frame, and the game waits while it is open, as it does for its own name
-    entry. One keyboard can wait at a time.
+    entry. One keyboard can wait at a time. The request ends when the player closes the keyboard, and
+    the keyboard never opens if your mod stops before the next frame.
   owns: true
   params:
     - {name: prompt, type: text, doc: "The line above the text field, at most 256 bytes."}
@@ -682,7 +687,7 @@ functions:
   users: [online-coop, custom-mod-menus]
 - name: open_mods
   doc: |
-    Opens the Mods page, Tsuchi's list of the installed mods. From the title screen's menu it opens on
+    Opens the Mods page, where Tsuchi lists the installed mods. From the title screen's menu it opens on
     its own, and Back returns to the title. While Settings is open, it shows the Mods tab.
   fails:
     not_ready: "Neither the title screen's menu nor Settings is taking input."

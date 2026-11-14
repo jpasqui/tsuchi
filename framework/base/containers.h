@@ -103,6 +103,9 @@ TSUCHI_Result mount_asset_container(const char* id, const char* engine_pak_path,
 // How many containers the framework has mounted, and whether it mounted one for the mod of this ID.
 uint32_t containers_mounted();
 bool container_mounted_for(const char* id);
+// Whether the framework mounted a container from a mod folder whose path starts with `prefix`. The
+// engine reads that folder until the game is closed.
+bool container_mounted_from(const char* prefix);
 // Writes to the log of each mod that was blocked as it started, with its container mounted, that the
 // container stays mounted. Called once, after the mods have started.
 void tell_containers_left_mounted();
