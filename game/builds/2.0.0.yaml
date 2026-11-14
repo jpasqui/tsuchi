@@ -449,6 +449,9 @@ structs:
   ui_panel_slot:
     fields:
       content: 48
+      size_rule: 56
+      padding: 64
+      alignment: 88
   pikmin_counter:
     size: 39704
     fields:

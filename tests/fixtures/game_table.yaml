@@ -633,6 +633,9 @@ structs:
   ui_panel_slot:
     fields:
       content: 64
+      size_rule: 72
+      padding: 80
+      alignment: 96
   pikmin_counter:
     size: 0x9B18
     fields: {bank: 0x998C, read_bank: 0x9988, initialized: 0x9990, force_recount: 0x9B10,
