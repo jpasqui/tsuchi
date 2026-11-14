@@ -25,6 +25,11 @@ optional:
   - code_sites.placement_build       # without either, maps refuses a mod's placement_changes (maps.cpp asks
   - code_sites.placement_restore     # placement_changes_ready); the demo dropped build's world and inlined restore
   - code_sites.dialog_buttons_call   # dialogs_backend.cpp then puts a question's text on after set-up, as a message's
+  - data.dialog_result_table          # dialogs_backend.cpp: without these, dialog.close is unsupported
+  - data.dialog_result_header
+  - structs.dialog_result
+  - structs.dialog_widget.kind
+  - structs.ui_manager.open_dialog
   - structs.game_actor.physics_place # send_to_work then aims every target at its root
   - functions.world_follow_request_move  # the self-check build's world-follow check then fails as unavailable at its start
   - structs.world_follow_ai.fsm
@@ -169,6 +174,21 @@ families:
   ui:
     services: [ui]
     files: [game/ui_feedback.cpp, game/ui_label_layout.h, game/ui_mod_list.cpp, game/ui_mod_list_native.cpp, game/ui_native.cpp, game/ui_native_classes.h, game/ui_widgets.cpp]
+  player_choice:
+    calls: [game.hold_player_choice, game.release_player_choice, game.answer_player_choice]
+    files: [game/player_choice.cpp]
+  title_menu:
+    calls: [ui.hold_menu_entry, ui.release_menu_entry, ui.hold_open_over, ui.hold_menu_lock, ui.release_menu_lock, ui.hold_menu_note, ui.release_menu_note]
+    files: [game/ui_title.cpp, game/ui_title_host.cpp, game/ui_title_options.cpp]
+  keyboard:
+    calls: [ui.ask_text]
+    files: [game/ui_keyboard.cpp]
+  mods_page:
+    calls: [ui.open_mods]
+    files: [game/ui_mod_page.cpp]
+  textures:
+    calls: [ui.create_texture, ui.release_texture, ui.decode_texture]
+    files: [game/ui_textures.cpp]
   world:
     services: [world]
     files: [game/world_backend.cpp]
@@ -198,6 +218,9 @@ families:
     files: [game/presentation_backend.cpp, game/presenter.cpp, game/presenter_effects.cpp, game/presenter_markers.cpp, game/presenter_scene.cpp]
   sd_card:
     files: [game/log_file.cpp, game/sd_card.cpp]
+  packages:
+    services: [packages]
+    files: [game/packages.cpp]
   shaders:
     files: [game/shader_archive_manifest.h, game/shader_materials.cpp]
   self_check:

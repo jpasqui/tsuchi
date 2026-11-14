@@ -17,7 +17,15 @@ struct UiControl {
     Texts choices, labels;
     uint32_t selected;
     int64_t minimum, maximum, step, integer;
+    // Framework-generated decimal settings reuse the stock integer arrows.
+    // Their value stays a number; the integer is only a presentation revision.
+    struct {
+        bool enabled;
+        double minimum, maximum, step, value;
+        void (*format)(float, char*);
+    } number;
 };
+struct UiRenderer;
 struct UiScreen {
     uint64_t id;
     TSUCHI_Mod* mod;
@@ -25,6 +33,7 @@ struct UiScreen {
     List<UiControl> controls;
     uint32_t selected, revision;
     bool settings_tab, resettable;
+    const UiRenderer* native_renderer=nullptr;
 };
 // The native adapter builds stock widgets. A host loss is reported by live.
 struct UiRenderer {
@@ -42,6 +51,10 @@ struct UiRenderer {
 void ui_start();
 uint32_t ui_events_dropped();
 void ui_set_renderer(const UiRenderer* renderer);
+// Tsuchi's own host over a game menu (ui_title_host.cpp), for screens opened with hold_open_over.
+void ui_set_title_renderer(const UiRenderer* renderer);
+// Whether the open screen is in that host.
+bool ui_active_over_menu();
 const UiScreen* ui_active_screen();
 void* ui_active_view();
 // Update this exact captured view through its retained Showing operation.
@@ -58,6 +71,16 @@ uint32_t ui_settings_tab_revision();
 const UiScreen* ui_settings_tab(uint32_t index);
 TSUCHI_Result ui_settings_tab_open(uint32_t index);
 void ui_settings_tab_close();
-// Declared settings may include editable text or numbers presented as messages.
+TSUCHI_Result ui_screen_integer_range(TSUCHI_Mod* mod, TSUCHI_Screen screen, const char* id,
+    int64_t minimum, int64_t maximum, int64_t value);
+TSUCHI_Result ui_screen_add_number(TSUCHI_Mod* mod, TSUCHI_Screen screen,
+    const char* id, const char* label, double minimum, double maximum,
+    double step, double initial, void (*format)(float, char*));
+TSUCHI_Result ui_screen_number(TSUCHI_Mod* mod, TSUCHI_Screen screen, const char* id, double* out);
+TSUCHI_Result ui_screen_set_number(TSUCHI_Mod* mod, TSUCHI_Screen screen, const char* id, double value);
+// Declared settings may include editable text.
 void ui_screen_resettable(TSUCHI_Screen screen);
+bool ui_screen_focus(TSUCHI_Screen screen, const char* control);
 } // namespace tsuchi
+
+namespace tsuchi { bool ui_screen_native_renderer(TSUCHI_Mod*,TSUCHI_Screen,const UiRenderer*); }

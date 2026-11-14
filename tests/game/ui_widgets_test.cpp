@@ -288,8 +288,36 @@ void test_construction_and_ownership() {
     const TSUCHI_Object nested_panel = construct(owner, second_root, panel_type);
     assert(ui_add_child(owner, second_panel, nested_panel, &result) == TSUCHI_OK);
     assert(ui_add_child(owner, nested_panel, second_panel, &result) == TSUCHI_INVALID);
+    // Another UserWidget of the same mod goes into a panel whole. It is parented like any child, cannot go in
+    // twice or into the viewport meanwhile, and nothing of this tree can go inside it in turn.
+    const TSUCHI_Object part_root = create(owner), part_panel = construct(owner, part_root, panel_type);
+    assert(ui_set_root_widget(owner, part_root, part_panel) == TSUCHI_OK);
+    TSUCHI_Object part_slot{};
+    assert(ui_add_child(owner, nested_panel, part_root, &part_slot) == TSUCHI_OK && part_slot.id);
+    assert(fake::get<uint64_t>(raw(part_root) + t::ui_mod_list_tab::slot) == raw(part_slot));
+    assert(ui_add_child(owner, second_panel, part_root, &result) == TSUCHI_BUSY);
+    assert(ui_add_child(owner, part_panel, second_root, &result) == TSUCHI_INVALID);
+    assert(ui_hold_widget(owner, part_root, 0) == TSUCHI_BUSY);
+    // Its own parts stay its own: they do not go into the outer tree's panels.
+    const TSUCHI_Object part_button = construct(owner, part_root, button_type);
+    assert(ui_add_child(owner, second_panel, part_button, &result) == TSUCHI_DENIED);
+    assert(ui_add_child(owner, part_panel, part_button, &result) == TSUCHI_OK);
+    // Destroyed, it comes out of the panel; the outer widget stays.
+    assert(ui_destroy_widget(owner, part_root) == TSUCHI_OK);
+    assert(!fake::get<uint64_t>(raw(part_root) + t::ui_mod_list_tab::slot));
+    assert(ui_find_widget(owner, second_root, "Missing", &result) == TSUCHI_OK);
+    // The outer one destroyed first: the inner one comes out and is still the mod's.
+    const TSUCHI_Object outer_root = create(owner), outer_panel = construct(owner, outer_root, panel_type);
+    const TSUCHI_Object inner_root = create(owner);
+    assert(ui_add_child(owner, outer_panel, inner_root, &result) == TSUCHI_OK);
+    assert(ui_destroy_widget(owner, outer_root) == TSUCHI_OK);
+    assert(!fake::get<uint64_t>(raw(inner_root) + t::ui_mod_list_tab::slot));
+    assert(ui_hold_widget(owner, inner_root, 0) == TSUCHI_OK && ui_release_widget(owner, inner_root) == TSUCHI_OK);
+    assert(ui_destroy_widget(owner, inner_root) == TSUCHI_OK);
     const TSUCHI_Object foreign_root = create(other), foreign_button = construct(other, foreign_root, button_type);
     assert(ui_add_child(owner, panel, foreign_button, &result) == TSUCHI_DENIED);
+    // Another mod's UserWidget does not go in.
+    assert(ui_add_child(owner, panel, foreign_root, &result) == TSUCHI_DENIED);
     fake::put(raw(button) + t::object::name, fake::name(u"Apply"));
     assert(ui_find_widget(owner, root, "Apply", &result) == TSUCHI_OK && result.id == button.id);
     assert(ui_find_widget(owner, root, "Missing", &result) == TSUCHI_OK && result.id == 0);
@@ -303,11 +331,14 @@ void test_construction_and_ownership() {
     add_child(reinterpret_cast<void*>(raw(panel)), reinterpret_cast<void*>(nested_user));
     assert(ui_find_widget(owner, root, "NestedMenu", &result) == TSUCHI_OK && result.id == handle(nested_user).id);
     assert(ui_find_widget(owner, root, "PrivateButton", &result) == TSUCHI_OK && result.id == 0);
+    assert(ui_find_widget(owner, handle(nested_user), "PrivateButton", &result) == TSUCHI_OK && result.id == handle(private_button).id);
+    assert(ui_find_widget(other, handle(nested_user), "PrivateButton", &result) == TSUCHI_DENIED);
+    assert(ui_find_widget(owner, button, "Missing", &result) == TSUCHI_INVALID);
     const unsigned before_private = attach_calls, before_private_hook = hook_calls;
     result.id = 777;
-    assert(ui_add_child(owner, panel, handle(private_button), &result) == TSUCHI_NOT_FOUND && result.id == 777);
+    assert(ui_add_child(owner, panel, handle(private_button), &result) == TSUCHI_BUSY && result.id == 777);
     assert(attach_calls == before_private);
-    assert(ui_hold_button_events(owner, handle(private_button)) == TSUCHI_NOT_FOUND && hook_calls == before_private_hook);
+    assert(ui_hold_button_events(other, handle(private_button)) == TSUCHI_DENIED && hook_calls == before_private_hook);
     assert(fake::get<uint64_t>(private_tree + t::ui_widget_tree::root) == private_button);
     // A separately created UserWidget retains its own owner even when the
     // native factory places it under the context widget's tree.
@@ -319,6 +350,8 @@ void test_construction_and_ownership() {
     assert(ui_add_child(owner, panel, contextual_root, &result) == TSUCHI_DENIED && attach_calls == before_contextual);
     const TSUCHI_Object contextual_panel = construct(other, contextual_root, panel_type);
     assert(ui_set_root_widget(other, contextual_root, contextual_panel) == TSUCHI_OK);
+    assert(ui_find_widget(owner, contextual_root, "Missing", &result) == TSUCHI_DENIED);
+    assert(ui_add_child(owner, panel, contextual_panel, &result) == TSUCHI_DENIED);
     assert(ui_destroy_widget(owner, contextual_root) == TSUCHI_DENIED);
     const TSUCHI_Object loose = construct(owner, second_root, button_type);
     fail_attach = true; result.id = 777;
@@ -484,6 +517,15 @@ void test_owned_widget_text() {
     auto* owner = make_mod(); auto* other = make_mod();
     const TSUCHI_Object root = create(owner), label = construct(owner, root, rich_type);
     const uint64_t widget = raw(label), tree = last_tree;
+    const uint64_t authored_part = object(u"AuthoredTextPart", cooked_type, tree);
+    const uint64_t authored_tree = object(u"WidgetTree", tree_type, authored_part);
+    const uint64_t authored_text = object(u"Caption", rich_type, authored_tree);
+    fake::put<uint64_t>(authored_part + t::ui_user_widget::tree, authored_tree);
+    fake::put<uint64_t>(authored_tree + t::ui_widget_tree::root, authored_text);
+    TSUCHI_Object caption{};
+    assert(ui_find_widget(owner, handle(authored_part), "Caption", &caption) == TSUCHI_OK && caption.id == handle(authored_text).id);
+    assert(ui_set_widget_text(owner, caption, "Stock caption") == TSUCHI_OK && shown_text(authored_text) == u"Stock caption");
+    assert(ui_set_widget_text(other, caption, "Foreign") == TSUCHI_DENIED);
     const unsigned conversions = text_conversions, drops = text_drops;
     assert(ui::table.set_widget_text(owner, label, "Ready") == TSUCHI_OK);
     assert(shown_text(widget) == u"Ready" && text_conversions == conversions + 1 && text_drops == drops + 1);

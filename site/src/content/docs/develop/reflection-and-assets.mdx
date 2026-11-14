@@ -166,6 +166,61 @@ rules. For example, use [`datatable`](/reference/datatable/) for table overrides
 `reflection.set` writes memory without telling the game, and it doesn't restore
 fields when your mod stops.
 
+### Owned fields
+
+For a boolean, integer, enum, or number that should revert when your mod stops, use
+[`reflection.hold_field`](/reference/reflection/#hold_field). A *field hold* records
+the original value and the value your mod wrote. Update the hold to change your
+setting, or release the hold to restore the original. For example, after finding
+the game's configuration object:
+
+<Tabs>
+<TabItem label="Lua">
+
+```lua
+local hold = assert(reflection.hold_field(config, "GameFlowConfig.CaveTimeAddRate", 0, ""))
+assert(reflection.update_field(hold, 0.5))
+assert(reflection.release_field(hold))
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```js
+const hold = reflection.hold_field(config, "GameFlowConfig.CaveTimeAddRate", 0, "");
+reflection.update_field(hold, 0.5);
+reflection.release_field(hold);
+```
+
+</TabItem>
+<TabItem label="C">
+
+```c
+TSUCHI_FieldHold hold;
+TSUCHI_Value rate = {.kind = TSUCHI_VALUE_NUMBER, .as.number = 0};
+if (host->reflection->hold_field(self, config, "GameFlowConfig.CaveTimeAddRate",
+                                 &rate, "", &hold) == TSUCHI_OK) {
+    rate.as.number = 0.5;
+    host->reflection->update_field(self, hold, &rate);
+    host->reflection->release_field(self, hold);
+}
+```
+
+</TabItem>
+</Tabs>
+
+Only one hold can own a field. If the game or another writer changes that field,
+update and release return `busy`; stopping your mod leaves the other value alone.
+Holds don't notify the game or rewrite copies already stored in save data.
+
+Paths may traverse structs, but can't cross object references. Pass empty text
+for `identity` outside an array. An array path can contain one index, such as
+`GeneratorList[0].RebirthInfo.RebirthInterval`. Supply an integer identity field
+relative to that row, such as `GenerateInfo.DebugUniqueId`. The identity must be
+unique in the array and unchanged for the hold's lifetime. Tsuchi finds the row by
+identity again after a reorder or reallocation; a missing row ends restoration
+without writing to another row. Nested arrays aren't supported.
+
 ## Lifetime
 
 After `asset.load` succeeds, Tsuchi keeps the asset loaded until your mod releases

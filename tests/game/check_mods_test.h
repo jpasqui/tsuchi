@@ -373,7 +373,56 @@ void logging() {
 
 // ---- What the framework says of the mods it found ----------------------------------------------------------
 
+void override_service_checks() {
+    tsuchi::forget_mods();
+    const auto saved_files = disk.files;
+    disk.files.clear();
+    const std::string root = std::string(tsuchi::kModsFolder) + "/";
+    disk.files[root + "override.target/mod.json"] = R"({"id":"override.target","name":"Target","version":"1.0.0","settings":{
+        "count":{"type":"integer","default":3,"min":1,"max":10,"public":true},
+        "private":{"type":"toggle","default":false}}})";
+    disk.files[root + "override.rules/mod.json"] = R"({"id":"override.rules","name":"Rules","version":"1.0.0",
+        "requires":{"override.target":"1.0.0"},"settings_overrides":{"override.target":{"count":7}}})";
+    disk.files[root + "override.target/main.lua"] = R"(assert(settings.integer('count') == 7)
+        assert(settings.controllers('count') == 'override.rules'))";
+    disk.files[root + "override.rules/main.js"] = R"(if (settings.integer('override.target:count') !== 7n ||
+        settings.controllers('override.target:count') !== 'override.rules') throw new Error('override binding');)";
+    CHECK(tsuchi::find_mods() == TSUCHI_OK);
+    tsuchi::start_mods();
+    auto* target = tsuchi::find_mod("override.target");
+    auto* rules = tsuchi::find_mod("override.rules");
+    if (target && target->state != tsuchi::ModState::running) std::printf("override target: %s\n",target->problem.get());
+    if (rules && rules->state != tsuchi::ModState::running) std::printf("override rules: %s\n",rules->problem.get());
+    CHECK(target && rules && target->state == tsuchi::ModState::running && rules->state == tsuchi::ModState::running);
+    if (target && rules && target->context && rules->context) {
+        char controllers[64] = "unchanged"; uint64_t needed = 0;
+        CHECK(tsuchi::host.settings->controllers(target->context,"count",controllers,1,&needed) == TSUCHI_CAPACITY && needed == 15);
+        CHECK(!strcmp(controllers,"unchanged"));
+        CHECK(tsuchi::host.settings->controllers(target->context,"count",controllers,sizeof controllers,&needed) == TSUCHI_OK &&
+              !strcmp(controllers,"override.rules"));
+        CHECK(tsuchi::host.settings->controllers(rules->context,"override.target:private",controllers,sizeof controllers,&needed) == TSUCHI_DENIED);
+        CHECK(tsuchi::host.settings->set_integer(target->context,"count",9) == TSUCHI_DENIED);
+        CHECK(tsuchi::host.settings->set_integer(rules->context,"override.target:count",9) == TSUCHI_DENIED);
+        CHECK(tsuchi::host.settings->reset(target->context,"count") == TSUCHI_DENIED);
+        CHECK(tsuchi::host.settings->controllers(target->context,"missing",controllers,sizeof controllers,&needed) == TSUCHI_NOT_FOUND);
+        unsigned changes = 0; TSUCHI_Subscription subscription{};
+        CHECK(tsuchi::host.settings->on_changed(target->context, [](void* user, const TSUCHI_SettingsChanged* event) {
+            if (!strcmp(event->mod,"override.target") && !strcmp(event->key,"count")) ++*static_cast<unsigned*>(user);
+        }, &changes, &subscription) == TSUCHI_OK);
+        // A runtime can stop a context directly; the settings step must release its overrides too.
+        tsuchi::mod_stop(rules->context);
+        run_frames(1);
+        int64_t value = 0;
+        CHECK(changes == 1 && tsuchi::host.settings->integer(target->context,"count",&value) == TSUCHI_OK && value == 3);
+        CHECK(tsuchi::host.settings->controllers(target->context,"count",controllers,sizeof controllers,&needed) == TSUCHI_OK && !*controllers);
+        CHECK(tsuchi::host.settings->set_integer(target->context,"count",5) == TSUCHI_OK);
+    }
+    tsuchi::forget_mods(); run_frames(1);
+    disk.files = saved_files;
+}
+
 void telling_of_mods() {
+    override_service_checks();
     const std::string mods_at = std::string(tsuchi::kModsFolder) + "/";
     const auto log_is = [](const std::string& expected) {
         const bool same = logged.lines == expected;

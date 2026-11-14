@@ -10,6 +10,16 @@ identity:
 - offset: 54547984
   hash: 17676423334391457610
 data:
+  options_direction_delegate_table: absent
+  options_input_delegate_table: absent
+  dialog_answer_yes: absent
+  dialog_answer_no: absent
+  dialog_answer_cancel: absent
+  dialog_answer_return: absent
+  dialog_result_table: absent
+  dialog_result_header: absent
+  title_input_delegate_table: absent
+  title_direction_delegate_table: absent
   academy_schedule: absent
   wwise_audio_manager: 133386464
   wwise_parameter_manager: 133386520
@@ -86,6 +96,18 @@ data:
   gimmick_warp_stage_function: 52913312
   content_icon_size: 134154048
 constants:
+  options_entry_icon: 0
+  options_row_pitch: 117
+  options_up_key: 0
+  options_down_key: 1
+  options_last_stock: 3
+  title_flow_players_wait: 0x24
+  dialog_result_message: 0x45
+  title_confirm_key: 0x16
+  title_back_key: 0x17
+  title_menu_state: 5
+  game_menu_presenter: 91
+  game_menu_settings_page: 2
   stream_block_load: 128
   stream_source_cdo: 16
   physics_dynamic_kind: 6
@@ -239,6 +261,10 @@ constants:
   mutex_ready: 1
   shader_map_registered: 1
   listed_pikmin_types: 8
+  widget_visible: 0
+  texture_format_bgra8: 2
+  texture_not_offline_processed: 16
+  bulk_data_read_write: 2
   widget_collapsed: 1
   widget_hidden: 2
   collision_records_most: 128
@@ -267,6 +293,18 @@ constants:
   effect_spawn_blocked: 2097664
   ui_keyboard_characters: 31
 structs:
+  options_button: {fields: {look: absent, look_bytes: absent}}
+  options_presenter: {fields: {input: absent, view: absent}}
+  game_menu_presenter: {fields: {view: absent}}
+  presenter_table: {fields: {reset: absent}}
+  options_view: {fields: {state: absent, buttons: absent, count: absent, room: absent, selected: absent}}
+  title_flow: {fields: {state: absent, answered: absent, answer: absent}}
+  dialog_result: {size: absent, fields: {self: absent, header: absent, message: absent, dialog_kind: absent, as_flow: absent}}
+  title_presenter: {fields: {cursor: absent, view: absent, input: absent, state: absent}}
+  title_view: {fields: {description: absent, buttons: absent, count: absent, room: absent, hidden_select: absent, hide: absent, hidden: absent, hidden_other: absent}}
+  title_button: {fields: {id: absent, label: absent, mark: absent}}
+  title_input: {fields: {data: absent, count: absent, capacity: absent}}
+  title_handler: {fields: {key: absent, instance: absent, kind: absent, presenter_index: absent, presenter_serial: absent, function: absent, zero: absent}}
   academy_schedule:
     fields:
       status: absent
@@ -448,6 +486,9 @@ structs:
   ui_panel_slot:
     fields:
       content: 48
+      size_rule: 56
+      padding: 64
+      alignment: 88
   pikmin_counter:
     size: 39704
     fields:
@@ -610,7 +651,7 @@ structs:
     fields:
       name: 0
       kind: 772
-      bytes: absent
+      bytes: 776
   dialog_request:
     size: 944
     fields:
@@ -621,12 +662,14 @@ structs:
       player: 480
   dialog_widget:
     fields:
+      kind: absent
       text: 1416
   academy_data:
     fields:
       test_courses: absent
   ui_manager:
     fields:
+      open_dialog: absent
       academy_data: absent
       academy_courses: absent
       announcer: 760
@@ -640,6 +683,21 @@ structs:
     fields:
       wait_time: 1300
       state: 1344
+  texture_2d:
+    fields:
+      platform_data: absent
+      flags: absent
+      update_resource: absent
+  texture_platform_data:
+    fields:
+      width: absent
+      height: absent
+      format: absent
+      mips: absent
+      mip_count: absent
+  texture_mip:
+    fields:
+      bulk_data: absent
   widget_table:
     fields:
       set_visibility: 656
@@ -1708,6 +1766,21 @@ structs:
     fields:
       throw_length_max: 1104
 functions:
+  options_button_icon: absent
+  options_direction: absent
+  options_confirm: absent
+  ui_presenter_find: absent
+  presenter_begin: absent
+  game_menu_open_page: absent
+  options_gate: absent
+  options_list_grow: absent
+  options_button_highlight: absent
+  title_confirm: absent
+  ui_set_render_opacity: absent
+  title_direction: absent
+  title_back: absent
+  title_list_grow: absent
+  ui_vertical_slot_sync: absent
   map_add_stream: 10772480
   map_remove_stream: 10761184
   map_duplicate_stream: 9698496
@@ -1719,6 +1792,11 @@ functions:
   academy_period_start: absent
   ui_context_world: 2916048
   ui_widget_in_viewport: 10006944
+  texture_create_transient: absent
+  bulk_data_size: absent
+  bulk_data_lock: absent
+  bulk_data_unlock: absent
+  texture_from_image: absent
   ui_widget_viewport: 15891328
   ui_scroll_offset: absent
   ui_scroll_reveal: absent
@@ -1964,6 +2042,9 @@ functions:
   squad_icon_count: 6302032
   squad_throw_trajectory: 3876384
 slots:
+  options_presenter_tick: absent
+  title_flow_update: absent
+  title_presenter_tick: absent
   physics_contacts:
     table: 123475936
     offset: 640

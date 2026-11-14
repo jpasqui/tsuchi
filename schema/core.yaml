@@ -32,3 +32,6 @@ handles:
   - {'name': 'sound_bank', 'doc': 'An independent sound bank held by your mod until unload or stop.'}
   - {'name': 'sound_voice', 'doc': 'One playback from an independent sound bank.'}
   - {name: content_declaration, doc: "An admitted batch of content declarations, until retract or mod stop."}
+  - {name: field_hold, doc: "An owned scalar field override, until release or mod stop."}
+  - {name: setting_hold, doc: "An owned runtime scalar setting override, until release or mod stop."}
+  - {name: package_install, doc: "A package install started by your mod, readable until another install starts or your mod stops."}

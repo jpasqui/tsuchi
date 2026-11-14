@@ -103,3 +103,13 @@ functions:
       no_memory: "The game is out of memory."
       unsupported: "This build of the game has no order to send one Pikmin to work."
     users: [groink, groink-lua]
+
+  - name: type_count
+    completes: info
+    doc: |
+      Counts the named stock Pikmin types, including Glow, and types registered
+      by active admitted mods. Does not depend on unlocks, Onion stock, or living
+      actors. Inactive reserved save allocations and unnamed numeric placeholders
+      are excluded. The count changes when added content is applied or removed.
+      This reports registered types, not compatibility of other mods' gameplay hooks.
+    returns: {type: u32, doc: "Number of currently registered Pikmin types."}

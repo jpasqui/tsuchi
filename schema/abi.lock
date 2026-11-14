@@ -41,7 +41,8 @@
   "text",
   "time",
   "ui",
-  "world"
+  "world",
+  "packages"
  ],
  "tables": {
   "actor": [
@@ -208,7 +209,10 @@
   "dialog": [
    "confirm",
    "message",
-   "on_answered"
+   "on_answered",
+   "ask",
+   "set_text",
+   "close"
   ],
   "effects": [
    "list",
@@ -267,7 +271,11 @@
    "on_world_loaded",
    "on_world_unloaded",
    "on_pause_changed",
-   "on_control_changed"
+   "on_control_changed",
+   "hold_player_choice",
+   "release_player_choice",
+   "answer_player_choice",
+   "on_player_choice"
   ],
   "gimmicks": [
    "list",
@@ -289,7 +297,8 @@
    "wrap_function",
    "wrap_inline",
    "patch_instruction",
-   "check_code"
+   "check_code",
+   "wrap_call"
   ],
   "hud": [
    "banner"
@@ -336,7 +345,8 @@
    "list",
    "info",
    "add",
-   "work_on"
+   "work_on",
+   "type_count"
   ],
   "player": [
    "count",
@@ -375,7 +385,10 @@
    "end_call",
    "console_variable",
    "hold_console_variable",
-   "release_console_variable"
+   "release_console_variable",
+   "hold_field",
+   "update_field",
+   "release_field"
   ],
   "save": [
    "slot",
@@ -419,7 +432,12 @@
    "set_text",
    "set_has",
    "reset",
-   "on_changed"
+   "on_changed",
+   "controllers",
+   "set_integer_range",
+   "hold",
+   "update_hold",
+   "release_hold"
   ],
   "squad": [
    "leader",
@@ -508,11 +526,37 @@
    "on_choice_changed",
    "on_integer_changed",
    "on_reset_requested",
-   "on_button_event"
+   "on_button_event",
+   "hold_open_over",
+   "hold_menu_entry",
+   "release_menu_entry",
+   "hold_menu_lock",
+   "release_menu_lock",
+   "hold_menu_note",
+   "release_menu_note",
+   "ask_text",
+   "on_entry_chosen",
+   "on_text_entered",
+   "open_mods",
+   "create_texture",
+   "release_texture",
+   "decode_texture",
+   "hold_menu_input",
+   "release_menu_input"
   ],
   "world": [
    "ground",
    "path"
+  ],
+  "packages": [
+   "install",
+   "status",
+   "cancel",
+   "count",
+   "at",
+   "remove",
+   "on_progress",
+   "on_finished"
   ]
  }
 }

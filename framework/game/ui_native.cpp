@@ -259,7 +259,7 @@ bool copy_shape(const UiScreen& screen, List<Row>& rows) {
         row.kind = control.kind; row.choice = control.selected;
         row.integer = control.integer; row.minimum = control.minimum; row.maximum = control.maximum; row.step = control.step;
         char number[21]; integer_text(control.integer, number);
-        const char* value = control.kind == UiKind::integer ? number : control.kind == UiKind::text ? control.text.get() : control.kind == UiKind::button ? "Select" : "";
+        const char* value = control.number.enabled ? control.text.get() : control.kind == UiKind::integer ? number : control.kind == UiKind::text ? control.text.get() : control.kind == UiKind::button ? "Select" : "";
         if (!row.caption.set(control.label.get()) || !row.value_text.set(value)) { row.caption.clear(); row.value_text.clear(); return false; }
         bool okay = true;
         for (const char* text = control.labels.first(); text && okay; text = control.labels.after(text)) okay = row.labels.add(text);
@@ -419,7 +419,7 @@ bool sync_row(View& view, Row& row, const UiControl& control) {
     const uint64_t widget = live(row.widget), selector = live(row.selector);
     if (!widget || !selector) return false;
     char number[21]; integer_text(control.integer, number);
-    const char* value = control.kind == UiKind::integer ? number : control.kind == UiKind::text ? control.text.get() : "Select";
+    const char* value = control.number.enabled ? control.text.get() : control.kind == UiKind::integer ? number : control.kind == UiKind::text ? control.text.get() : "Select";
     const uint32_t selected = control.kind == UiKind::choice ? control.selected : control.kind == UiKind::integer ? 1 : 0;
     const int64_t integer = control.integer, minimum = control.minimum, maximum = control.maximum, step = control.step;
     const UiKind kind = control.kind;
@@ -858,6 +858,24 @@ bool ui_native_prepare_input() {
     return ui_input_steps(after_step);
 #else
     return false;
+#endif
+}
+TSUCHI_Result ui_native_hide_buttons(bool hide) {
+#if TSUCHI_UI_INPUT
+    if (!on_game_thread() || !input_mod || !mod_usable(input_mod)) return TSUCHI_UNSUPPORTED;
+    if (!hide) { input::table.release_hidden(input_mod, 0); return TSUCHI_OK; }
+    return input::table.hold_hidden(input_mod, 0, TSUCHI_Buttons(0xFFFF));   // each of the sixteen buttons
+#else
+    (void)hide; return TSUCHI_UNSUPPORTED;
+#endif
+}
+bool ui_native_buttons_down(uint64_t& held) {
+#if TSUCHI_UI_INPUT
+    TSUCHI_PadState state{};
+    if (!on_game_thread() || !input_mod || !mod_usable(input_mod) || input::table.pad(input_mod, 0, &state) != TSUCHI_OK) return false;
+    held = state.held; return true;
+#else
+    (void)held; return false;
 #endif
 }
 bool ui_native_start(TSUCHI_Mod* framework) {

@@ -14,6 +14,8 @@ description: Load a concrete UserWidget class through asset, create an instance 
 tutorials:
 - title: Create a screen
   path: /develop/screens/
+- title: Add menu entries
+  path: /develop/menu-entries/
 enums:
   Control:
     open: true
@@ -51,6 +53,19 @@ enums:
     - {name: l, value: 4, doc: The L button.}
     - {name: r, value: 5, doc: The R button.}
     - {name: zr, value: 6, doc: The ZR button.}
+  Menu:
+    open: false
+    doc: A menu of the game's own that takes mod entries.
+    values:
+    - {name: title, value: 1, doc: "The title screen's menu, under Press Start."}
+    - {name: title_options, value: 2, doc: "The menu that Plus opens on the title screen, with Co-op Mode and Controls."}
+    - {name: mods, value: 3, doc: "The Mods page, where Tsuchi lists the installed mods. A mod has one entry there, as a row after the mods."}
+  TextKind:
+    open: false
+    doc: Which keys the software keyboard offers.
+    values:
+    - {name: text, value: 1, doc: "The full keyboard, with letters and symbols."}
+    - {name: number, value: 2, doc: "A number pad with only digits."}
 functions:
 - name: create
   doc: Creates an empty screen. Add controls before you open it. The framework destroys the screen when
@@ -376,7 +391,8 @@ functions:
 
 - name: create_widget
   doc: Creates a UserWidget from a loaded class and keeps it for your mod. The context supplies its world;
-    it may be a world, actor, or widget. This creates an engine widget, independently of generated Settings
+    it may be a world, actor, or widget. Away from play, such as on the title screen, the player controller
+    from actor.list serves. This creates an engine widget, independently of generated Settings
     screens. Destroy it when finished. It ends when its context or loaded world ends, or your mod stops.
   owns: true
   params:
@@ -417,11 +433,13 @@ functions:
     no_memory: The ownership or retention record could not be allocated.
   users: [custom-mod-menus, kadan]
 - name: find_widget
-  doc: Finds a named widget in your UserWidget's own tree. It does not descend into another UserWidget's
-    private tree. A missing name returns no object. The result remains owned by the same root.
+  doc: Finds a named widget in an owned UserWidget's own tree. To look inside an authored nested
+    UserWidget, pass that widget on the next call. It must belong to a UserWidget created by your mod.
+    It does not search nested trees automatically. A missing name returns no object. A UserWidget your
+    mod created and added to another of its trees with add_child keeps its own ownership.
   owns: true
   params:
-  - {name: widget, type: handle<object>, doc: Your UserWidget root.}
+  - {name: widget, type: handle<object>, doc: "A UserWidget your mod created, or an authored UserWidget nested in one."}
   - {name: name, type: text, doc: The widget's exact engine name.}
   returns: {type: handle<object>, doc: The widget., none: No widget has that name.}
   fails:
@@ -448,18 +466,20 @@ functions:
     not_ready: The tree cannot be changed or the owner ended.
   completes: construct_widget
 - name: add_child
-  doc: Adds an unparented widget to a PanelWidget in the same owned tree. Returns the engine's PanelSlot;
+  doc: Adds an unparented widget to a PanelWidget of yours. The child is a widget of the same tree, or
+    another UserWidget your mod created, whole, such as one of the game's own button widgets. That one stays
+    its own widget and comes out again when either is destroyed. Returns the engine's PanelSlot;
     use reflection for the slot's layout. It refuses cycles and does not reparent existing children.
   owns: true
   params:
   - {name: panel, type: handle<object>, doc: Your PanelWidget.}
-  - {name: child, type: handle<object>, doc: Your unparented child in the same tree.}
+  - {name: child, type: handle<object>, doc: "Your unparented child in the same tree, or another UserWidget of yours."}
   returns: {type: handle<object>, doc: The created PanelSlot.}
   fails:
     not_found: A widget no longer exists or is not owned.
-    denied: The widgets belong to different mods or trees.
+    denied: "The widgets belong to different mods, or the child is a part of another UserWidget's tree."
     invalid: The parent is not a panel, or the attachment would form a cycle.
-    busy: The child already has a parent or is the tree root.
+    busy: "The child already has a parent, is the tree root, or is a UserWidget shown in the viewport."
     not_ready: The engine could not attach it, or its owner ended during attachment.
     no_memory: The slot retention record could not be allocated.
   completes: construct_widget
@@ -561,6 +581,174 @@ functions:
     no_memory: The widget could not be retained for the call.
   completes: create_widget
 
+- name: hold_open_over
+  doc: |
+    Opens a screen in Tsuchi's own host over one of the game's menus, as after its entry was chosen. Buttons,
+    choices, integer selectors and text show. Back closes it and returns to that menu. The hold ends when
+    you or the player close it, your mod stops, or its host closes.
+  owns: true
+  params:
+    - {name: screen, type: handle<screen>, doc: The populated screen.}
+    - {name: menu, type: enum<Menu>, doc: "The menu it opens over. Only `title` takes a screen."}
+  fails:
+    not_found: "The screen no longer exists."
+    denied: "Another mod owns the screen."
+    invalid: "The menu is not `title`, or the screen has no controls."
+    busy: "A screen is already open."
+    not_ready: "That menu is not on the screen and taking input."
+    unsupported: "This build of the game has no adapter for that menu."
+  users: [online-coop, custom-mod-menus]
+- name: hold_menu_entry
+  doc: |
+    Adds an entry to one of the game's menus, after the game's own entries and in their style. Its
+    description shows in the line under the menu while it is selected. Choosing it emits `entry_chosen`.
+    It ends when released or your mod stops. Holding the same entry again changes its label and description.
+    On the Mods page the entry is a row under the list of mods, such as one that opens your mod's own page.
+    It shows no description there, and it appears the next time the page opens.
+  owns: true
+  params:
+    - {name: menu, type: enum<Menu>, doc: The menu.}
+    - {name: entry, type: text, doc: "Your ID for the entry, such as `online_play`, unique in your mod."}
+    - {name: label, type: text, doc: The entry's text.}
+    - {name: description, type: text, doc: "The line under the menu while the entry is selected. Empty for none."}
+  fails:
+    invalid: "A text isn't valid UTF-8, the ID is empty or longer than 63 bytes, or the label is empty or longer than 80 bytes, or the description longer than 300."
+    capacity: "That menu has no room for another mod entry, or your mod already has its one entry on the Mods page."
+    unsupported: "This build of the game has no adapter for that menu."
+  users: [online-coop, custom-mod-menus]
+- name: release_menu_entry
+  doc: Removes your entry from the menu. The game's own entries are left as they were.
+  owns: true
+  params:
+    - {name: menu, type: enum<Menu>, doc: The menu.}
+    - {name: entry, type: text, doc: Your entry's ID.}
+  fails:
+    not_found: "Your mod holds no entry with that ID in that menu."
+  completes: hold_menu_entry
+
+- name: hold_menu_lock
+  doc: |
+    Keeps the game's own entries of one of its menus from being chosen, and shows them dimmed. Your
+    mod's entries stay usable. It ends when released or your mod stops.
+  owns: true
+  params:
+    - {name: menu, type: enum<Menu>, doc: "The menu. Only `title` takes a lock."}
+  fails:
+    invalid: "The menu is not `title`."
+    unsupported: "This build of the game has no adapter for that menu."
+  users: [online-coop, custom-mod-menus]
+- name: release_menu_lock
+  doc: Lets the game's own entries of the menu be chosen again.
+  owns: true
+  params:
+    - {name: menu, type: enum<Menu>, doc: The menu.}
+  fails:
+    invalid: "The menu is not `title`."
+    not_found: "Your mod does not lock that menu."
+  completes: hold_menu_lock
+- name: hold_menu_note
+  doc: |
+    Shows a short text beside one of the game's menus, in the game's own text style, such as an online
+    session's code. Holding it again changes the text. It ends when released or your mod stops.
+  owns: true
+  params:
+    - {name: menu, type: enum<Menu>, doc: "The menu. Only `title` takes a note."}
+    - {name: note, type: text, doc: "The text, at most 300 bytes. A new line starts a second line."}
+  fails:
+    invalid: "The menu is not `title`, or the text isn't valid UTF-8, or it is empty or longer than 300 bytes."
+    busy: "Another mod's note is beside that menu."
+    unsupported: "This build of the game has no adapter for that menu."
+  users: [online-coop, custom-mod-menus]
+- name: release_menu_note
+  doc: Removes your note from beside the menu.
+  owns: true
+  params:
+    - {name: menu, type: enum<Menu>, doc: The menu.}
+  fails:
+    invalid: "The menu is not `title`."
+    not_found: "Your mod has no note beside that menu."
+  completes: hold_menu_note
+- name: ask_text
+  doc: |
+    Shows the system's software keyboard and emits `text_entered` with what the player typed. It opens
+    at the start of the next frame, and the game waits while it is open, as it does for its own name
+    entry. One keyboard can wait at a time. The request ends when the player closes the keyboard, and
+    the keyboard never opens if your mod stops before the next frame.
+  owns: true
+  params:
+    - {name: prompt, type: text, doc: "The line above the text field, at most 256 bytes."}
+    - {name: initial, type: text, doc: "The text the field starts with. Empty for none."}
+    - {name: most, type: u32, doc: "The most characters the player can type, from 1 to 256."}
+    - {name: kind, type: enum<TextKind>, doc: The keys the keyboard offers.}
+  fails:
+    invalid: "A text isn't valid UTF-8 or is too long, or the limit or kind is invalid."
+    busy: "A keyboard is already waiting to open."
+    unsupported: "This build of the game has no software keyboard call."
+  users: [online-coop, custom-mod-menus]
+- name: open_mods
+  doc: |
+    Opens the Mods page, where Tsuchi lists the installed mods. From the title screen's menu it opens on
+    its own, and Back returns to the title. While Settings is open, it shows the Mods tab.
+  fails:
+    not_ready: "Neither the title screen's menu nor Settings is taking input."
+    busy: "A screen is open over the menu."
+    unsupported: "This build of the game has no adapter for the Mods page."
+  users: [mod-downloader, custom-mod-menus]
+- name: create_texture
+  doc: Creates a texture from pixels and keeps it for your mod, such as a picture downloaded with net.get.
+    Show it with reflection, for example Image.SetBrushFromTexture on a widget your mod owns. Release it when
+    no widget shows it. It ends when your mod stops.
+  owns: true
+  params:
+  - {name: width, type: u32, doc: "The width in pixels, from 1 to 2048."}
+  - {name: height, type: u32, doc: "The height in pixels, from 1 to 2048."}
+  - {name: pixels, type: bytes, doc: "Four bytes a pixel, red, green, blue and alpha, row by row from the top: exactly width times height times 4 bytes."}
+  returns: {type: handle<object>, doc: "The texture, which is a Texture2D."}
+  fails:
+    invalid: "A size is outside its range, or the pixels are not width times height times 4 bytes."
+    unsupported: This build of the game has no adapter for textures.
+    not_ready: The engine did not make the texture.
+    no_memory: The texture could not be kept.
+  users: [mod-downloader, custom-mod-menus]
+- name: release_texture
+  doc: Lets go of a texture your mod created. The engine collects it once nothing else uses it.
+  owns: true
+  params:
+  - {name: texture, type: handle<object>, doc: Your texture.}
+  fails:
+    not_found: Your mod has no such texture.
+  completes: create_texture
+- name: decode_texture
+  doc: Creates a texture from the bytes of a PNG or JPEG file, such as one downloaded with net.get, and
+    keeps it for your mod. Tsuchi checks the size in the file's header, then the game's own decoder reads
+    the picture at that size. Decoding takes the game thread; a large picture can take a frame or more.
+    Release it with release_texture.
+  owns: true
+  params:
+  - {name: image, type: bytes, doc: "The whole file, at most 16 MiB."}
+  returns: {type: handle<object>, doc: "The texture, which is a Texture2D."}
+  fails:
+    invalid: "The bytes are empty or more than 16 MiB, aren't a PNG or JPEG file with a whole header, or the game's decoder doesn't read them."
+    capacity: "The picture is larger than 4096 pixels on a side."
+    unsupported: This build of the game has no adapter for textures.
+    not_ready: "Called off the game thread."
+    no_memory: The texture could not be kept.
+  users: [mod-downloader, custom-mod-menus]
+- name: hold_menu_input
+  doc: |
+    Keeps the game's menus from acting on presses while your mod shows a page of its own over them. The
+    game is shown none of the first player's buttons meanwhile; `input.pad` still shows them to your mod.
+    It ends when released or your mod stops. The menus act again once every button has been let go.
+  owns: true
+  fails:
+    busy: "Another mod holds the menus' input, or holds presses or hides on the first player's controller."
+  users: [mod-downloader, custom-mod-menus]
+- name: release_menu_input
+  doc: Gives the game's menus their input back.
+  owns: true
+  fails:
+    not_found: "Your mod does not hold the menus' input."
+  completes: hold_menu_input
 events:
 - name: activated
   doc: Emitted when the player selects a button. Only the screen's owning mod receives this event.
@@ -649,3 +837,15 @@ events:
   - {name: widget, type: handle<object>, doc: The owned Button.}
   - {name: signal, type: enum<ButtonSignal>, doc: The native event.}
   users: [custom-mod-menus, kadan]
+- name: entry_chosen
+  doc: Emitted when the player chooses one of your menu entries. Only the entry's mod receives it.
+  fields:
+  - {name: menu, type: enum<Menu>, doc: The menu.}
+  - {name: entry, type: text, doc: Your entry's ID.}
+  users: [online-coop, custom-mod-menus]
+- name: text_entered
+  doc: Emitted when the player closes the keyboard that your mod opened with `ask_text`.
+  fields:
+  - {name: accepted, type: bool, doc: "`true` if the player confirmed the text, `false` if they cancelled."}
+  - {name: text, type: text, doc: "What the player typed. Empty when they cancelled."}
+  users: [online-coop, custom-mod-menus]

@@ -48,6 +48,48 @@ functions:
       no_memory: "The game is out of memory."
     users: [online-coop, dog-coop]
 
+  - name: ask
+    doc: |
+      Asks the player a question in a dialog with two buttons of your own, such as "Host a game" and
+      "Join a game". The `answered` event says which one the player chose in `choice`.
+    owns: true
+    params:
+      - {name: text, type: text, doc: The question.}
+      - {name: first, type: text, doc: "The first button's label."}
+      - {name: second, type: text, doc: "The second button's label."}
+    returns: {type: handle<dialog>, doc: "The dialog's handle, which `answered` returns."}
+    waits: answered
+    fails:
+      invalid: "A text isn't valid UTF-8, or a label is empty."
+      not_ready: "The game can't show dialogs right now, or the Tsuchi patch isn't installed."
+      unsupported: "This build of the game puts its own labels on every question."
+      no_memory: "The game is out of memory."
+    users: [online-coop, dog-coop]
+
+  - name: set_text
+    doc: "Changes the text of one of your dialogs that is on the screen or waiting for its turn."
+    owns: true
+    params:
+      - {name: dialog, type: handle<dialog>, doc: The dialog.}
+      - {name: text, type: text, doc: The new text.}
+    fails:
+      not_found: "Your mod has no such dialog waiting or on the screen."
+      invalid: "The text isn't valid UTF-8."
+    users: [online-coop, dog-coop]
+
+  - name: close
+    doc: |
+      Takes away one of your dialogs, as if the player had not answered: `answered` reports it with
+      `choice` 2 and not accepted. One still waiting for its turn is never shown.
+    owns: true
+    params:
+      - {name: dialog, type: handle<dialog>, doc: The dialog.}
+    fails:
+      not_found: "Your mod has no such dialog waiting or on the screen."
+      not_ready: "The dialog is being set up; try again on the next frame."
+      unsupported: "This build of the game has no way to close a dialog from code."
+    users: [online-coop, dog-coop]
+
 events:
   - name: answered
     doc: |
@@ -59,4 +101,5 @@ events:
     fields:
       - {name: dialog, type: handle<dialog>, doc: "The dialog's handle."}
       - {name: accepted, type: bool, doc: "`true` if the player accepted a question or closed a message with its button."}
+      - {name: choice, type: u32, doc: "0 for the first button, 1 for the second, 2 for Back or a dialog closed from code."}
     users: [online-coop, dog-coop]
