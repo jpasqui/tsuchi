@@ -130,9 +130,10 @@ void set_dev_folder(const char* root, bool (*begin)(), void (*end)());
 // before the first call, watches nothing. See DESIGN.md, "The development folder".
 //
 // Each look lists the folder: a file added, removed or of another size is seen at once, and no file is opened for
-// it. The files' bytes are read a few at a time, in passes over the folder (kWatchFiles files and kWatchBytes
-// bytes a look, at least one file), so a change that keeps a file's size is seen at the end of the pass it falls
-// in. A mod with a few small files has a pass every look.
+// it. The files' bytes, 1 MiB of them in all, are read a few at a time, in passes over the folder (kWatchFiles
+// files and kWatchBytes bytes a look, at least one file), so a change that keeps a file's size is seen at the end
+// of a pass: the one under way when the file was still to be read, the next when it had been read. A mod with a
+// few small files has a pass every look.
 void set_dev_watch(uint32_t steps);
 // Looks at the development folders when the interval set_dev_watch gave has passed. Runs after each step, before
 // run_restarts.
