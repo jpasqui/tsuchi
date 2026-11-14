@@ -76,8 +76,8 @@ it.
 
 ## The Mods page
 
-The Mods page is Tsuchi's list of the installed mods. Players open it with **Mods** on the title
-screen, or as the **Mods** tab of **Settings**. See [Manage mods](/players/mod-list/).
+Tsuchi lists the installed mods on the Mods page. Players open it with **Mods** on the title screen,
+or as the **Mods** tab of **Settings**. See [Manage mods](/players/mod-list/).
 
 A mod can add one entry to it, as a button under the list. Use it for a page of your own that belongs
 with the mods, such as a browser for more of them. The button shows the next time the page opens.
@@ -116,9 +116,9 @@ tab. Anywhere else it returns `not_ready`.
 ## Screens and typed text
 
 [`ui.hold_open_over`](/reference/ui/#hold_open_over) opens a [screen](/develop/screens/) over the
-title menu or its Options menu, as after one of your entries was chosen. **B** closes the screen and
-returns to that menu.
+title menu, as after one of your entries was chosen. **B** closes the screen and returns to the title
+menu.
 
 [`ui.ask_text`](/reference/ui/#ask_text) shows the system's software keyboard. Your mod receives
-[`text_entered`](/reference/ui/#text_entered) with what the player typed, or with `accepted` false if
-they cancelled.
+[`text_entered`](/reference/ui/#text_entered) with what the player typed, or with `accepted` set to
+`false` if they cancelled.

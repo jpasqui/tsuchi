@@ -7,7 +7,7 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 Use [`packages`](/reference/packages/) to install a mod package from an HTTPS URL. Tsuchi
 downloads the file to the SD card, checks it, and installs it. Your mod chooses which file to
-install. Tsuchi does the writing.
+install, and Tsuchi writes every file to the SD card.
 
 ## Capability
 
@@ -34,7 +34,7 @@ A package is a ZIP file of one of three kinds:
 | Assets | One cooked container: a `.pak`, `.utoc`, and `.ucas` of the same name. |
 | Cheats | Cheat files named by the game's build ID, such as `060F827BD2B38703.txt`. |
 
-One outer folder around the contents is accepted. Outside the mod folders, Tsuchi ignores only
+Tsuchi accepts one outer folder around the contents. Outside the mod folders, Tsuchi ignores only
 `README.md`, `README.txt`, `LICENSE`, and `LICENSE.txt`. Any other file refuses the package.
 
 The ZIP file can be up to 512 MiB, with up to 1 GiB expanded and 256 entries. Stored and DEFLATE
