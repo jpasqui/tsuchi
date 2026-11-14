@@ -860,13 +860,13 @@ bool ui_native_prepare_input() {
     return false;
 #endif
 }
-bool ui_native_hide_buttons(bool hide) {
+TSUCHI_Result ui_native_hide_buttons(bool hide) {
 #if TSUCHI_UI_INPUT
-    if (!on_game_thread() || !input_mod || !mod_usable(input_mod)) return false;
-    if (!hide) { input::table.release_hidden(input_mod, 0); return true; }
-    return input::table.hold_hidden(input_mod, 0, TSUCHI_Buttons(0xFFFF)) == TSUCHI_OK;   // each of the sixteen buttons
+    if (!on_game_thread() || !input_mod || !mod_usable(input_mod)) return TSUCHI_UNSUPPORTED;
+    if (!hide) { input::table.release_hidden(input_mod, 0); return TSUCHI_OK; }
+    return input::table.hold_hidden(input_mod, 0, TSUCHI_Buttons(0xFFFF));   // each of the sixteen buttons
 #else
-    (void)hide; return false;
+    (void)hide; return TSUCHI_UNSUPPORTED;
 #endif
 }
 bool ui_native_buttons_down(uint64_t& held) {

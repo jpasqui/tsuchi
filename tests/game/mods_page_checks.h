@@ -142,6 +142,17 @@ void mods_page_checks(uint64_t host) {
     assert(ui::table.hold_menu_input(pager) == TSUCHI_OK && buttons_are_hidden && hides == 2);
     mod_stop(pager); listener(0); listener(0);
     assert(!buttons_are_hidden && !ui_menu_input_held() && shows == 2);
+    // Another mod's presses or hides on that controller: the game would still see the buttons, so nothing is
+    // held.
+    TSUCHI_Mod* late = mod_create("late");
+    pad_taken = true;
+    assert(ui::table.hold_menu_input(late) == TSUCHI_BUSY && !buttons_are_hidden && hides == 2 && !ui_menu_input_held());
+    assert(ui::table.release_menu_input(late) == TSUCHI_NOT_FOUND);
+    pad_taken = false;
+    assert(ui::table.hold_menu_input(late) == TSUCHI_OK && buttons_are_hidden && hides == 3);
+    assert(ui::table.release_menu_input(late) == TSUCHI_OK);
+    listener(0);
+    assert(!buttons_are_hidden && !ui_menu_input_held() && shows == 3);
     can_hide = false;
     callbacks.host_lost(host); active = 0;
 

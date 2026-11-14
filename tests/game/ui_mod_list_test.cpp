@@ -46,8 +46,9 @@ bool note_ended_session = false;
 // The page on its own, the Mods tab shown directly, and the title menu's adapter for entries.
 bool page_alone = false;
 // The input service as the native adapter reaches it: whether buttons can be hidden from the game, how often
-// they were hidden and shown, and what is physically down.
-bool can_hide = false, buttons_are_hidden = false;
+// they were hidden and shown, and what is physically down. pad_taken is another mod holding presses or hides
+// on that controller.
+bool can_hide = false, pad_taken = false, buttons_are_hidden = false;
 unsigned hides = 0, shows = 0;
 uint64_t physical_buttons = 0;
 unsigned page_opens = 0, tab_shows = 0, stock_backs = 0;
@@ -148,7 +149,11 @@ bool ui_menu_action(uint64_t host,uint32_t action) {
  return known&&handled&&result;
 }
 bool ui_mod_page_alone() { return page_alone; }
-bool ui_native_hide_buttons(bool hide) { if (!can_hide) return false; ++(hide ? hides : shows); buttons_are_hidden = hide; return true; }
+TSUCHI_Result ui_native_hide_buttons(bool hide) {
+ if (!can_hide) return TSUCHI_UNSUPPORTED;
+ if (hide && pad_taken) return TSUCHI_BUSY;
+ ++(hide ? hides : shows); buttons_are_hidden = hide; return TSUCHI_OK;
+}
 bool ui_native_buttons_down(uint64_t& held) { if (!can_hide) return false; held = physical_buttons; return true; }
 bool ui_mod_page_supported() { return true; }
 TSUCHI_Result ui_mod_page_open() { ++page_opens; return page_open_result; }

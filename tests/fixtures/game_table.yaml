@@ -273,6 +273,7 @@ constants:
   listed_pikmin_types: 8
   texture_format_bgra8: 2
   texture_not_offline_processed: 0x10
+  bulk_data_read_write: 2
   widget_collapsed: 4
   widget_visible: 0
   widget_hidden: 6

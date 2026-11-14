@@ -35,7 +35,7 @@ uint8_t* lock_pixels(uint64_t texture, uint32_t width, uint32_t height, void*& b
     bulk = reinterpret_cast<void*>(mip + t::texture_mip::bulk_data);
     // The size the engine allocated, before any pixel is written.
     if (t::fn::bulk_data_size(bulk) != uint64_t(width) * height * 4) return nullptr;
-    return static_cast<uint8_t*>(t::fn::bulk_data_lock(bulk, 2));
+    return static_cast<uint8_t*>(t::fn::bulk_data_lock(bulk, uint32_t(t::constant::bulk_data_read_write)));
 }
 
 TSUCHI_Result create_texture(TSUCHI_Mod* mod, uint32_t width, uint32_t height, const void* pixels, uint64_t bytes, TSUCHI_Object* out) {
@@ -68,13 +68,57 @@ TSUCHI_Result create_texture(TSUCHI_Mod* mod, uint32_t width, uint32_t height, c
     return TSUCHI_OK;
 }
 
+uint32_t big_endian16(const uint8_t* at) { return uint32_t(at[0]) << 8 | at[1]; }
+uint32_t big_endian32(const uint8_t* at) { return big_endian16(at) << 16 | big_endian16(at + 2); }
+// The size a PNG or JPEG file's header gives, read before the engine decodes anything, so that a small file
+// cannot have it allocate for a huge picture. False for any other bytes, and for a header cut short or wrong.
+bool picture_size(const uint8_t* file, uint64_t bytes, uint32_t& width, uint32_t& height) {
+    static const uint8_t png[8] = {0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
+    if (bytes >= sizeof png && !memcmp(file, png, sizeof png)) {
+        // The first chunk is IHDR, 13 bytes and its check, which begin with the width and the height.
+        if (bytes < 33 || big_endian32(file + 8) != 13 || memcmp(file + 12, "IHDR", 4)) return false;
+        width = big_endian32(file + 16); height = big_endian32(file + 20);
+        return width && height;
+    }
+    if (bytes < 4 || file[0] != 0xFF || file[1] != 0xD8) return false;
+    // A JPEG's segments, up to the frame header of SOF0, SOF1 or SOF2: precision, height, width.
+    uint64_t at = 2;
+    for (;;) {
+        if (at >= bytes || file[at] != 0xFF) return false;
+        while (at < bytes && file[at] == 0xFF) ++at;   // fill bytes before a marker
+        if (at >= bytes) return false;
+        const uint8_t marker = file[at++];
+        if (marker == 0x01 || (marker >= 0xD0 && marker <= 0xD7)) continue;   // markers without a length
+        // Image data, the end, or another start before any frame header.
+        if (marker == 0x00 || marker == 0xD8 || marker == 0xD9 || marker == 0xDA) return false;
+        if (bytes - at < 2) return false;
+        const uint64_t length = big_endian16(file + at);
+        if (length < 2 || bytes - at < length) return false;
+        if (marker == 0xC0 || marker == 0xC1 || marker == 0xC2) {
+            if (length < 8) return false;
+            height = big_endian16(file + at + 3); width = big_endian16(file + at + 5);
+            return width && height;
+        }
+        // The other kinds of frame, lossless and arithmetic coded.
+        if (marker >= 0xC3 && marker <= 0xCF && marker != 0xC4 && marker != 0xC8 && marker != 0xCC) return false;
+        at += length;
+    }
+}
+
 TSUCHI_Result decode_texture(TSUCHI_Mod* mod, const void* image, uint64_t bytes, TSUCHI_Object* out) {
     if (!mod || !out || !image || !bytes || bytes > kMostImageBytes) return TSUCHI_INVALID;
+    uint32_t declared_width = 0, declared_height = 0;
+    if (!picture_size(static_cast<const uint8_t*>(image), bytes, declared_width, declared_height)) return TSUCHI_INVALID;
+    if (declared_width > kMostDecodedSide || declared_height > kMostDecodedSide) return TSUCHI_CAPACITY;
     if (!on_game_thread()) return TSUCHI_NOT_READY;
     if (!t::bound(t::fn::texture_from_image)) return TSUCHI_UNSUPPORTED;
     if (reserve_owned(mod, 1) != TSUCHI_OK) return TSUCHI_NO_MEMORY;
     // The engine's array of bytes, read and never changed: the file where the mod has it.
-    struct Bytes { const void* data; int32_t count, capacity; } file{image, int32_t(bytes), int32_t(bytes)};
+    alignas(8) uint8_t file[t::array::size]{};
+    const void* data = image; const int32_t count = int32_t(bytes);
+    memcpy(file + t::array::data, &data, sizeof data);
+    memcpy(file + t::array::count, &count, sizeof count);
+    memcpy(file + t::array::max, &count, sizeof count);
     const uint64_t texture = reinterpret_cast<uint64_t>(t::fn::texture_from_image(&file));
     const uint64_t handle = game::live(texture) ? game::to_handle(texture) : 0;
     if (!handle) return TSUCHI_INVALID;   // no decoder of the game's reads it

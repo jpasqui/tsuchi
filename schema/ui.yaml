@@ -435,11 +435,11 @@ functions:
 - name: find_widget
   doc: Finds a named widget in an owned UserWidget's own tree. To look inside an authored nested
     UserWidget, pass that widget on the next call. It must belong to a UserWidget created by your mod.
-    It does not search nested trees automatically. A missing name returns no object. Independently
-    created UserWidgets keep their own ownership, including when nested in another mod's tree.
+    It does not search nested trees automatically. A missing name returns no object. A UserWidget your
+    mod created and added to another of its trees with add_child keeps its own ownership.
   owns: true
   params:
-  - {name: widget, type: handle<object>, doc: Your UserWidget root.}
+  - {name: widget, type: handle<object>, doc: "A UserWidget your mod created, or an authored UserWidget nested in one."}
   - {name: name, type: text, doc: The widget's exact engine name.}
   returns: {type: handle<object>, doc: The widget., none: No widget has that name.}
   fails:
@@ -714,17 +714,19 @@ functions:
     not_found: Your mod has no such texture.
   completes: create_texture
 - name: decode_texture
-  doc: Creates a texture from the bytes of a picture file, such as a PNG or JPEG downloaded with net.get, and
-    keeps it for your mod. The game's own decoder reads it, at the picture's size. Decoding takes the game
-    thread; a large picture can take a frame or more. Release it with release_texture.
+  doc: Creates a texture from the bytes of a PNG or JPEG file, such as one downloaded with net.get, and
+    keeps it for your mod. Tsuchi checks the size in the file's header, then the game's own decoder reads
+    the picture at that size. Decoding takes the game thread; a large picture can take a frame or more.
+    Release it with release_texture.
   owns: true
   params:
   - {name: image, type: bytes, doc: "The whole file, at most 16 MiB."}
   returns: {type: handle<object>, doc: "The texture, which is a Texture2D."}
   fails:
-    invalid: "The bytes are empty or more than 16 MiB, or the game's decoder doesn't read that kind of picture."
+    invalid: "The bytes are empty or more than 16 MiB, aren't a PNG or JPEG file with a whole header, or the game's decoder doesn't read them."
     capacity: "The picture is larger than 4096 pixels on a side."
     unsupported: This build of the game has no adapter for textures.
+    not_ready: "Called off the game thread."
     no_memory: The texture could not be kept.
   users: [mod-downloader, custom-mod-menus]
 - name: hold_menu_input
@@ -734,7 +736,7 @@ functions:
     It ends when released or your mod stops. The menus act again once every button has been let go.
   owns: true
   fails:
-    busy: "Another mod holds the menus' input."
+    busy: "Another mod holds the menus' input, or holds presses or hides on the first player's controller."
   users: [mod-downloader, custom-mod-menus]
 - name: release_menu_input
   doc: Gives the game's menus their input back.

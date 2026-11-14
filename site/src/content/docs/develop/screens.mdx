@@ -431,9 +431,10 @@ function showPicture(widget, width, height, pixels) {
 </TabItem>
 </Tabs>
 
-[`ui.decode_texture`](/reference/ui/#decode_texture) makes a texture from a picture file's bytes, such
-as a PNG or JPEG. The game's own decoder reads the file, at the picture's size, up to 4096 pixels on a
-side. Decoding takes the game thread, so decode one picture a frame at most.
+[`ui.decode_texture`](/reference/ui/#decode_texture) makes a texture from the bytes of a PNG or
+JPEG file. The game's own decoder reads the file, at the picture's size, up to 4096 pixels on a side.
+Tsuchi reads that size from the file's header first and refuses a larger picture before anything decodes
+it. Decoding takes the game thread, so decode one picture a frame at most.
 
 The texture stays your mod's until [`ui.release_texture`](/reference/ui/#release_texture) or your mod
 stops. Release it once no image shows it.

@@ -591,9 +591,14 @@ void entry_chosen(void*, const TSUCHI_UiEntryChosen* event) {
 // ui.hold_menu_input and its release.
 TSUCHI_Result hold_menu_input(TSUCHI_Mod* mod) {
     if (!mod) return TSUCHI_INVALID;
-    if (input_holder && input_holder != mod && mod_usable(input_holder)) return TSUCHI_BUSY;
-    // Hidden where an input service can: the list and the title menu are quiet either way.
-    if (!buttons_hidden) buttons_hidden = ui_native_hide_buttons(true);
+    if (input_holder && mod_usable(input_holder)) return input_holder == mod ? TSUCHI_OK : TSUCHI_BUSY;
+    // Hidden where an input service can: the list and the title menu are quiet either way. Another mod's
+    // presses or hides on that controller would leave the game its buttons, so then nothing is held.
+    if (!buttons_hidden) {
+        const TSUCHI_Result hidden = ui_native_hide_buttons(true);
+        if (hidden == TSUCHI_BUSY) return TSUCHI_BUSY;
+        buttons_hidden = hidden == TSUCHI_OK;
+    }
     input_holder = mod; input_quiet = false;
     return TSUCHI_OK;
 }

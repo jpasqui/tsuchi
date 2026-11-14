@@ -263,6 +263,7 @@ constants:
   widget_visible: 0
   texture_format_bgra8: 2
   texture_not_offline_processed: 16
+  bulk_data_read_write: 2
   widget_collapsed: 1
   widget_hidden: 2
   collision_records_most: 128
