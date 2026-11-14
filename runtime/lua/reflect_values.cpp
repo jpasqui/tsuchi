@@ -301,6 +301,13 @@ bool held_scalar(lua_State* L, int index, TSUCHI_Value& value) {
     else { value.kind = TSUCHI_VALUE_NUMBER; value.as.number = lua_tonumber(L, index); }
     return true;
 }
+// A float with a whole value is an integer here, as it is to settings.set_integer.
+bool setting_scalar(lua_State* L, int index, TSUCHI_Value& value) {
+    if (!held_scalar(L, index, value)) return false;
+    int whole = 0; const lua_Integer integer = lua_tointegerx(L, index, &whole);
+    if (value.kind == TSUCHI_VALUE_NUMBER && whole) { value.kind = TSUCHI_VALUE_INTEGER; value.as.integer = integer; }
+    return true;
+}
 }
 int tsuchi_lua_reflection_hold_field(lua_State* L) {
     const TSUCHI_Object object{tsuchi_lua::check_handle(L, 1, "object", false)};
@@ -327,7 +334,7 @@ int tsuchi_lua_reflection_update_field(lua_State* L) {
 int tsuchi_lua_settings_hold(lua_State* L) {
     size_t bytes = 0; const char* key = luaL_checklstring(L, 1, &bytes);
     TSUCHI_Value value{};
-    if (strlen(key) != bytes || !held_scalar(L, 2, value)) return tsuchi_lua::fail(L, TSUCHI_INVALID);
+    if (strlen(key) != bytes || !setting_scalar(L, 2, value)) return tsuchi_lua::fail(L, TSUCHI_INVALID);
     TSUCHI_SettingHold hold{};
     const auto result = host(L)->settings->hold(mod(L), key, &value, &hold);
     if (result != TSUCHI_OK) return tsuchi_lua::fail(L, result);
@@ -336,7 +343,7 @@ int tsuchi_lua_settings_hold(lua_State* L) {
 int tsuchi_lua_settings_update_hold(lua_State* L) {
     const TSUCHI_SettingHold hold{tsuchi_lua::check_handle(L, 1, "setting_hold", false)};
     TSUCHI_Value value{};
-    if (!held_scalar(L, 2, value)) return tsuchi_lua::fail(L, TSUCHI_INVALID);
+    if (!setting_scalar(L, 2, value)) return tsuchi_lua::fail(L, TSUCHI_INVALID);
     const auto result = host(L)->settings->update_hold(mod(L), hold, &value);
     if (result != TSUCHI_OK) return tsuchi_lua::fail(L, result);
     lua_pushboolean(L, 1); return 1;

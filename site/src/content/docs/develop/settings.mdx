@@ -173,11 +173,39 @@ the saved preference.
 the player's saved preference. Declare the target as a direct required dependency.
 The target can opt out with `overridable: false`; hidden settings always opt out.
 
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
 ```lua
-local cap = assert(settings.hold("jpasqui.population-cap:maximum", 200))
+local cap = assert(settings.hold("example.population:maximum", 200))
 assert(settings.update_hold(cap, 150))
 assert(settings.release_hold(cap))
 ```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript
+const cap = settings.hold("example.population:maximum", 200);
+settings.update_hold(cap, 150);
+settings.release_hold(cap);
+```
+
+</TabItem>
+<TabItem label="C">
+
+```c
+TSUCHI_SettingHold cap;
+TSUCHI_Value maximum = {.kind = TSUCHI_VALUE_INTEGER, .as.integer = 200};
+if (host->settings->hold(self, "example.population:maximum", &maximum, &cap) == TSUCHI_OK) {
+    maximum.as.integer = 150;
+    host->settings->update_hold(self, cap, &maximum);
+    host->settings->release_hold(self, cap);
+}
+```
+
+</TabItem>
+</Tabs>
 
 The same calls are available in JavaScript and compiled mods. JavaScript integer
 values accept safe integers or BigInt. Values must match the boolean, integer or

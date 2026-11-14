@@ -35,7 +35,8 @@ An existing named call site reuses its chain.
 
 The hook engine retains the whole invocation until the wrapper returns. Work
 after `Hook.original` therefore still runs when the hook is removed inside the
-callee. This is useful for restoring temporary fields around a native operation.
+callee. For example, a wrapper can set a temporary field, call `Hook.original`,
+and then restore the field.
 Two independent inline callbacks before and after a call do not provide that
 lifetime guarantee. Keep the hook record until all of its calls return, including
 when a developer restart would otherwise reuse the same global storage.
