@@ -31,6 +31,9 @@ GAME = ROOT / 'framework' / 'game'
 FRAMEWORK_TARGET = ROOT / 'framework' / 'target'
 # The framework is built with no warnings for what it has deprecated: it still offers those, and uses them to do so.
 CXX = ['-std=c++17', '-Wall', '-Wextra', '-Werror', '-fno-exceptions', '-fno-rtti', '-DTSUCHI_DEPRECATED(text)=']
+# Sealed sessions use the framework's Mbed TLS, with the configuration the module builds it with.
+TLS_FLAGS = ['-I', ROOT / 'third_party' / 'mbedtls-3.6.7' / 'include', '-I', ROOT / 'runtime' / 'https',
+             '-DMBEDTLS_CONFIG_FILE="https_tls_config.h"']
 EXE = '.exe' if sys.platform == 'win32' else ''
 
 
@@ -62,6 +65,24 @@ def build_program(program, flags, sources, extra_objects=()):
                                   for value in arguments) + '\n', encoding='utf-8')
     run([compiler, '@' + str(response)])
     return program
+
+
+def tls_archive():
+    """Mbed TLS compiled once into build/obj/session-tls as an archive, so a program links only what it uses."""
+    out = BUILD / 'obj' / 'session-tls'
+    out.mkdir(parents=True, exist_ok=True)
+    config = ROOT / 'runtime' / 'https' / 'https_tls_config.h'
+    objects = []
+    for source in sorted((ROOT / 'third_party' / 'mbedtls-3.6.7' / 'library').glob('*.c')):
+        obj = out / (source.stem + '.o')
+        if not obj.exists() or obj.stat().st_mtime < max(source.stat().st_mtime, config.stat().st_mtime):
+            run([shutil.which('clang'), *TLS_FLAGS, '-std=c99', '-O1', '-D_CRT_SECURE_NO_WARNINGS', '-c', source, '-o', obj])
+        objects.append(obj)
+    archive = out / 'mbedtls.lib'
+    if not archive.exists() or archive.stat().st_mtime < max(obj.stat().st_mtime for obj in objects):
+        archive.unlink(missing_ok=True)
+        run([shutil.which('llvm-ar'), 'rcs', archive, *objects])
+    return archive
 
 
 def lua_objects():
@@ -222,7 +243,7 @@ class SchemaRules(unittest.TestCase):
 
     def test_the_schema_loads(self):
         schema = load(ROOT / 'schema')
-        self.assertEqual([s.name for s in schema.services], ['actor', 'animation', 'asset', 'audio', 'battle', 'behavior', 'camera', 'captain', 'carry', 'collision', 'combat', 'component', 'content', 'creature', 'datatable', 'dialog', 'effects', 'entity', 'file', 'game', 'gimmicks', 'hook', 'hud', 'input', 'mod', 'net', 'pikmin', 'player', 'reflection', 'save', 'session', 'settings', 'squad', 'storage', 'story', 'text', 'time', 'ui', 'world'])
+        self.assertEqual([s.name for s in schema.services], ['actor', 'animation', 'asset', 'audio', 'battle', 'behavior', 'camera', 'captain', 'carry', 'character', 'collision', 'combat', 'component', 'content', 'creature', 'datatable', 'dialog', 'effects', 'entity', 'file', 'game', 'gimmicks', 'hook', 'hud', 'input', 'memory', 'mod', 'net', 'pikmin', 'player', 'reflection', 'save', 'session', 'settings', 'squad', 'storage', 'story', 'text', 'time', 'ui', 'voice', 'world'])
 
     def test_engine_and_game_actor_contracts_are_distinct(self):
         schema = load(ROOT / 'schema')
@@ -365,7 +386,7 @@ class SchemaRules(unittest.TestCase):
         # What the generators make of it: the header and the reference page say it once, at the end of the entry.
         schema = load(self.broken(*added, self.BUBBLE, self.BUBBLE[:-1] + ', since: 2}', version=4))
         combat = next(s for s in schema.services if s.name == 'combat')
-        self.assertEqual([combat.since(fn) for fn in combat.functions], [0, 0, 0, 3, 0])
+        self.assertEqual([combat.since(fn) for fn in combat.functions], [0, 0, 0, 3, 0, 0, 0])
         header = c_header.generate(schema)['include/tsuchi/combat.h']
         self.assertIn('     * Added in version 3. A mod that also runs on a framework older than that asks TSUCHI_HAS\n'
                       '     * before it uses this. */\n    TSUCHI_Result (*knockback)(', header)
@@ -373,7 +394,7 @@ class SchemaRules(unittest.TestCase):
         self.assertIn('    TSUCHI_ATTACK_KIND_BUBBLE = 7u, /* A bubble that traps the target. Added in version 2. */', header)
         self.assertIn('#define TSUCHI_API_VERSION 4u', c_header.generate(schema)['include/tsuchi/core.h'])
         page = docs_page.generate(schema)['docs/reference/combat.mdx']
-        self.assertIn('Fails with `no_memory`: The game is out of memory.\n\nAdded in version 3.\n\n### kill_pikmin', page)
+        self.assertIn('Fails with `no_memory`: The game is out of memory.\n\nAdded in version 3.\n\n### thrown_hit', page)
         self.assertIn('| `bubble` | A bubble that traps the target. Added in version 2. |', page)
         self.assertEqual(page.count('Added in version'), 2)
         # A script has the function or does not: nothing in the binding turns on the version.
@@ -381,7 +402,7 @@ class SchemaRules(unittest.TestCase):
         # A whole service added later tells it of each of its members, since each is as new as the service.
         schema = load(self.broken('service: combat\n', 'service: combat\nsince: 2\n', *added, version=4))
         combat = next(s for s in schema.services if s.name == 'combat')
-        self.assertEqual([combat.since(fn) for fn in combat.functions], [2, 2, 2, 3, 2])
+        self.assertEqual([combat.since(fn) for fn in combat.functions], [2, 2, 2, 3, 2, 2, 2])
         self.assertIn('    const TSUCHI_CombatService *combat; /* Added in version 2. */', c_header.generate(schema)['include/tsuchi/tsuchi.h'])
         self.assertIn('A Pikmin is either alive or dead.\n\nAdded in version 2.\n\n## Tutorials',
                       docs_page.generate(schema)['docs/reference/combat.mdx'])
@@ -440,7 +461,7 @@ class SchemaRules(unittest.TestCase):
         self.assertEqual(script.count('tsuchi_lua::deprecated('), 3)
         page = docs_page.generate(schema)['docs/reference/combat.mdx']
         self.assertIn('Fails with `not_ready`: The game isn\'t ready.\n\nDeprecated in version 3: use [`combat.damage`](#damage).\n\n### damage', page)
-        self.assertIn('Added in version 2. Deprecated in version 4: use [`entity.destroy`](/reference/entity/#destroy).\n\n## Event descriptions', page)
+        self.assertIn('Added in version 2. Deprecated in version 4: use [`entity.destroy`](/reference/entity/#destroy).\n\n### refresh_gauge', page)
         self.assertIn('Deprecated in version 3: use [`combat.damaged`](#damaged).\n\n### pikmin_died', page)
         self.assertIn('| `bubble` | A bubble that traps the target. Deprecated in version 2: use `water`. |', page)
         self.assertIn('for actors that don\'t have any. Deprecated in version 4: use `max_extra`. |', page)
@@ -499,7 +520,7 @@ class SchemaRules(unittest.TestCase):
         # A released table is in the order its members were added: a framework has everything up to the length of
         # its table, so what was added in version 3 cannot sit before what the first release had.
         made['released'] = True
-        with self.assertRaisesRegex(SchemaError, 'combat.kill_pikmin: its place in schema/abi.lock is after knockback, which was added in version 3'):
+        with self.assertRaisesRegex(SchemaError, 'combat.thrown_hit: its place in schema/abi.lock is after knockback, which was added in version 3'):
             load(folder(made, *added, *retired))
         members = made['tables']['combat']
         members.append(members.pop(members.index('knockback')))
@@ -877,6 +898,16 @@ class Generated(unittest.TestCase):
              ROOT / 'tests' / 'base' / 'reflect_test.cpp', '-o', program])
         run([program])
 
+    def test_memory_blocks_and_checked_access(self):
+        """The memory service: blocks, their owners and limits, lasting blocks, and checked reads and writes."""
+        fixture = self.fixture()
+        program = BUILD / f'memory_test{EXE}'
+        run([shutil.which('clang++'), *CXX, '-I', GEN / 'include', '-I', fixture / 'framework', '-I', GEN / 'framework',
+             '-I', BASE, '-I', CORE, '-I', ROOT / 'tests' / 'base', CORE / 'registry.cpp', CORE / 'ids.cpp', CORE / 'reflection.cpp', CORE / 'json.cpp', CORE / 'sha256.cpp', CORE / 'text.cpp', CORE / 'texts.cpp',
+             *sorted(BASE.glob('*.cpp')), *sorted((GEN / 'framework').glob('*.cpp')),
+             ROOT / 'tests' / 'base' / 'memory_test.cpp', '-o', program])
+        self.assertIn('memory passed', run([program]).stdout)
+
     def containers_program(self):
         fixture = self.fixture()
         program = BUILD / f'containers_test{EXE}'
@@ -970,14 +1001,14 @@ class Generated(unittest.TestCase):
         flags = [*CXX, '-O1', '-I', GEN / 'include', '-I', fixture / 'framework', '-I', GEN / 'framework',
                  '-I', BASE, '-I', CORE, '-I', GAME, '-I', ROOT / 'tests' / 'base', '-I', ROOT / 'runtime' / 'lua', '-I', LUA, '-I', SDK_CHECK,
                  '-I', ROOT / 'runtime' / 'lua' / 'mods', '-I', FRAMEWORK_TARGET,
-                 '-I', ROOT / 'runtime/javascript', '-isystem', quickjs_build.QUICKJS]
+                 '-I', ROOT / 'runtime/javascript', '-isystem', quickjs_build.QUICKJS, *TLS_FLAGS]
         sources = [*sorted(CORE.glob('*.cpp')), *sorted(BASE.glob('*.cpp')), *sorted(GAME.glob('*.cpp')),
                    *sorted((GEN / 'framework').glob('*.cpp')), *sorted((GEN / 'lua').glob('*.cpp')),
                    *sorted((ROOT / 'runtime' / 'lua').glob('*.cpp')), *sorted((ROOT / 'runtime' / 'lua' / 'mods').glob('*.cpp')),
                    FRAMEWORK_TARGET / 'status_observer.cpp', ROOT / 'tests' / 'game' / 'objects_test.cpp', *check_mods,
                    *sorted((GEN / 'javascript').glob('*.cpp')), *sorted((ROOT / 'runtime/javascript').glob('*.cpp')),
-                   FRAMEWORK_TARGET / 'uint128.cpp']
-        program = build_program(BUILD / (name + EXE), flags, sources, [*quickjs_build.objects(), *lua_objects()])
+                   FRAMEWORK_TARGET / 'uint128.cpp', ROOT / 'tests' / 'game' / 'session_tls_support.cpp']
+        program = build_program(BUILD / (name + EXE), flags, sources, [*quickjs_build.objects(), *lua_objects(), tls_archive()])
         Generated.built_programs[name] = program
         return program
 
@@ -1049,7 +1080,7 @@ class Generated(unittest.TestCase):
 
     def test_the_real_table_has_what_the_base_uses(self):
         for source in (*sorted(BASE.glob('*.cpp')), *sorted(GAME.glob('*.cpp')), CORE / 'hooks.cpp', CORE / 'reflection.cpp'):
-            run([shutil.which('clang++'), *CXX, '-fsyntax-only', '-I', GEN / 'include', '-I', GEN / 'framework',
+            run([shutil.which('clang++'), *CXX, *TLS_FLAGS, '-fsyntax-only', '-I', GEN / 'include', '-I', GEN / 'framework',
                  '-I', BASE, '-I', CORE, '-I', GAME, source])
 
     @unittest.skipUnless(shutil.which('ld.lld'), 'needs ld.lld')

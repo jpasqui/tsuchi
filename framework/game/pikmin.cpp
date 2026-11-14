@@ -70,12 +70,23 @@ uint64_t pikmin_leader(uint64_t pikmin) {
 }
 
 TSUCHI_Result add_pikmin(uint64_t leader, uint8_t type, uint8_t leaf, uint32_t count) {
+    namespace x = t::engine_transform;
     const TSUCHI_Result ready = added_pikmin_ready(type);
     if (ready != TSUCHI_OK) return ready;
     Transform at;
     if (!t::bound(t::fn::eject_pikmin) || !get_transform(leader, at)) return TSUCHI_NOT_READY;
-    // The engine's transform: a rotation, a place and a scale, each in a block of 16 bytes.
-    alignas(16) float where[12] = {0, 0, 0, 1, at.location[0], at.location[1], at.location[2], 0, 1, 1, 1, 0};
+    // The engine's transform: no turn, the leader's place, and a scale of 1. The game makes the Pikmin with it, scale
+    // and all: one written a float late made every new Pikmin flat (a scale of 0, 1, 1). It is 48 bytes on every
+    // build; the table says where each part is.
+    alignas(16) uint8_t where[48] = {};
+    const float turn[4] = {0, 0, 0, 1}, size[3] = {1, 1, 1};
+    const uint64_t turn_at = x::rotation, place_at = x::translation, size_at = x::scale;
+    if (!t::present(x::rotation) || !t::present(x::translation) || !t::present(x::scale) || turn_at > sizeof where - sizeof turn ||
+        place_at > sizeof where - sizeof at.location || size_at > sizeof where - sizeof size)
+        return TSUCHI_NOT_READY;
+    memcpy(where + turn_at, turn, sizeof turn);
+    memcpy(where + place_at, at.location, sizeof at.location);
+    memcpy(where + size_at, size, sizeof size);
     t::fn::eject_pikmin(pointer(leader), where, type, leaf, int32_t(count), read_or<uint64_t>(leader + t::game_actor::sublevel), false,
                         int32_t(t::constant::spawn_decoration_none));
     return TSUCHI_OK;

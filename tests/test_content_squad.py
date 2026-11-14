@@ -25,6 +25,7 @@ def main():
                    'framework/game/content_squad.cpp', 'tests/game/content_squad_test.cpp']:
         command.append(str(ROOT / source))
     command += [str(gen / 'framework/squad_service.cpp'), str(gen / 'framework/asset_service.cpp'),
+                str(gen / 'framework/pikmin_service.cpp'),
                 '-o', str(program)]
     subprocess.run(command, check=True)
     subprocess.run([str(program)], check=True)

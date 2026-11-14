@@ -8,6 +8,7 @@
 #include "ground_contact.h"
 #include "objects.h"
 #include "entity_service.h"
+#include "entity_tracks.h"
 #include "reflect.h"
 #include "services.h"
 #include "suspend.h"
@@ -186,6 +187,25 @@ TSUCHI_Result suspended(TSUCHI_Actor actor, TSUCHI_EntityParts* out) {
     return TSUCHI_OK;
 }
 
+TSUCHI_Result parts_of(TSUCHI_Actor actor, TSUCHI_EntityParts* out) {
+    uint64_t address = 0;
+    if (const TSUCHI_Result found = entity_of(actor, address); found != TSUCHI_OK) return found;
+    // A suspension's own record of the body it stopped, for parts that read as off while it holds them.
+    uint32_t parts = suspended_body(address);
+    if (game::ai_component(address)) parts |= kSuspendLogic;
+    if (game::movement_component(address)) parts |= kSuspendMovement;
+    if (game::is_simulating(address)) parts |= kSuspendPhysics;
+    bool blocks = false;
+    game::each_primitive(
+        address, [](void* context, uint64_t component) {
+            if (game::blocks(game::collision_of(component))) *static_cast<bool*>(context) = true;
+        },
+        &blocks);
+    if (blocks) parts |= kSuspendCollision;
+    *out = TSUCHI_EntityParts(parts);
+    return TSUCHI_OK;
+}
+
 TSUCHI_Result grounded(TSUCHI_Actor actor, bool* out) {
     uint64_t address = 0;
     if (const TSUCHI_Result found = entity_of(actor, address); found != TSUCHI_OK) return found;
@@ -235,15 +255,46 @@ TSUCHI_Result destroy(TSUCHI_Mod* mod, TSUCHI_Actor actor) {
     return result;
 }
 
+// ---- Actors a mod keeps awake -------------------------------------------------
+
+// Each mod's hold counts once among what keeps the actor's physics running (GActor+0x504): the game then
+// neither puts it to sleep nor leaves it asleep, whoever sees it.
+TSUCHI_Result begin_awake(const Hold& hold, HoldNothing&, const HoldNothing&, bool fresh) {
+    if (fresh) game::hold_awake(game::from_handle(hold.object), true);
+    return TSUCHI_OK;
+}
+
+void end_awake(const Hold& hold, HoldNothing&, HoldEnd why) {
+    if (why == HoldEnd::destroyed) return;
+    if (const uint64_t actor = game::from_handle(hold.object)) game::hold_awake(actor, false);
+}
+
+Holds<HoldNothing, HoldNothing, begin_awake, nullptr, end_awake> awake{"entity.awake", HoldOn::actor, false};
+
+TSUCHI_Result hold_awake(TSUCHI_Mod* mod, TSUCHI_Actor actor) {
+    uint64_t address = 0;
+    if (const TSUCHI_Result found = entity_of(actor, address); found != TSUCHI_OK) return found;
+    return awake.take(mod, actor.id, 0, HoldNothing{});
+}
+
+TSUCHI_Result release_awake(TSUCHI_Mod* mod, TSUCHI_Actor actor) {
+    uint64_t address = 0;
+    if (const TSUCHI_Result found = entity_of(actor, address); found != TSUCHI_OK) return found;
+    return awake.release(mod, actor.id, 0);
+}
+
 const entity::Backend service{listed,        find_placed, kind,   team,    placement, get_pose,
-                               set_pose,      warp,          get_velocity, launch,      suspend, resume, suspended, spawn,
-                               destroy, grounded};
+                               set_pose,      warp,          get_velocity, launch,      suspend, resume,
+                               track_hold,    track_release, track_feed,   track_show,  track_read, track_forget,
+                               suspended,     parts_of,      spawn,        destroy,     grounded,
+                               track_read_poses, hold_awake, release_awake};
 
 } // namespace
 
 void entities_start() {
     entity::set_backend(&service);
     spawned.start();
+    awake.start();
     motion_start();
     suspend_start();
 }

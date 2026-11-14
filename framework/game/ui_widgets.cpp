@@ -11,6 +11,7 @@
 #include "names.h"
 #include "object_retention.h"
 #include "objects.h"
+#include "presenter_markers.h"
 #include "reflect.h"
 #include "shared.h"
 #include <string.h>
@@ -248,10 +249,54 @@ void deliver() {
     }
     sending.clear();
 }
+// A widget hung from an actor (hold_mark). The hold is on the actor, by the slot: it ends with the actor, and the
+// presenter's markers place the slot on every picture (presenter_markers.h).
+game::ClassRef canvas_slot_class{t::name::ui_mod_list_slot_class};
+struct MarkKept { uint64_t slot; };
+struct MarkWanted { uint64_t slot, actor, controller; float offset[3], align[2]; };
+TSUCHI_Result apply_mark(const Hold&, MarkKept& kept, const MarkWanted& wanted, bool) {
+    if (!t::bound(t::fn::ui_slot_anchors) || !t::bound(t::fn::ui_slot_alignment)) return TSUCHI_NOT_READY;
+    if (!markers_hang(wanted.slot, wanted.actor, wanted.controller, wanted.offset)) return TSUCHI_CAPACITY;
+    // The place given is from the canvas's top left corner, at the widget's alignment.
+    t::fn::ui_slot_anchors(reinterpret_cast<void*>(wanted.slot), 0, 0, 0, 0);
+    t::fn::ui_slot_alignment(reinterpret_cast<void*>(wanted.slot), wanted.align[0], wanted.align[1]);
+    kept.slot = wanted.slot;
+    return TSUCHI_OK;
+}
+TSUCHI_Result mark_slot(TSUCHI_Mod* mod, uint64_t handle, uint64_t& slot);
+// The presenter still has it, and the widget is still the mod's, in the same canvas slot.
+bool keep_mark(const Hold& hold, MarkKept& kept) {
+    uint64_t slot = 0;
+    return markers_hung(kept.slot) && mark_slot(hold.mod, hold.what, slot) == TSUCHI_OK && slot == kept.slot;
+}
+void restore_mark(const Hold&, MarkKept& kept, HoldEnd) { markers_unhang(kept.slot); }
+Holds<MarkKept, MarkWanted, apply_mark, keep_mark, restore_mark> mark_holds{"ui.mark", HoldOn::object, true};
+bool finite_number(float value) { return value - value == 0; }
+// The canvas slot that a widget of the mod's sits in, or that slot itself.
+TSUCHI_Result mark_slot(TSUCHI_Mod* mod, uint64_t handle, uint64_t& slot) {
+    slot = 0;
+    if (!available() || !mod || !mod_usable(mod)) return TSUCHI_INVALID;
+    const uint64_t object = resolve(handle);
+    if (!object) return TSUCHI_NOT_FOUND;
+    uint64_t widget = object;
+    if (game::is_a(object, canvas_slot_class)) widget = game::read_or<uint64_t>(object + t::ui_panel_slot::content);
+    Root* root = nullptr;
+    const TSUCHI_Result owned = widget ? locate(mod, game::to_handle(widget), root) : TSUCHI_NOT_FOUND;
+    if (owned != TSUCHI_OK) return owned;
+    slot = widget == object ? game::read_or<uint64_t>(widget + t::ui_mod_list_tab::slot) : object;
+    if (!slot || !game::is_a(slot, canvas_slot_class) || game::read_or<uint64_t>(slot + t::ui_panel_slot::content) != widget) return TSUCHI_INVALID;
+    return TSUCHI_OK;
+}
+// The mod's hold on the slot, whichever actor it is on: its place in the table, or -1.
+int32_t mark_hold_of(uint64_t slot) {
+    for (uint32_t i = 0; i < mark_holds.count(); ++i)
+        if (mark_holds.hold_at(i).what == game::to_handle(slot)) return int32_t(i);
+    return -1;
+}
 } // namespace
 
 void ui_widgets_start(TSUCHI_Mod* owner) {
-    framework = owner; roots.start();
+    framework = owner; roots.start(); mark_holds.start();
     if (!steps_registered) steps_registered = each_frame(deliver);
     auto& backend = ui_screen_backend();
     backend.create_widget = ui_create_widget;
@@ -263,6 +308,8 @@ void ui_widgets_start(TSUCHI_Mod* owner) {
     backend.add_child = ui_add_child;
     backend.hold_widget = ui_hold_widget;
     backend.release_widget = ui_release_widget;
+    backend.hold_mark = ui_hold_mark;
+    backend.release_mark = ui_release_mark;
     backend.hold_button_events = ui_hold_button_events;
     backend.release_button_events = ui_release_button_events;
     ui::set_backend(&backend);
@@ -343,7 +390,7 @@ TSUCHI_Result ui_find_widget(TSUCHI_Mod* mod, TSUCHI_Object widget, const char* 
 }
 TSUCHI_Result ui_set_widget_text(TSUCHI_Mod* mod, TSUCHI_Object widget, const char* text) {
     char16_t units[kUiTextBytes + 1]; size_t count = 0;
-    if (!ui_glyph_text_syntax(text, true) || !game::utf8_to_units(text, units, kUiTextBytes, count))
+    if (!ui_glyph_text_syntax(text, true, true) || !game::utf8_to_units(text, units, kUiTextBytes, count))
         return TSUCHI_INVALID;
     units[count] = 0;
     Root* root = nullptr; const auto result = locate(mod, widget.id, root);
@@ -456,6 +503,41 @@ TSUCHI_Result ui_release_widget(TSUCHI_Mod* mod, TSUCHI_Object widget) {
         root->viewport = true; return TSUCHI_NOT_READY;
     }
     return TSUCHI_OK;
+}
+TSUCHI_Result ui_hold_mark(TSUCHI_Mod* mod, TSUCHI_Object widget, TSUCHI_Actor actor, uint32_t player, const TSUCHI_Vec3* offset,
+                           float align_x, float align_y) {
+    if (!offset || player >= uint32_t(t::constant::player_slots) || !finite_number(offset->x) || !finite_number(offset->y) ||
+        !finite_number(offset->z) || !finite_number(align_x) || !finite_number(align_y))
+        return TSUCHI_INVALID;
+    uint64_t slot = 0;
+    const TSUCHI_Result found = mark_slot(mod, widget.id, slot);
+    if (found != TSUCHI_OK) return found;
+    const uint64_t target = resolve(actor.id);
+    if (!target) return TSUCHI_NOT_FOUND;
+    const uint64_t world = game::global<uint64_t>(t::data::game_framework);
+    const uint64_t controller = world && t::bound(t::fn::camera_controller)
+        ? reinterpret_cast<uint64_t>(t::fn::camera_controller(reinterpret_cast<void*>(world), int32_t(player))) : 0;
+    if (!controller) return TSUCHI_NOT_READY;
+    const uint64_t slot_handle = game::to_handle(slot), actor_handle = game::to_handle(target);
+    // Hung from another actor already: that hold ends, and this one is taken.
+    const int32_t held = mark_hold_of(slot);
+    if (held >= 0) {
+        const Hold before = mark_holds.hold_at(uint32_t(held));
+        if (before.mod != mod) return TSUCHI_DENIED;
+        if (before.object != actor_handle) mark_holds.release(mod, before.object, slot_handle);
+    }
+    const MarkWanted wanted{slot, target, controller, {offset->x, offset->y, offset->z}, {align_x, align_y}};
+    return mark_holds.take(mod, actor_handle, slot_handle, wanted);
+}
+TSUCHI_Result ui_release_mark(TSUCHI_Mod* mod, TSUCHI_Object widget) {
+    uint64_t slot = 0;
+    const TSUCHI_Result found = mark_slot(mod, widget.id, slot);
+    if (found != TSUCHI_OK) return found;
+    const int32_t held = mark_hold_of(slot);
+    if (held < 0) return TSUCHI_NOT_FOUND;
+    const Hold hold = mark_holds.hold_at(uint32_t(held));
+    if (hold.mod != mod) return TSUCHI_DENIED;
+    return mark_holds.release(mod, hold.object, hold.what);
 }
 TSUCHI_Result ui_hold_button_events(TSUCHI_Mod* mod, TSUCHI_Object widget) {
     Root* root = nullptr; const auto result = locate(mod, widget.id, root);

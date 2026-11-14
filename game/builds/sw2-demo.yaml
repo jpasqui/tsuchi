@@ -10,6 +10,18 @@ identity:
 - offset: 54547984
   hash: 17676423334391457610
 data:
+  options_direction_delegate_table: absent
+  options_input_delegate_table: absent
+  dialog_answer_yes: absent
+  dialog_answer_no: absent
+  dialog_answer_cancel: absent
+  title_answer_load: absent
+  save_slot_paths: absent
+  dialog_answer_return: absent
+  dialog_result_table: absent
+  dialog_result_header: absent
+  title_input_delegate_table: absent
+  title_direction_delegate_table: absent
   wwise_audio_manager: 133386464
   wwise_parameter_manager: 133386520
   ui_select_sound: 133926408
@@ -85,6 +97,22 @@ data:
   gimmick_warp_stage_function: 52913312
   content_icon_size: 134154048
 constants:
+  title_note_lift: 130
+  options_entry_icon: 3
+  options_row_pitch: 143
+  options_up_key: 0
+  options_down_key: 1
+  options_last_stock: 3
+  title_flow_players_wait: 0x24
+  title_flow_menu: 2
+  title_flow_story: 6
+  fade_out_in_front: 3
+  fade_role_title: 1
+  play_mode_one: 1
+  dialog_result_message: 0x45
+  title_confirm_key: 0x16
+  title_back_key: 0x17
+  title_menu_state: 5
   stream_block_load: 128
   stream_source_cdo: 16
   physics_dynamic_kind: 6
@@ -177,6 +205,7 @@ constants:
   pause_blocks_travel: 2147421195
   request_from_menu: 4
   leave_request_id: 16
+  travel_request_id: 0xF
   portal_request_id: 11
   dialog_question: 21
   dialog_message: 94
@@ -209,6 +238,7 @@ constants:
   team_story: 4
   sort_dog: 4
   state_carcass: 16
+  state_target_collection: 512
   dismiss_keep_none: 16
   play_mode_two: 2
   pad_none: 7
@@ -266,6 +296,16 @@ constants:
   effect_spawn_blocked: 2097664
   ui_keyboard_characters: 31
 structs:
+  options_button: {fields: {look: absent, look_bytes: absent}}
+  options_presenter: {fields: {input: absent, view: absent}}
+  options_view: {fields: {state: absent, buttons: absent, count: absent, room: absent, selected: absent}}
+  title_flow: {fields: {state: absent, answered: absent, answer: absent, slot: absent}}
+  dialog_result: {size: absent, fields: {self: absent, header: absent, message: absent, dialog_kind: absent, as_flow: absent}}
+  title_presenter: {fields: {cursor: absent, view: absent, input: absent, state: absent}}
+  title_view: {fields: {description: absent, buttons: absent, count: absent, room: absent, hidden_select: absent, hide: absent, hidden: absent, hidden_other: absent}}
+  title_button: {fields: {id: absent, label: absent, mark: absent}}
+  title_input: {fields: {data: absent, count: absent, capacity: absent}}
+  title_handler: {fields: {key: absent, instance: absent, kind: absent, presenter_index: absent, presenter_serial: absent, function: absent, zero: absent}}
   console_manager_table:
     fields:
       find_variable: 176
@@ -285,6 +325,7 @@ structs:
       clipping: 194
       cached_slate: 216
       remove_from_parent: 672
+      visibility: absent
   ui_user_widget:
     fields:
       tree: 488
@@ -576,7 +617,7 @@ structs:
     fields:
       name: 0
       kind: 772
-      bytes: absent
+      bytes: 776
   dialog_request:
     size: 944
     fields:
@@ -587,10 +628,16 @@ structs:
       player: 480
   dialog_widget:
     fields:
+      kind: absent
       text: 1416
   ui_manager:
     fields:
+      open_dialog: absent
+      face_messages: absent
+      actor_access: absent
       announcer: 760
+  face_message_manager: {fields: {labels: absent, label_buckets: absent}}
+  ui_actor_access: {fields: {captain: absent}}
   announcer:
     fields:
       banner: 704
@@ -747,11 +794,16 @@ structs:
       story_save: 504
       controllers: 768
       pause_manager: 1360
+      fade: absent
       saves: 496
   config_save:
     fields:
       play_mode: 128
       slot: 152
+      difficulty: absent
+      difficulty_count: absent
+      difficulty_set: absent
+      difficulty_set_count: absent
   story_save:
     fields:
       night: 188
@@ -930,6 +982,13 @@ structs:
     fields:
       components: 552
       count: 560
+  carry_numbers:
+    fields:
+      entries: absent
+      count: absent
+  carry_number:
+    fields:
+      place: absent
   instanced_mesh:
     fields:
       instances: 1392
@@ -948,6 +1007,9 @@ structs:
       anchor: 1712
       shown: 1692
       position: 560
+  action_marker:
+    fields:
+      actor: absent
   material_instance_values:
     fields:
       scalars: 224
@@ -1001,6 +1063,7 @@ structs:
       actor_list: 4008
       pikmin_list: 4056
       pikmin_counters: 3968
+      carry_numbers: absent
   actor_node:
     size: 24
     fields:
@@ -1062,6 +1125,25 @@ structs:
       air_steps: 7384
       contact_step: 7388
       placement: 10344
+      body: absent
+  skeletal_mesh:
+    fields:
+      blueprint: absent
+  motion_blueprint:
+    fields:
+      speed: absent
+      motions: absent
+      move_motion: absent
+  motion_entry:
+    size: absent
+    fields:
+      state_machine: absent
+      motion: absent
+  motion_blueprint_table:
+    fields:
+      set_motion: absent
+      set_move_motion: absent
+      set_speed: absent
   spawn_request:
     size: 232
     fields:
@@ -1190,6 +1272,25 @@ structs:
   avatar_table:
     fields:
       squad: 2336
+  character_part:
+    fields:
+      controller: absent
+      move: absent
+  game_controller:
+    fields:
+      unpaused_frames: absent
+      lock_mask: absent
+      lock_timer: absent
+      press_ages: absent
+      press_age_count: absent
+  press_age:
+    size: absent
+    fields:
+      seconds: absent
+  game_controller_table:
+    fields:
+      locked: absent
+      pressed: absent
   whistle_part:
     fields:
       radius: 564
@@ -1205,6 +1306,20 @@ structs:
       current: 816
       extra: 820
       max_extra: 824
+      actor: absent
+      gauge_enabled: absent
+      gauge_views: absent
+      gauge_list_1: absent
+      gauge_list_2: absent
+      gauge_list_3: absent
+      gauge_full: absent
+  gauge_actor:
+    fields:
+      part_1: absent
+      part_2: absent
+  gauge_stick:
+    fields:
+      clung: absent
   action:
     fields:
       child: 104
@@ -1229,6 +1344,12 @@ structs:
       attack: 73
       riding_applies: 170
       origin: 184
+  pikmin_hit:
+    fields:
+      point: absent
+      press: absent
+      part: absent
+      freeze_scaled: absent
   knock_message:
     size: 288
     fields:
@@ -1370,6 +1491,7 @@ structs:
       maximum: 1468
       carriers: 1624
       info: 1656
+      shown_count: absent
   carry_info:
     fields:
       destination: 224
@@ -1414,6 +1536,8 @@ structs:
     fields:
       maximum: absent
       minimum: absent
+      input_form: absent
+      new_lines: absent
       utf8: absent
       work: absent
       work_bytes: absent
@@ -1668,6 +1792,21 @@ structs:
     fields:
       throw_length_max: 1104
 functions:
+  options_button_icon: absent
+  options_direction: absent
+  options_confirm: absent
+  set_slot_difficulty: absent
+  fade_request: absent
+  face_message_request: absent
+  options_gate: absent
+  options_list_grow: absent
+  options_button_highlight: absent
+  title_confirm: absent
+  ui_set_render_opacity: absent
+  title_direction: absent
+  title_back: absent
+  title_list_grow: absent
+  ui_vertical_slot_sync: absent
   map_add_stream: 10772480
   map_remove_stream: 10761184
   map_duplicate_stream: 9698496
@@ -1834,6 +1973,7 @@ functions:
   pause_change: 10149312
   return_to_title: 4215168
   set_life: 14210752
+  life_refresh_gauge: absent
   damage_message: 7213840
   knock_message: 12487344
   post_message: 5812944
@@ -1843,6 +1983,7 @@ functions:
   npad_handheld_state: 95954736
   npad_joy_dual_state: 95954768
   mark_end_of_frame: 881760
+  actor_sleep_decision: absent
   mark_pose_dirty: 874544
   mark_render_state: 6218192
   widget_scale: 3576832
@@ -1922,6 +2063,9 @@ functions:
   squad_icon_count: 6302032
   squad_throw_trajectory: 3876384
 slots:
+  options_presenter_tick: absent
+  title_flow_update: absent
+  title_presenter_tick: absent
   physics_contacts:
     table: 123475936
     offset: 640
@@ -2046,6 +2190,10 @@ slots:
     table: 122212384
     offset: 2600
     stock: 53396560
+  controller_held: absent
+  controller_pressed: absent
+  controller_released: absent
+  controller_update: absent
 tables:
   actor_tables:
   - 122040608
@@ -2161,6 +2309,78 @@ tables:
   - 124501672
   - 124718056
   - 124832120
+  character_sites:
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  character_site_words:
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  character_site_registers:
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
 slot_groups:
   actor_register:
     offset: 1744

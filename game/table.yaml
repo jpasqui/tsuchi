@@ -28,6 +28,18 @@ identity:
   - {offset: 0x3405610, hash: 0x12E47DB99BCCB5CC}
 
 data:
+  options_direction_delegate_table: 0x8AA2518   # the function table of the Options menu's Up and Down handler
+  options_input_delegate_table: 0x8AA2588       # and of its Confirm and Back handlers
+  dialog_answer_yes: 0x93514C0                 # the names the game's dialogs answer with: the first button
+  dialog_answer_no: 0x93514C8                  # the second
+  dialog_answer_cancel: 0x93514D0              # the third
+  title_answer_load: 0x9347C28                 # the name the title's save list answers with for a slot to load
+  save_slot_paths: 0x934F160                   # the title's path for each save slot, an engine string (16 bytes) each
+  dialog_answer_return: 0x93514E0              # Back
+  dialog_result_table: 0x89C07B8               # the function table of the message that ends a dialog
+  dialog_result_header: 0x7F19FE8              # the 8 bytes that message carries, as the game makes it
+  title_direction_delegate_table: 0x8AA75D8      # and of its Up and Down handler
+  title_input_delegate_table: 0x8AA7648          # the function table of the title presenter's Confirm and Back handlers
   wwise_audio_manager: 0x92DD0E8
   wwise_parameter_manager: 0x92DD120
   ui_select_sound: 0x9335ae0 # native common UI focus FName, initialized as Select
@@ -115,6 +127,22 @@ data:
   gimmick_warp_stage_function: 0x14AB0D0
   content_icon_size: 0x935E568
 constants:
+  title_note_lift: 130                          # how far a mod's note sits above the title's description
+  options_entry_icon: 3                         # the frame of the menu's icon sheet a mod entry of the Options menu shows: two heads, Play Co-op's
+  options_row_pitch: 143                        # the height of Play Co-op's entry in that menu, with its spacing
+  options_up_key: 0                             # the Options menu's input map: Up and Down
+  options_down_key: 1
+  options_last_stock: 3                         # its last stock entry, where the game wraps Down to the first
+  title_flow_players_wait: 0x24                # the title flow's state while the Number of Players question is up
+  title_flow_menu: 2                           # the title flow's state while its menu takes input
+  title_flow_story: 6                          # and while it waits for the save list's answer: then it loads the slot
+  fade_out_in_front: 3                         # a fade request's direction: to black, with the loading screen above every other widget
+  fade_role_title: 1                           # and the sound role the title's save list gives that request
+  play_mode_one: 1                             # one player
+  dialog_result_message: 0x45                  # the kind of message that ends a dialog
+  title_confirm_key: 0x16                        # the title presenter's input map: Confirm
+  title_back_key: 0x17                           # and Back
+  title_menu_state: 5                            # title presenter state: the menu takes input
   stream_block_load: 0x80
   stream_source_cdo: 0x10
   physics_dynamic_kind: 6
@@ -210,6 +238,7 @@ constants:
   pause_blocks_travel: 0x7FFF0C0B   # the pause kinds under any of which the story takes no request for travel
   request_from_menu: 4              # where a request says it comes from, as the game's own menus say
   leave_request_id: 16
+  travel_request_id: 0xF               # what a travel request (from the map, or the game's own) says it is
   portal_request_id: 0xB
   dialog_question: 0x15             # the game's dialog with a button to accept and one to cancel
   dialog_message: 0x5E              # its dialog with one button
@@ -243,6 +272,7 @@ constants:
   team_story: 4                     # the team of the captain in the story, where there are no sides
   sort_dog: 4                       # the bit of an actor's sort that says it is a dog
   state_carcass: 0x10               # the bit of an actor's state that says it is a carcass
+  state_target_collection: 0x200    # the bit of an actor's state for a collection of targets, whose entries the life gauge's update calls into
   dismiss_keep_none: 0x10           # in an order to dismiss: no type stays with the leader
   play_mode_two: 2                  # two players, the second throwing pebbles: no switching to Oatchi
   pad_none: 7                       # the controller number that stands for none: the eighth, which is never connected
@@ -306,6 +336,32 @@ constants:
 # What the game calls things of its own, where the framework has to spell one: classes, and the stages the game
 # goes through.
 names:
+  title_text_part: PA_Title_Text                # the title's description, under its menu
+  title_text_text: F_Text                       # that description's text
+  options_button_icon_child: IM_Icon             # a menu button's icon
+  options_panel_child: PA_Dialog_Bg              # the Options menu's dark panel, sized for its own entries
+  options_view_class: WBP_ui_Option_Title_C     # the title's Options menu (Plus on the title screen)
+  host_page_article: PA_Content                 # the Information page's parts Tsuchi's host hides
+  host_page_scroll: N_Cvs_Scroll
+  host_page_scrollbar: PA_ScrollBar
+  host_page_pager: N_Hrz_Pager_000
+  host_page_canvas: N_Cvs_eshop                 # and the canvas its rows go on
+  host_page_header: PA_Header
+  host_header_text: F_Text
+  host_page_footer: PA_Footer
+  host_button_text: F_Text                      # a title button's text and new mark
+  host_button_new: PA_New
+  host_button_selected: Focus                    # a title button's selected look, and the animations between the two
+  host_button_focus: Normal2Focus
+  host_button_unfocus: Focus2Normal
+  host_line_text: F_Info_Text_000               # an Information text block's text
+  title_view_class: WBP_ui_Title_C                # the title screen's widget, which holds its menu
+  title_buttons_child: N_Vrt_Button              # the box of the title menu's buttons
+  title_canvas_child: N_Cvs_Title                # the title widget's canvas, where a mod's note goes
+  title_input_class: PlayerInputPresenter        # the title presenter's map of input handlers
+  title_buttons_box_class: VerticalBox
+  title_button_normal: Normal                    # a title button's look when it is not selected
+  title_button_slot_class: VerticalBoxSlot
   content_texture_class: Texture2D
   save_class: CarrotSaveGame        # every save object's class derives from it
   navigation_system_class: NavigationSystemV1
@@ -372,6 +428,7 @@ names:
   material_class: MaterialInterface
   skeletal_class: SkeletalMeshComponent
   clip_class: AnimationAsset
+  motion_blueprint_class: CarrotAnimInstance  # the game's own animation blueprints, which play motions by name
   map_rule_class: CarrotGameRule
   level_class: Level
   streaming_class: LevelStreamingDynamic
@@ -394,6 +451,7 @@ names:
   primitive_class: PrimitiveComponent   # a part that can collide
   avatar_class: AvatarComponent     # the part of a captain that decides for it
   life_class: LifeComponent         # the part that keeps life
+  creature_ai_class: TekiAIComponent  # the part that decides for a creature
   data_table_class: DataTable
   navmesh_class: RecastNavMesh
   nav_modifier_class: CarrotNavModifierComponent  # a part that marks the navmesh under it
@@ -428,6 +486,11 @@ names:
   gimmick_warp_class: WarpCarryAIComponent
 # Assets of the game's own that the framework loads, by their paths.
 assets:
+  title_text_class: /Game/Carrot4/UI/OutGame/Title/Parts/WBP_ui_PA_Title_Text.WBP_ui_PA_Title_Text_C  # the title's description, which a mod's note copies
+  options_button_class: /Game/Carrot4/UI/Common/Button/WBP_ui_PA_Button_Menu.WBP_ui_PA_Button_Menu_C  # an entry of the title's Options menu
+  host_page_class: /Game/Carrot4/UI/OutGame/Information/WBP_ui_Information.WBP_ui_Information_C   # Tsuchi's host: the frame
+  host_line_class: /Game/Carrot4/UI/OutGame/Information/Parts/WBP_ui_Info_PA_Text.WBP_ui_Info_PA_Text_C  # its lines of text
+  title_button_class: /Game/Carrot4/UI/OutGame/Title/Parts/WBP_ui_PA_Title_Button.WBP_ui_PA_Title_Button_C  # one entry of the title menu
   ui_mod_list_tab_class: /Game/Carrot4/UI/InGame/Tablet/Parts/WBP_ui_Tablet_PA_Tab_Item.WBP_ui_Tablet_PA_Tab_Item_C
   pikmin_property_table: /Game/Carrot4/Core/GActor/DT_PikminProperty.DT_PikminProperty
   pikmin_color_enum: /Script/Carrot4.EPikminColor
@@ -461,6 +524,23 @@ rows:
                   AreaSelect_Common_Complete_00]
 
 structs:
+  options_button: {fields: {look: 0x4D8, look_bytes: 0x15}}   # a menu button's ButtonSize, text place and PresetType (MenuButtonWidget)
+  options_presenter: {fields: {input: 0x78, view: 0x80}}   # the title's Options menu presenter: its input map and its widget
+  options_view: {fields: {state: 0x4D8, buttons: 0x4F8, count: 0x500, room: 0x504, selected: 0x508}}  # its widget
+  title_flow: {fields: {state: 0xD8, answered: 0xE8, answer: 0xEC, slot: 0xF4}}   # the title's state machine: its state, and the dialog's answer
+  dialog_result: {size: 0x50, fields: {self: 0x18, header: 0x28, message: 0x38, dialog_kind: 0x3C, as_flow: 0x4D}}
+  # The title presenter: the selected entry, its widget, its input map and its state (0 to 3 the opening and
+  # Press Start, 4 the menu coming in, 5 the menu, 9 and 10 a choice being carried out).
+  title_presenter: {fields: {cursor: 0x80, view: 0x88, input: 0xA8, state: 0xB0}}
+  # The title widget: the line under the menu, its list of buttons, the button count without a hidden last
+  # entry (bit 0 of hide), and which entry is hidden (hidden, or hidden_other when hidden_select is set).
+  title_view: {fields: {description: 0x560, buttons: 0x568, count: 0x570, room: 0x574, hidden_select: 0x5AB, hide: 0x5AC, hidden: 0x5B0, hidden_other: 0x5B4}}
+  # A title button: the name its choice goes by, its text and its new-content mark.
+  title_button: {fields: {id: 0x300, label: 0x528, mark: 0x540}}
+  # The title presenter's input map: four entries of 32 bytes, each a key at +0 and a handler instance at +8
+  # whose function sits at +32 and its presenter's weak index and serial at +24 and +28.
+  title_input: {fields: {data: 0xC8, count: 0xD0, capacity: 0xD4}}
+  title_handler: {fields: {key: 0, instance: 8, kind: 0x10, presenter_index: 24, presenter_serial: 28, function: 32, zero: 40}}
   console_manager_table:
     fields: {find_variable: {at: 0xb0, returns: pointer, args: [pointer, const_pointer, bool]}}
   console_variable_table:
@@ -476,7 +556,8 @@ structs:
       set: {at: 0x88, args: [pointer, const_pointer, u32]}
       value: {at: 0xa0, returns: f32, args: [pointer]}
   ui_widget:
-    fields: {render_x: 0x90, render_y: 0x94, render_scale_x: 0x98, render_scale_y: 0x9C, render_pivot_x: 0xAC, render_pivot_y: 0xB0, clipping: 0xC2, cached_slate: 0xD8, remove_from_parent: {at: 0x298, args: [pointer]}}
+    fields: {render_x: 0x90, render_y: 0x94, render_scale_x: 0x98, render_scale_y: 0x9C, render_pivot_x: 0xAC, render_pivot_y: 0xB0, clipping: 0xC2, cached_slate: 0xD8, remove_from_parent: {at: 0x298, args: [pointer]},
+             visibility: 0xC3}         # a byte: 0 visible, 1 collapsed, 2 hidden, 3 and 4 visible but not hit (UWidget.Visibility)
   ui_user_widget:
     fields: {tree: 0x1E8}
   ui_widget_tree:
@@ -715,9 +796,18 @@ structs:
              shape: 0x130, mode: 0x175,   # one byte each
              player: 0x1E0}           # whose answer counts; below 0 for anyone's
   dialog_widget:
-    fields: {text: 0x588}             # a weak reference to the block its text is shown in
+    fields: {text: 0x588,             # a weak reference to the block its text is shown in
+             kind: 0x5F4}             # which of the game's dialogs it shows
   ui_manager:
-    fields: {announcer: 0x2F0}        # what shows the game's announcements
+    fields: {announcer: 0x2F0,        # what shows the game's announcements
+             actor_access: 0x3B0,     # UIActorAccessMgr: the characters the screens are about
+             open_dialog: 0x980,      # the dialog on the screen
+             face_messages: 0xBB0}    # FaceMessageMgr: the crew's radio messages, by the names of its table's rows
+  face_message_manager:             # FaceMessageMgr
+    fields: {labels: 0x30,            # its labels, each with what it knows of one: elements (label, info, next in chain)
+             label_buckets: 0x68}     # and their hash: inline bucket, then the heap's buckets at +8 and their count at +0x10
+  ui_actor_access:
+    fields: {captain: 0x30}           # Orima, the reflected captain the throw-type HUD binds each update (0x2557270)
   announcer:
     fields: {banner: 0x2C0}           # the banner's widget, once the game has made it
   banner_widget:
@@ -812,9 +902,10 @@ structs:
              pending: 0xB0}                # a stage waiting to become its child
   game_instance:
     fields: {scene_manager: 0x1B0, config_save: 0x1F0, story_save: 0x1F8, controllers: 0x2E8, pause_manager: 0x538,
+             fade: 0x450,                # the fade manager that outlasts a level: its fade to black is the loading screen
              saves: 0x1F0}               # CarrotSaveGames: one object pointer for each of the save_kinds, config first
   config_save:
-    fields: {play_mode: 0x80, slot: 0x98}         # see the play_mode_ constants
+    fields: {play_mode: 0x80, slot: 0x98, difficulty: 0x2D8, difficulty_count: 0x2E0, difficulty_set: 0x2E8, difficulty_set_count: 0x2F0}  # see the play_mode_ constants; one byte for each slot in the two difficulty arrays
   story_save:
     fields: {night: 0xBC, summary: 0xB8, onyon_leaves: 0x290, onyon_deco: 0x2A0, outside_deco: 0x2B0, switch_unlocked: 0x268, day: 0xB8, treasure_records: 0x678, sparklium: 0xA78,  # nonzero once the story lets the player switch to Oatchi
              area_bases: 0xAB0, saved_portal: 0xB20, return_portal: 0xBA8, reserved_flow: 0xC30, reserved_travel_type: 0xC31}       # an array with one entry for each area's number
@@ -910,6 +1001,11 @@ structs:
     fields: {drawer: 0xA8}
   instance_drawer:                  # the game's one drawer of instances, which clears and adds them all each step
     fields: {components: 0x228, count: 0x230}
+  carry_numbers:                    # the component that draws the carry counters: one set of quads in the world
+    fields: {entries: 0xC0,           # its counters, 0x18 bytes each, the counter first
+             count: 0xC8}
+  carry_number:                     # one counter, in the part of what is carried that counts its carriers
+    fields: {place: 0xC}              # the point in the world its number is drawn at, put there each step
   instanced_mesh:                   # one of its parts: an instanced static mesh
     fields: {instances: 0x570,        # each a 64-byte matrix
              count: 0x578,
@@ -924,6 +1020,8 @@ structs:
     fields: {anchor: 0x6B0,           # the world point it hangs from
              shown: 0x69C,            # nonzero while it is shown; it is placed only then
              position: 0x230}
+  action_marker:                    # an action prompt over an actor, such as Ride over Oatchi (CarrotActionMarkerWidget)
+    fields: {actor: 0x9C8}            # MarkerActor, the actor it points at (an object property)
   material_instance_values:         # a material instance's own parameter values, which its setters keep
     fields: {scalars: 0xE0, vectors: 0xF0}
   material_scalar_value:            # one of them: the parameter's info, its value at material_parameter.value
@@ -959,12 +1057,26 @@ structs:
              events: 0x4C0,           # what runs the level's scripted events
              actor_list: 0xEF8,       # the first link of the ring of actors in play
              pikmin_list: 0xF28,      # and of the ring of Pikmin, the dying among them
-             pikmin_counters: 0xED0}  # the game's counts of its Pikmin by type, leaf, state and player
+             pikmin_counters: 0xED0,  # the game's counts of its Pikmin by type, leaf, state and player
+             carry_numbers: 0x4F0}    # the component that draws every carry counter (UInstancedCarryNumMgrComponent)
   actor_node:                       # one link of that ring; each actor carries its own
     size: 0x18
     fields: {next: 0x8, actor: 0x10}
   engine_actor:
     fields: {root: 0x130, play_state: 0x5C}
+  skeletal_mesh:                    # a skeletal mesh part
+    fields: {blueprint: 0x720}        # the animation blueprint that runs on it now (AnimScriptInstance)
+  motion_blueprint:                 # one of the game's own animation blueprints (CarrotAnimInstance)
+    fields: {speed: 0x2B8,            # what it blends walking and running by
+             motions: 0x3F0,          # its state machines by name, in slots laid out as a row_list, each a motion_entry
+             move_motion: 0x440}      # the name of its move motion, at the start of a record like a motion_entry's
+  motion_entry:                     # one slot: a state machine's name and the motion it plays
+    size: 0xA0
+    fields: {state_machine: 0x0, motion: 0x8}
+  motion_blueprint_table:           # entries in its function table, each overridden by some kinds of blueprint
+    fields: {set_motion: {at: 0x350, args: [pointer, u64, u64]},  # (blueprint, motion name, state machine name)
+             set_move_motion: {at: 0x358, args: [pointer, u64]},  # (blueprint, move motion name)
+             set_speed: {at: 0x360, args: [pointer, f32]}}        # (blueprint, speed); some kinds ease toward it
   ordinary_actor_vtable:
     fields:
       end_play: {at: 0x348, args: [u64, u8]}
@@ -1002,6 +1114,7 @@ structs:
              support_contact: 0x1820, # accepted upward support in the current native contact update
              air_steps: 0x1CB8,       # steps since a contact reset; some wall contacts reset this too
              contact_step: 0x1CBC,    # TickPre sets this; collision processing consumes it before resetting contacts
+             body: 0x2F0,             # its skeletal mesh, animated by one of the game's own blueprints
              placement: 0x27C8}
   spawn_request:                    # what the game's spawner is given
     size: 0xE8
@@ -1075,6 +1188,21 @@ structs:
              ride_asked: 0x1495}      # set when a ride is asked for; the game leaves it set
   avatar_table:                     # entries in the function table of that part
     fields: {squad: {at: 0x918, returns: u64, args: [pointer]}}            # (the part) -> the squad it throws from: its own, or its dog's while it rides
+  character_part:                   # the steered part of a captain or a dog, game_actor.player (Orima_Update 0x158BE20)
+    fields: {controller: 0x758,       # its controller object, which turns buttons into logical inputs
+             move: 0x744}             # this frame's move direction across the world, three floats (written at 0x158C778)
+  game_controller:                  # a gameplay controller object (constructor 0x2055900, size 0xB8)
+    fields: {unpaused_frames: 0x80,   # an i32; a press reads as up while it is below 2 (0x20445EC)
+             lock_mask: 0x88,         # a u64, one bit for each input number modulo 64 (0x2043380)
+             lock_timer: 0x90,        # a float; masked inputs read as up while it is above 0 (0x204327C)
+             press_ages: 0x98,        # an array of press_age, one for each input number from 0 (0x2044510)
+             press_age_count: 0xA0}   # an i32, its length
+  press_age:                        # how long ago an input was last pressed; Oatchi's bite and jump read it (0x13C5DE4)
+    size: 0x10
+    fields: {seconds: 0x4}
+  game_controller_table:            # entries in the function table of a gameplay controller, 0x89D2208
+    fields: {locked: {at: 0xD8, returns: bool, args: [pointer]},                  # (controller) -> every input reads as up
+             pressed: {at: 0x60, returns: bool, args: [pointer, i32, pointer, pointer]}}  # (controller, input, null, null)
   whistle_part:
     fields: {radius: 0x234, center: 0x240,
              count: 0x360}            # how many whistles it has begun
@@ -1082,7 +1210,18 @@ structs:
     fields: {offset: 0x280,           # where it is from the captain, across the ground; the game works out the point from this
              position: 0x2A4}         # the point it is on
   life_component:
-    fields: {max: 0x32C, current: 0x330, extra: 0x334, max_extra: 0x338}
+    fields: {max: 0x32C, current: 0x330, extra: 0x334, max_extra: 0x338,
+             actor: 0x208,            # its creature, which the gauge's update reads
+             gauge_enabled: 0x2D0,    # EnableLifeGauge: the gauge's update does nothing without it
+             gauge_views: 0x2AC,      # how many views the gauge is placed for
+             gauge_list_1: 0x248,     # three lists the gauge's update walks: pointers in the first, bytes in the others
+             gauge_list_2: 0x288,
+             gauge_list_3: 0x298,
+             gauge_full: 0x53C}       # the full health the gauge measures against; the last field the update reads
+  gauge_actor:                      # what of a creature the life gauge's update (0x1ADEDA0) reads besides its root and physics parts
+    fields: {part_1: 0x3A0, part_2: 0x4B0}  # two more of its own parts, when set; part_2 is its StickComponent
+  gauge_stick:                      # the creature's StickComponent (gauge_actor part_2), as the gauge's update reads it
+    fields: {clung: 0x2A1}          # set while Pikmin cling to it: the update then shows the gauge below full health
   action:                           # one thing an actor is doing; what it is doing within that is its child
     fields: {child: 0x68, name: 0x80}
   message_queue_table:
@@ -1100,6 +1239,12 @@ structs:
     fields: {amount: 0x40, attack: 0x49,
              riding_applies: 0xAA,    # a captain riding Oatchi loses life only with this set
              origin: 0xB8}            # where the hit came from: a victim is pushed away from here
+  pikmin_hit:                       # a damage message's fields for a thrown Pikmin's direct hit (attack 1), as the throw's
+                                    # contact handler (0x1735D50) fills them at 0x1736608; ComputeDamage reads them at 0x1AE407C
+    fields: {point: 0x4C,             # where the Pikmin touched the target, three floats
+             press: 0x78,             # 1 for a landing that presses: MaxLife / the target life's LethalDose.PressHit (+0x36C)
+             part: 0x80,              # the collision part it touched; 0 as the message's constructor leaves it
+             freeze_scaled: 0xB0}     # 1: a frozen target takes the hit scaled by its FreezeDamageRatio
   knock_message:
     size: 0x120
     fields: {velocity: 0x78, damage: 0xF0}
@@ -1146,8 +1291,8 @@ structs:
              actors: 0x4C8,           # an array of the actors it made
              flags: 0x4D8}            # see generator_added
   engine_transform:                 # a turn as x, y, z, w, a place, and a scale, each of floats, as the engine keeps one
-    size: 0x30
-    fields: {rotation: 0x0, translation: 0x10, scale: 0x20}
+    size: 0x30                      # the scale follows the place with no gap: a generator of scale 0.3 reads 0.3 at 0x1C, 0x20, 0x24
+    fields: {rotation: 0x0, translation: 0x10, scale: 0x1C}
   ai_values:                        # what an AI part writes its values into and reads them from: two arrays of bytes
     size: 0x20
     fields: {set: 0x0,                # what the level's maker set for it
@@ -1196,7 +1341,8 @@ structs:
   carry_actor:
     fields: {component: 0x310}
   carry_component:
-    fields: {weight: 0x560, maximum: 0x564, carriers: 0x600, info: 0x620}
+    fields: {weight: 0x560, maximum: 0x564, carriers: 0x600, info: 0x620,
+             shown_count: 0xC24}      # the count its counter shows in place of the carriers' (0xD4BA10), or -1 for theirs
   carry_info:
     fields: {destination: 0xE0, arrival_destination: 0xF0}
   carry_stick:
@@ -1215,7 +1361,8 @@ structs:
   # ui
   ui_keyboard:
     size: 0x500
-    fields: {maximum: 0x3AC, minimum: 0x3B0, utf8: 0x3BD, work: 0x4D0, work_bytes: 0x4D8}
+    # input_form: 0 is one line; new_lines: whether Enter adds one. The game's name entry clears both.
+    fields: {maximum: 0x3AC, minimum: 0x3B0, input_form: 0x3B8, new_lines: 0x3BC, utf8: 0x3BD, work: 0x4D0, work_bytes: 0x4D8}
 
   # ui
   effect_owner:
@@ -1323,6 +1470,21 @@ structs:
 
   # carry: original Attach 0x1A71074..0x1A710E4 and DrainAttachmentList3B8.
 functions:
+  options_button_icon: {address: 0x24170A0, returns: void, args: [pointer, i32]}  # a menu button's icon, which also places its label
+  options_direction: {address: 0x28E2E40, returns: bool, args: [pointer, bool]}  # the Options menu's Up and Down (presenter, down)
+  options_confirm: {address: 0x28E2E90, returns: bool, args: [pointer]}          # and its Confirm
+  set_slot_difficulty: {address: 0x20B9330, returns: void, args: [pointer, u32, i32]}  # (config, difficulty, slot): also marks the slot as having one, so it isn't asked
+  face_message_request: {address: 0x2778100, returns: void, args: [pointer, pointer, u32, u32]}  # (FaceMessageMgr, a row's name, 0, 0): a missing or turned-off row is dropped; both of the game's callers pass 0, 0
+  fade_request: {address: 0x1D45BF0, returns: void, args: [pointer, u32, u32, bool, f32]}  # (fade manager, direction, sound role, with the story's numbers, seconds): the title's save list asks (3, 1, false, 0.3) as the player picks Load
+  options_gate: {address: 0x2D38910, returns: bool, args: [pointer]}             # whether its widget takes input now
+  options_list_grow: {address: 0x2489150, returns: void, args: [pointer]}        # grows its button list to fit its count
+  options_button_highlight: {address: 0x2416C30, returns: void, args: [pointer, bool, bool]}  # a menu button selected or not
+  ui_set_render_opacity: {address: 0x4C6CFD0, returns: void, args: [pointer, f32]}  # a widget's opacity, 0 to 1
+  title_direction: {address: 0x29573C0, returns: bool, args: [pointer, i32]}  # the title presenter's Up and Down handler
+  title_confirm: {address: 0x2957420, returns: bool, args: [pointer]}       # the title presenter's Confirm handler
+  title_back: {address: 0x29574B0, returns: bool, args: [pointer]}          # and its Back handler
+  title_list_grow: {address: 0x2D8BA80, returns: void, args: [pointer]}     # grows the title widget's button list to fit its count
+  ui_vertical_slot_sync: {address: 0x4C69000, returns: void, args: [pointer]}  # applies a VerticalBoxSlot's padding
   map_add_stream: {address: 0x05BAB910, args: [pointer, pointer]}
   map_remove_stream: {address: 0x05BABDB0, returns: bool, args: [pointer, pointer]}
   map_duplicate_stream: {address: 0x039BDA20, returns: pointer, args: [const_pointer, pointer, u64, u32, pointer, i32, u32]}
@@ -1591,6 +1753,7 @@ functions:
   return_to_title: {address: 0x1EB75A0, returns: void, args: [bool]}                     # true: open the title screen. Nothing is saved
   # the part that keeps life, jump the gauge to it, who did it (an object's number and serial), the new life
   set_life: {address: 0x1AE5FC0, returns: void, args: [pointer, bool, u64, f32]}
+  life_refresh_gauge: {address: 0x1ADEDA0, returns: void, args: [pointer, f32]}     # (life, seconds): only the gauge's update, which the creature's own update calls
   damage_message: {address: 0x1B4B370, returns: void, args: [pointer, pointer]}          # makes one in the memory given: (memory, attacker or null)
   knock_message: {address: 0x1B4B6E0, returns: void, args: [pointer, pointer]}           # the same for a knock
   post_message: {address: 0x1B8B8D0, returns: bool, args: [pointer, pointer]}            # (actor, message): the actor's queue takes it, or it is freed
@@ -1603,6 +1766,9 @@ functions:
   npad_joy_dual_state: {address: 0x62EF200, args: [pointer, const_pointer]}
   # A part: it is put on its world's list of what the end of the frame sends; its pose is to be sent, and it is put there.
   mark_end_of_frame: {address: 0x5259D50, args: [pointer]}
+  # An actor: whether it sleeps (no player sees it and no Pikmin are near) or wakes, decided and done as its own
+  # update does each frame (GActor_UpdatePhysicsFreeze, from GActor_TickPre). awake_holds keeps it awake.
+  actor_sleep_decision: {address: 0x1B81160, args: [pointer]}
   mark_pose_dirty: {address: 0x5259F70, args: [pointer]}
   # A part: the renderer's copy of it is made again at the end of the frame.
   mark_render_state: {address: 0x52597B0, args: [pointer]}
@@ -1713,6 +1879,26 @@ tables:
                        0x8AD6958, 0x8AD7B30, 0x8AD9330, 0x8ADC2A0, 0x8ADC900, 0x8ADD4C0, 0x8AE1BE8, 0x8AE36C8,
                        0x8AE30D8, 0x8A60830, 0x89EA408, 0x8A0F2F0, 0x8A1E8A8, 0x8A25F10, 0x8A264F0, 0x8A64F60,
                        0x8A8A570, 0x8AC1750, 0x8AFC758, 0x8B0FF20]
+  # Where a captain's or a dog's action reads its logical input, in the order of character_backend.cpp's sites: the
+  # instruction, the game's instruction there, and the register that holds the character's steered part, or 31 when
+  # x0 holds its controller at the call, or 32 plus the register that holds the controller.
+  #   0 whistle pressed (blr, Orima_WhistleInput 0x15A9FC0)   1 whistle held after a ride (blr)
+  #   2 captain throw pressed (blr, 0xDF8760)                 3 captain throw held (br, IsThrowHeld 0x15A0670)
+  #   4 dismiss (blr, 0xDF4070)                                5 type switch one way (tbnz after bl 0x2044990, 0x157F810)
+  #   6 type switch the other way (blr, 0x157F810)            7 ride pressed (blr, Control Execute 0xE040F0)
+  #   8, 9 ride released 13 and 19 (blr)                      10 dog throw of riders (blr, 0x13BBB80)
+  #   11 dog throw pressed (br, 0x1402C20)                    12 dog throw held (br, 0x1402D10)
+  #   13 bite (blr, 0x13C5AE0)                                14 bite's press age (ldr s0, [x8, #0x124])
+  #   15 jump, buffered (blr, 0x13C6330)                      16 jump's press age (ldr s0, [x8, #0x144])
+  #   17 jump (blr)                                           18, 19 rush charge pressed and held (blr, 0x13BBB80)
+  #   20 interact (blr, 0x13C8670)                            21, 22 after the move direction is written (0x158BE20)
+  character_sites: [0x15AA0B0, 0x15AA108, 0xDF87AC, 0x15A0680, 0xDF40DC, 0x157F9A8, 0x157F9C4, 0xE06CC4, 0xE05C90,
+                    0xE05CA8, 0x13BC6A8, 0x1402C98, 0x1402D20, 0x13C5DD8, 0x13C5DE4, 0x13C6488, 0x13C6494, 0x13C650C,
+                    0x13BC8F4, 0x13BCBC0, 0x13C8A24, 0x158C780, 0x1591808]
+  character_site_words: [0xD63F0100, 0xD63F0100, 0xD63F0100, 0xD61F0040, 0xD63F0100, 0x37000BA0, 0xD63F0100, 0xD63F0100,
+                         0xD63F0100, 0xD63F0100, 0xD63F0100, 0xD61F0080, 0xD61F0040, 0xD63F0100, 0xBD412500, 0xD63F0100,
+                         0xBD414500, 0xD63F0100, 0xD63F0100, 0xD63F0100, 0xD63F0100, 0xB50037F4, 0xF9417D16]
+  character_site_registers: [19, 19, 19, 31, 19, 19, 19, 23, 23, 23, 31, 31, 31, 31, 53, 31, 53, 31, 31, 31, 31, 19, 19]
 
 # One entry in each of a list of tables, with the functions the game puts there.
 slot_groups:
@@ -1728,6 +1914,9 @@ slot_groups:
 
 
 slots:
+  options_presenter_tick: {table: 0x8AA1378, offset: 0x280, stock: 0x28E2660, args: [pointer, f32]}  # the Options menu presenter, each frame
+  title_flow_update: {table: 0x89C0620, offset: 0x28, stock: 0x1F310E0, args: [pointer, f32]}  # the title's state machine
+  title_presenter_tick: {table: 0x8AA49B8, offset: 0x280, stock: 0x2957170, args: [pointer, f32]}  # the title presenter, each frame it runs
   physics_contacts: {table: 0x89DA570, offset: 0x278, stock: 0x2166790, args: [pointer, pointer]} # handler, pending collision array
   ui_mod_list_construct:
     table: 144906144
@@ -1790,6 +1979,13 @@ slots:
   battle_roulette: {table: 0x89BBB30, offset: 0x50, stock: 0x1E26470, returns: u32, args: [pointer, pointer]}
   squad_grab_avatar: {table: 0x88A59D8, offset: 0xA20, stock: 0x15A21F0, returns: u64, args: [pointer, u64]}
   squad_grab_orima: {table: 0x88ADC78, offset: 0xA20, stock: 0x15A21F0, returns: u64, args: [pointer, u64]}
+  # A gameplay controller's logical inputs, in its function table 0x89D2208: (controller, input) -> held; (controller,
+  # input, repeat, count) -> pressed this frame; (controller, input) -> released this frame; (controller, seconds) once a
+  # frame from the controller manager (0x20576F8), which also ages the press-age table through the pressed entry.
+  controller_held: {table: 0x89D2208, offset: 0x38, stock: 0x2043250, returns: bool, args: [pointer, i32]}
+  controller_pressed: {table: 0x89D2208, offset: 0x60, stock: 0x20445C0, returns: bool, args: [pointer, i32, pointer, pointer]}
+  controller_released: {table: 0x89D2208, offset: 0x68, stock: 0x2043810, returns: bool, args: [pointer, i32]}
+  controller_update: {table: 0x89D2208, offset: 0x90, stock: 0x2042B70, args: [pointer, f32]}
 # What a native route's handler finds where, by route: register numbers, and offsets from the stack pointer
 # where the route's stack is read. Another compiler can put these elsewhere, so each is per build.
 # A number in a route's frame is a register, unless it is listed here as an offset from the stack.

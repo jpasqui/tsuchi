@@ -539,7 +539,7 @@ TSUCHI_Buttons service_held = 0, service_hidden = 0;
 bool hidden_ready = true;
 TSUCHI_Result service_pad(uint32_t player, TSUCHI_PadState* out) { assert(!player); *out = {}; out->connected = true; out->held = service_held; return TSUCHI_OK; }
 TSUCHI_Result service_hidden_mask(uint32_t player, TSUCHI_Buttons* out) { assert(!player); if (!hidden_ready) return TSUCHI_NOT_READY; *out = service_hidden; return TSUCHI_OK; }
-const input::Backend input_backend{service_pad,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,service_hidden_mask};
+const input::Backend input_backend{service_pad,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,service_hidden_mask,nullptr,nullptr};
 #endif
 }
 namespace tsuchi {

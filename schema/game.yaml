@@ -21,6 +21,15 @@ enums:
     open: true
     doc: "A world that the game loads, like an area, a cave floor, or the title screen. The game's own worlds use their level's name, like `Area001_P`. A mod's map uses `<mod id>:<name>`."
 
+  PlayerChoice:
+    open: false
+    doc: "An answer to the game's Number of Players question after Story and a save."
+    values:
+      - {name: one, value: 1, doc: "One Player, the first button."}
+      - {name: two, value: 2, doc: "Two Players, the second button."}
+      - {name: third, value: 3, doc: "The third button, when a mod's change to the dialog's row gives it one."}
+      - {name: back, value: 4, doc: "Back to choosing a save."}
+
   Mode:
     open: false
     classified: true
@@ -250,7 +259,68 @@ functions:
       busy: Admission is in progress.
     users: [kadan, remote-content-tools]
 
+  - name: load_story
+    doc: |
+      Loads a save slot into the story from the title screen, the same way that picking
+      it in the save list and choosing Load does, without showing the menus. A slot
+      that has never had a difficulty gets the one it is set to, so the game doesn't
+      ask. The game starts loading on its next update. Use `save.use_stand_in` first to
+      load a replacement in place of the slot.
+    params:
+      - {name: slot, type: u32, doc: "The slot, from `0`."}
+    fails:
+      invalid: "That slot doesn't exist, or the title screen has no file for it."
+      not_ready: "The title screen's menu isn't taking input, or the game is fading or busy with its saves."
+      busy: "A load was already asked for."
+      unsupported: "This build of the game has no adapter for the title flow."
+    users: [online-coop, dog-coop]
+
+  - name: hold_player_choice
+    doc: |
+      Gives your mod every answer to the game's Number of Players question, the one after Story and a
+      save. The game keeps waiting, with the title screen behind it, until you call
+      `answer_player_choice`. The hold ends when released or your mod stops; an answer still waiting is
+      then Back.
+    owns: true
+    fails:
+      busy: "Another mod holds the choice."
+      unsupported: "This build of the game has no adapter for the title flow."
+    users: [online-coop, dog-coop]
+
+  - name: release_player_choice
+    doc: "Lets the game take the answers to its Number of Players question again."
+    owns: true
+    fails:
+      not_found: "Your mod does not hold the choice."
+    completes: hold_player_choice
+
+  - name: answer_player_choice
+    doc: "Answers the Number of Players question that waits for your mod, as the game's own answer."
+    owns: true
+    params:
+      - {name: choice, type: enum<PlayerChoice>, doc: "The answer the game goes on with."}
+    fails:
+      invalid: "The choice isn't one of the four."
+      not_found: "Your mod does not hold the choice."
+      not_ready: "No answer waits for your mod."
+    users: [online-coop, dog-coop]
+
 events:
+  - name: player_choice
+    doc: "Emitted when the player answers the Number of Players question while your mod holds the choice."
+    fields:
+      - {name: choice, type: enum<PlayerChoice>, doc: "The player's answer."}
+    users: [online-coop, dog-coop]
+
+  - name: story_load_requested
+    doc: |
+      Emitted when the title screen is asked to load a save slot into the story:
+      the player picked the slot and Load, or a mod called `load_story`. It comes
+      as the title takes the answer, before the game fades out and loads.
+    fields:
+      - {name: slot, type: u32, doc: "The slot, from `0`."}
+    completes: load_story
+
   - name: mode_changed
     doc: "Emitted when the game changes from one mode to another. Like every event in this service, it is detected by checking once per world step while a mod is listening, and the first check doesn't report anything."
     fields:

@@ -59,8 +59,8 @@ void close_view(void*) { ++destroyed_views; }
 UiRenderer renderer{open_view,update_view,live_view,close_view};
 TSUCHI_Result confirm(TSUCHI_Mod*,const char* text,TSUCHI_Dialog* out) { prompt=text; *out={++asked.id}; return TSUCHI_OK; }
 TSUCHI_Result show(TSUCHI_Mod*,const char* text,TSUCHI_Dialog* out) { message=text; *out={999}; return TSUCHI_OK; }
-const dialog::Backend dialog_backend{confirm,show};
-void answer(bool yes) { dialog::emit_answered_to(framework,{asked,yes}); }
+const dialog::Backend dialog_backend{confirm,show,nullptr,nullptr,nullptr};
+void answer(bool yes) { dialog::emit_answered_to(framework,{asked,yes,yes?0u:1u}); }
 bool request(uint32_t index) { UiModListRow row{}; assert(callbacks.row(index,row)); return row.requested; }
 void select(const char* control) { const auto* screen=ui_active_screen(); assert(screen); ui::emit_activated_to(framework,{{screen->id},control}); }
 void step() { for(auto fn:steps) fn(); }

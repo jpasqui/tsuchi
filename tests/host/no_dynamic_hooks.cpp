@@ -13,4 +13,5 @@ TSUCHI_Result dynamic_remove(TSUCHI_Mod*, uint64_t) { return TSUCHI_NOT_FOUND; }
 uint64_t stack_room() { return UINT64_MAX; }
 uint64_t engine_frame_number() { return 0; }
 bool each_dynamic_frame(void (*)()) { return true; }
+TSUCHI_Result hook_slot_entry(const char*, uint64_t&, uint64_t&) { return TSUCHI_NOT_FOUND; }
 }

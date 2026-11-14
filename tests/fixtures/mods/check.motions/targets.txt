@@ -1,0 +1,9 @@
+Default,UpperSM,FacialSM,DemoSM,StemSM
+Default,HeadSM,TailSM,DemoSM,EyeSM,BigSM
+CHAPPY,KOCHAPPY
+Default
+Sleep
+Wait
+TsuchiCheckMove
+TsuchiCheckMove2
+/Game/Carrot4/Placeables/Teki/GKochappy.GKochappy_C

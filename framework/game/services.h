@@ -8,6 +8,8 @@
 namespace tsuchi {
 
 void net_start();
+// The microphone and other players' voices (voice_backend.cpp).
+void voice_start();
 void session_start();
 void session_set_clock(double (*clock)());
 
@@ -97,7 +99,7 @@ void audio_start();
 void effects_start(TSUCHI_Mod* self);
 void world_start();
 void anim_start();
-void story_start();
+void story_start(TSUCHI_Mod* const* framework);
 // Wraps the two calls in which the game sets up a dialog, for the framework's own context. The first is entered
 // through `setup_entry`, which hands on the request the game is setting up from: see `tsuchi_dialog_on_setup`.
 void dialogs_start(TSUCHI_Mod* self, void* setup_entry);
@@ -165,6 +167,8 @@ void carry_start(TSUCHI_Mod* self);
 
 // The input service: controllers read once per world step, buttons pressed and hidden, and the keyboard.
 void input_start(TSUCHI_Mod* self);
+// The character service: a captain's or a dog's logical inputs, movement and actions, held by mods.
+void characters_start(TSUCHI_Mod* self);
 // Every button the system says is held, on every controller read at this step, in the system's bit order. 0 before
 // the first step.
 uint64_t input_keys_held();

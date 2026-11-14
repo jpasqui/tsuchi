@@ -177,6 +177,8 @@ TSUCHI_Result list_folder(const char* path, Texts&, Texts& folders) {
     for (const auto& id : ids) if (!folders.add(id.c_str())) return TSUCHI_NO_MEMORY;
     return TSUCHI_OK;
 }
+// The same with sizes, as the development folders are listed: this stand-in lists folders only, so there are none.
+TSUCHI_Result list_folder(const char* path, Texts& files, Texts& folders, List<uint64_t>&) { return list_folder(path, files, folders); }
 TSUCHI_Result file_size(const char* path, uint64_t& size) {
     const std::string* file = find_file(path);
     if (!file) return TSUCHI_NOT_FOUND;

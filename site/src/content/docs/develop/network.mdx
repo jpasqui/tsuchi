@@ -122,3 +122,32 @@ the peer times out.
 
 Call `session.leave` to end the session your mod started, and
 `session.close_channel` to stop receiving its events. Both end when your mod stops.
+
+## Securing a session
+
+A session is open by default: its messages can be read on the way, and anyone who reaches the host can
+join it. To play with someone outside your own network, give both machines the same 32 random bytes with
+`session.set_secret` before `session.host` or `session.join`. Every datagram of that session is then
+encrypted and authenticated, and a machine without the secret gets no answer at all.
+
+Your mod decides how the second machine gets the secret, for example from an HTTPS service that hands it
+only to a guest the host's player let in. Make each secret with a cryptographic generator and use it for
+one session. A secured session still trusts what its partner sends: check it as you would any input.
+
+## Getting through routers
+
+Players on different networks usually can't join by address, because the host's router doesn't
+let the guest's datagrams in. Two calls get them through without forwarding a port. Your mod
+introduces the two machines itself, for example with join codes from an HTTPS service it reaches
+with `net.get`.
+
+1. Each machine calls `session.discover` with a STUN server's numeric address and port, after
+   `session.host` or `session.join`. A moment later `session.public_address` returns the address
+   and port that the internet sees for its session.
+2. Your mod gives each machine the other's public address.
+3. The guest joins the host's public address with `session.join`, and the host calls
+   `session.punch` with the guest's. The host's router then lets the guest's joins in.
+
+`session.public_address` returns `not_ready` until the STUN server answers, and `io` if it never
+does. Some mobile networks give each destination its own outgoing port, and punching can't get
+through them. Players on the same network join by local address instead.

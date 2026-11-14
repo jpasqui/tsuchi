@@ -63,7 +63,11 @@ TSUCHI_Result knockback(TSUCHI_Actor victim, const TSUCHI_Vec3* velocity, float,
 // The stand-in has no Pikmin.
 TSUCHI_Result kill_pikmin(TSUCHI_Actor, TSUCHI_DeathCause, TSUCHI_Actor) { return TSUCHI_NOT_FOUND; }
 
-const tsuchi::combat::Backend backend{get_life, set_life, damage, knockback, kill_pikmin};
+// Nor a Pikmin to land.
+TSUCHI_Result thrown_hit(TSUCHI_Actor, TSUCHI_Actor, const TSUCHI_Vec3*, bool) { return TSUCHI_NOT_FOUND; }
+
+TSUCHI_Result refresh_gauge(TSUCHI_Actor, float, bool) { return TSUCHI_NOT_FOUND; }
+const tsuchi::combat::Backend backend{get_life, set_life, damage, knockback, thrown_hit, kill_pikmin, refresh_gauge};
 
 TSUCHI_Result hold_look(TSUCHI_Mod*, uint32_t player, const TSUCHI_Look* target) {
     return player == 0 && target->actor.id <= 1 && target->point.x == 1 &&

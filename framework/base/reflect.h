@@ -113,6 +113,8 @@ TSUCHI_Result write_text(const Place& place, const char* text);
 // TSUCHI_CAPACITY for text longer than the game stores, TSUCHI_NOT_READY while the
 // game cannot be asked.
 TSUCHI_Result name_from_utf8(const char* text, Name& out);
+// The game's name for the text only if it has one already: not_found otherwise, and nothing is added.
+TSUCHI_Result existing_name_from_utf8(const char* text, Name& out);
 // UTF-8 to the engine's 16-bit units. Counts every unit and writes those that
 // fit, without a terminator. False for text that is not well-formed UTF-8.
 bool utf8_to_units(const char* text, char16_t* out, size_t capacity, size_t& count);
@@ -173,6 +175,10 @@ uint64_t default_object(uint64_t type);
 // Memory from the engine's own allocator, and giving it back. Null while the
 // engine has no allocator yet, or has no memory to give.
 void* engine_memory(uint64_t bytes);
+// The same at an address that is a multiple of `alignment`, a power of two, or the allocator's own for 0.
+void* engine_memory_aligned(uint64_t bytes, uint32_t alignment);
+// Whether the engine's allocator can be reached yet.
+bool engine_memory_available();
 void release_engine_memory(void* block);
 
 // Memory for a function's arguments and results, set up as the engine expects.

@@ -51,6 +51,18 @@ enums:
     - {name: l, value: 4, doc: The L button.}
     - {name: r, value: 5, doc: The R button.}
     - {name: zr, value: 6, doc: The ZR button.}
+  Menu:
+    open: false
+    doc: A menu of the game's own that takes mod entries.
+    values:
+    - {name: title, value: 1, doc: "The title screen's menu, under Press Start."}
+    - {name: title_options, value: 2, doc: "The menu that Plus opens on the title screen, with Play Co-op and Settings."}
+  TextKind:
+    open: false
+    doc: Which keys the software keyboard offers.
+    values:
+    - {name: text, value: 1, doc: "The full keyboard, with letters and symbols."}
+    - {name: number, value: 2, doc: "A number pad with only digits."}
 functions:
 - name: create
   doc: Creates an empty screen. Add controls before you open it. The framework destroys the screen when
@@ -490,6 +502,40 @@ functions:
     not_ready: The viewport could not be detached or its owner ended during the call.
     busy: A viewport addition or removal is already in progress.
   completes: hold_widget
+- name: hold_mark
+  doc: Hangs your widget from a point over an actor, the way the game hangs its life gauges and prompts. On
+    every frame, including the frames between steps, the widget's canvas slot is put where the point is on the
+    player's screen. The point moves between the last two steps as the actor is drawn, and the widget is hidden
+    while the point is behind the camera. The slot is anchored to the canvas's top left corner and aligned as you
+    ask; its size stays yours. Its canvas should cover the screen. Holding the same widget again changes the
+    actor, the offset or the alignment. The hold ends when you release it, when the actor, the widget or its root
+    is gone, and when your mod stops. The slot then stays where it was last put.
+  owns: true
+  params:
+  - {name: widget, type: handle<object>, doc: "A widget in your tree whose slot is a CanvasPanelSlot, or that slot."}
+  - {name: actor, type: handle<actor>, doc: The actor it hangs from.}
+  - {name: player, type: u32, doc: "The player whose screen it is placed on, from 0 to 3."}
+  - {name: offset, type: vec3, doc: "Centimeters from the actor's place, in the world. `{0, 0, 150}` is over a captain's head."}
+  - {name: align_x, type: f32, doc: "The point of the widget that is put there, across: `0` is its left edge, `0.5` its middle and `1` its right edge."}
+  - {name: align_y, type: f32, doc: "The same, down: `0` is its top edge and `1` its bottom edge."}
+  fails:
+    invalid: The player is outside its range, a number is not finite, or the widget's slot is not a CanvasPanelSlot.
+    not_found: The widget or the actor no longer exists, or the widget is not owned.
+    denied: Another mod owns the widget.
+    not_ready: The player has no controller yet, or the game's slot calls are unavailable.
+    capacity: 64 widgets are hung already.
+  completes: hold_widget
+- name: release_mark
+  doc: Lets your widget go from the actor it hangs from. It stays where it was last put, and is shown again if
+    it was hidden behind the camera.
+  owns: true
+  params:
+  - {name: widget, type: handle<object>, doc: The widget or the slot that you hung.}
+  fails:
+    not_found: The widget no longer exists, is not owned, or does not hang from an actor.
+    denied: Another mod owns the widget.
+    invalid: The object is not a widget or a CanvasPanelSlot.
+  completes: hold_widget
 - name: hold_button_events
   doc: Observes the native clicked, pressed, released, hovered and unhovered events of an owned UMG Button.
     Existing engine delegates still run once. Events are queued for the next world step and delivered only
@@ -546,13 +592,13 @@ functions:
 - name: set_widget_text
   doc: Sets an owned CarrotRichTextBlock through the native FText setter. The widget must belong
     to a UserWidget created by your mod; find_widget or construct_widget supplies such children.
-    Plain UTF-8 and exact glyph tokens are accepted, up to 640 bytes. Authored widgets keep their
+    Plain UTF-8 with line breaks and exact glyph tokens are accepted, up to 640 bytes. Authored widgets keep their
     own layout and decorator configuration; a PictureFont decorator renders the button icons.
     Empty text clears the label. The value remains when the widget is hidden and ends with its root.
   owns: true
   params:
   - {name: widget, type: handle<object>, doc: Your owned CarrotRichTextBlock.}
-  - {name: text, type: text, doc: Plain UTF-8 with optional exact glyph tokens.}
+  - {name: text, type: text, doc: Plain UTF-8 with optional line breaks and exact glyph tokens.}
   fails:
     not_found: The widget no longer exists or is not owned.
     denied: Another mod owns the widget.
@@ -561,6 +607,103 @@ functions:
     no_memory: The widget could not be retained for the call.
   completes: create_widget
 
+- name: hold_open_over
+  doc: |
+    Opens a screen in Tsuchi's own host over one of the game's menus, as after its entry was chosen. Buttons,
+    choices and text show; integer controls do not yet. Back closes it and returns to that menu.
+  owns: true
+  params:
+    - {name: screen, type: handle<screen>, doc: The populated screen.}
+    - {name: menu, type: enum<Menu>, doc: The menu it opens over.}
+  fails:
+    not_found: "The screen no longer exists."
+    denied: "Another mod owns the screen."
+    invalid: "The screen has no controls."
+    busy: "A screen is already open."
+    not_ready: "That menu is not on the screen and taking input."
+    unsupported: "This build of the game has no adapter for that menu."
+  users: [online-coop, custom-mod-menus]
+- name: hold_menu_entry
+  doc: |
+    Adds an entry to one of the game's menus, after the game's own entries and in their style. Its
+    description shows in the line under the menu while it is selected. Choosing it emits `entry_chosen`.
+    It ends when released or your mod stops. Holding the same entry again changes its label and description.
+  owns: true
+  params:
+    - {name: menu, type: enum<Menu>, doc: The menu.}
+    - {name: entry, type: text, doc: "Your ID for the entry, such as `online_play`, unique in your mod."}
+    - {name: label, type: text, doc: The entry's text.}
+    - {name: description, type: text, doc: "The line under the menu while the entry is selected. Empty for none."}
+  fails:
+    invalid: "A text isn't valid UTF-8, the ID is empty or longer than 63 bytes, or the label is empty or longer than 80 bytes, or the description longer than 300."
+    capacity: "Four mod entries are already in that menu."
+    unsupported: "This build of the game has no adapter for that menu."
+  users: [online-coop, custom-mod-menus]
+- name: release_menu_entry
+  doc: Removes your entry from the menu. The game's own entries are left as they were.
+  owns: true
+  params:
+    - {name: menu, type: enum<Menu>, doc: The menu.}
+    - {name: entry, type: text, doc: Your entry's ID.}
+  fails:
+    not_found: "Your mod holds no entry with that ID in that menu."
+  completes: hold_menu_entry
+
+- name: hold_menu_lock
+  doc: |
+    Keeps the game's own entries of one of its menus from being chosen, and shows them dimmed. Your
+    mod's entries stay usable. It ends when released or your mod stops.
+  owns: true
+  params:
+    - {name: menu, type: enum<Menu>, doc: The menu.}
+  fails:
+    unsupported: "This build of the game has no adapter for that menu."
+  users: [online-coop, custom-mod-menus]
+- name: release_menu_lock
+  doc: Lets the game's own entries of the menu be chosen again.
+  owns: true
+  params:
+    - {name: menu, type: enum<Menu>, doc: The menu.}
+  fails:
+    not_found: "Your mod does not lock that menu."
+  completes: hold_menu_lock
+- name: hold_menu_note
+  doc: |
+    Shows a short text beside one of the game's menus, in the game's own text style, such as an online
+    session's code. Holding it again changes the text. It ends when released or your mod stops.
+  owns: true
+  params:
+    - {name: menu, type: enum<Menu>, doc: The menu.}
+    - {name: note, type: text, doc: "The text, at most 300 bytes. A new line starts a second line."}
+  fails:
+    invalid: "The text isn't valid UTF-8, or it is empty or longer than 300 bytes."
+    busy: "Another mod's note is beside that menu."
+    unsupported: "This build of the game has no adapter for that menu."
+  users: [online-coop, custom-mod-menus]
+- name: release_menu_note
+  doc: Removes your note from beside the menu.
+  owns: true
+  params:
+    - {name: menu, type: enum<Menu>, doc: The menu.}
+  fails:
+    not_found: "Your mod has no note beside that menu."
+  completes: hold_menu_note
+- name: ask_text
+  doc: |
+    Shows the system's software keyboard and emits `text_entered` with what the player typed. It opens
+    at the start of the next frame, and the game waits while it is open, as it does for its own name
+    entry. One keyboard can wait at a time.
+  owns: true
+  params:
+    - {name: prompt, type: text, doc: "The line above the text field, at most 256 bytes."}
+    - {name: initial, type: text, doc: "The text the field starts with. Empty for none."}
+    - {name: most, type: u32, doc: "The most characters the player can type, from 1 to 256."}
+    - {name: kind, type: enum<TextKind>, doc: The keys the keyboard offers.}
+  fails:
+    invalid: "A text isn't valid UTF-8 or is too long, or the limit or kind is invalid."
+    busy: "A keyboard is already waiting to open."
+    unsupported: "This build of the game has no software keyboard call."
+  users: [online-coop, custom-mod-menus]
 events:
 - name: activated
   doc: Emitted when the player selects a button. Only the screen's owning mod receives this event.
@@ -649,3 +792,15 @@ events:
   - {name: widget, type: handle<object>, doc: The owned Button.}
   - {name: signal, type: enum<ButtonSignal>, doc: The native event.}
   users: [custom-mod-menus, kadan]
+- name: entry_chosen
+  doc: Emitted when the player chooses one of your menu entries. Only the entry's mod receives it.
+  fields:
+  - {name: menu, type: enum<Menu>, doc: The menu.}
+  - {name: entry, type: text, doc: Your entry's ID.}
+  users: [online-coop, custom-mod-menus]
+- name: text_entered
+  doc: Emitted when the player closes the keyboard that your mod opened with `ask_text`.
+  fields:
+  - {name: accepted, type: bool, doc: "`true` if the player confirmed the text, `false` if they cancelled."}
+  - {name: text, type: text, doc: "What the player typed. Empty when they cancelled."}
+  users: [online-coop, custom-mod-menus]

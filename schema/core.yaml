@@ -32,3 +32,4 @@ handles:
   - {'name': 'sound_bank', 'doc': 'An independent sound bank held by your mod until unload or stop.'}
   - {'name': 'sound_voice', 'doc': 'One playback from an independent sound bank.'}
   - {name: content_declaration, doc: "An admitted batch of content declarations, until retract or mod stop."}
+  - {name: memory_block, doc: "A block of memory reserved by your mod, freed when you free it or your mod stops, unless it is lasting."}

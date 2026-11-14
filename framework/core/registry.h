@@ -46,6 +46,8 @@ void mod_stop(TSUCHI_Mod* mod);
 // True for a context made here that has not been stopped, asked on the game's thread. Every call a mod makes
 // begins with this, so a call from another thread is refused the way a stopped mod's is, and changes nothing.
 bool mod_usable(const TSUCHI_Mod* mod);
+// The same, except inside a hook callback: for the few calls that never reach the engine or a script runtime.
+bool mod_usable_in_hooks(const TSUCHI_Mod* mod);
 // The same whatever the thread. For the one thing that is answered on any thread: where a hooked call goes.
 bool mod_running(const TSUCHI_Mod* mod);
 const char* mod_id(const TSUCHI_Mod* mod);

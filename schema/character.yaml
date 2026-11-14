@@ -1,0 +1,281 @@
+service: character
+layer: game
+acts_on: actor
+lifetime: world
+brief: "Holds a captain's or a dog's logical inputs, moves it, and holds, presses, or rebinds its actions."
+description: |
+  The game doesn't read a captain or a dog straight from a controller. Each
+  character has its own controller object, which turns buttons into logical
+  inputs like `whistle` or `captain_throw`, and each action reads one of those inputs
+  where its code decides. Use this service to drive one character without a
+  controller: hold or press its logical inputs, move it in a world direction,
+  and make one of its actions happen. You can also bind an action to another
+  logical input, or to none, which is how a key binding mod moves one action
+  to another button even when two actions share a button.
+
+  Held inputs add to the player's own. They count as activity for the
+  captain's idle animation, they reach the game's short input buffer for
+  Oatchi's bite and jump, and the game's own locks still hide them in menus
+  and scenes.
+
+  In the story, a captain that rides Oatchi gets Oatchi's controller object.
+  While two characters share one controller object, the input calls fail with
+  `not_ready`, and inputs held before then have no effect until the
+  characters stop sharing it. The action calls tell the two characters apart
+  and keep working.
+
+  The action calls and `hold_move` change the game's code at the places
+  where it reads an action's input. They need Tsuchi's code access, which a
+  standard build of Tsuchi doesn't have. Without it they fail with
+  `not_ready`.
+
+  Every function takes a captain or a dog. To get a player's, use
+  `player.captain` or `player.dog`.
+
+enums:
+  Input:
+    open: false
+    doc: "A logical input of the game's controller objects. The names say what the input does in play, where that is known. The others are numbered."
+    values:
+      - {name: captain_throw, value: 0, doc: "A captain's throw. Holding it also keeps the captain from whistling."}
+      - {name: input_1, value: 1, doc: "Input 1. Its meaning isn't known."}
+      - {name: input_2, value: 2, doc: "Input 2. Holding it counts as activity for the idle animation."}
+      - {name: whistle, value: 3, doc: "The whistle, for a captain and for a dog."}
+      - {name: input_4, value: 4, doc: "Input 4. It keeps a captain from whistling, and it rides the dog when the game's direct Y menu option is on."}
+      - {name: input_5, value: 5, doc: "Input 5. Its meaning isn't known."}
+      - {name: input_6, value: 6, doc: "Input 6. Holding it changes how the game reads the right stick."}
+      - {name: input_7, value: 7, doc: "Input 7. A menu or command input."}
+      - {name: dismiss, value: 8, doc: "A captain's dismiss."}
+      - {name: input_9, value: 9, doc: "Input 9. Its meaning isn't known."}
+      - {name: input_10, value: 10, doc: "Input 10. It keeps a captain from whistling and starts one of the captain's commands."}
+      - {name: switch_type, value: 11, doc: "Switches the selected Pikmin type one way."}
+      - {name: switch_type_back, value: 12, doc: "Switches the selected Pikmin type the other way."}
+      - {name: ride, value: 13, doc: "Rides the dog, and opens the Y menu."}
+      - {name: input_14, value: 14, doc: "Input 14. Holding it counts as activity for the idle animation."}
+      - {name: input_15, value: 15, doc: "Input 15. A menu or command input."}
+      - {name: input_16, value: 16, doc: "Input 16. A menu or command input."}
+      - {name: input_17, value: 17, doc: "Input 17. A menu or command input."}
+      - {name: dog_throw, value: 18, doc: "Oatchi's A: throws the Pikmin riding on it, bites, or acts on a target."}
+      - {name: ride_release, value: 19, doc: "Input 19. The game reads its release in the window after a ride press."}
+      - {name: dog_jump, value: 20, doc: "Oatchi's X: jumps, and charges a rush while held."}
+      - {name: input_21, value: 21, doc: "Input 21. A menu or command input."}
+      - {name: input_22, value: 22, doc: "Input 22. Its meaning isn't known."}
+      - {name: input_23, value: 23, doc: "Input 23. Its meaning isn't known."}
+      - {name: input_24, value: 24, doc: "Input 24. Its meaning isn't known."}
+      - {name: input_25, value: 25, doc: "Input 25. A menu or command input."}
+      - {name: input_26, value: 26, doc: "Input 26. A menu or command input."}
+      - {name: input_27, value: 27, doc: "Input 27. A menu or command input."}
+      - {name: input_28, value: 28, doc: "Input 28. Holding it counts as activity for the idle animation."}
+      - {name: input_29, value: 29, doc: "Input 29. Its meaning isn't known."}
+      - {name: input_30, value: 30, doc: "Input 30. Its meaning isn't known."}
+      - {name: input_31, value: 31, doc: "Input 31. Holding it counts as activity in handheld play."}
+      - {name: input_32, value: 32, doc: "Input 32. The game reads it to check the handheld style."}
+      - {name: none, value: 255, doc: "No input. Bind an action to it so that no input starts the action."}
+  Action:
+    open: false
+    doc: "An action that reads a logical input where its code decides. Each one belongs to a captain, to a dog, or to both."
+    values:
+      - {name: whistle, value: 0, doc: "Starts and keeps up a whistle. A captain or a dog. Reads `whistle`."}
+      - {name: throw_pikmin, value: 1, doc: "A captain's throw, held until the release. A dog's throw of the Pikmin riding on it. Reads `captain_throw` for a captain and `dog_throw` for a dog."}
+      - {name: dismiss, value: 2, doc: "A captain's dismiss. Reads `dismiss`."}
+      - {name: switch_type, value: 3, doc: "Switches the selected Pikmin type one way. A captain or a dog. Reads `switch_type`."}
+      - {name: switch_type_back, value: 4, doc: "Switches the selected Pikmin type the other way. A captain or a dog. Reads `switch_type_back`."}
+      - {name: ride, value: 5, doc: "A captain gets on its dog, on a press or on a release that follows one closely. Reads `ride`, or `input_4` with the direct Y menu option, and `ride_release`."}
+      - {name: bite, value: 6, doc: "A dog bites when no Pikmin are riding on it. Reads `dog_throw`."}
+      - {name: jump, value: 7, doc: "A dog jumps. Reads `dog_jump`."}
+      - {name: rush, value: 8, doc: "A dog charges a rush, pressed and then held. Reads `dog_jump`."}
+      - {name: interact, value: 9, doc: "A dog acts on the target in front of it. Reads `dog_throw`."}
+
+functions:
+  - name: hold_input
+    doc: |
+      Holds a logical input down on a character until you release it. It reads
+      as held on every frame, as pressed on the first frame only, and as
+      released on the frame after you release it. The game's own repeat of a
+      held input doesn't add presses. Only one mod at a time can hold an input
+      on a character.
+    owns: true
+    params:
+      - {name: character, type: handle<actor>, doc: "A captain or a dog."}
+      - {name: input, type: enum<Input>, doc: "The input. `none` isn't allowed."}
+    fails:
+      not_found: "The actor no longer exists or isn't a captain or a dog."
+      invalid: "The input is `none`."
+      busy: "Another mod is holding or pressing this input on this character."
+      not_ready: "The character has no controller object yet, or it shares one with another character."
+    users: [online-coop, button-remap]
+
+  - name: press_input
+    doc: |
+      Presses a logical input on a character for one frame. The character's
+      controller object reads it as pressed and held on its next update, and
+      as released on the update after.
+    owns: true
+    params:
+      - {name: character, type: handle<actor>, doc: "A captain or a dog."}
+      - {name: input, type: enum<Input>, doc: "The input. `none` isn't allowed."}
+    fails:
+      not_found: "The actor no longer exists or isn't a captain or a dog."
+      invalid: "The input is `none`."
+      busy: "A mod is already holding or pressing this input on this character, your mod included."
+      not_ready: "The character has no controller object yet, or it shares one with another character."
+    users: [online-coop, button-remap]
+
+  - name: release_input
+    doc: "Ends your mod's hold on a character's input."
+    owns: true
+    params:
+      - {name: character, type: handle<actor>, doc: "A captain or a dog."}
+      - {name: input, type: enum<Input>, doc: "The input."}
+    fails:
+      not_found: "Your mod isn't holding this input on this character."
+    users: [online-coop, button-remap]
+
+  - name: input_held
+    doc: "Returns `true` while any mod holds or presses an input on a character."
+    params:
+      - {name: character, type: handle<actor>, doc: "A captain or a dog."}
+      - {name: input, type: enum<Input>, doc: "The input."}
+    returns: {type: bool, doc: "Returns `true` while a mod holds or presses it."}
+    fails:
+      not_found: "The actor no longer exists or isn't a captain or a dog."
+    users: [online-coop, button-remap]
+
+  - name: hold_move
+    doc: |
+      Moves a character in a direction in the world until you release it, in
+      place of the direction that the game works out from the stick and the
+      camera. The direction's length is how far the stick is pushed, from `0`
+      to `1`, and its height is ignored. A zero direction holds the character
+      still. Holding again changes the direction. Only one mod at a time can
+      move a character.
+    owns: true
+    params:
+      - {name: character, type: handle<actor>, doc: "A captain or a dog."}
+      - {name: direction, type: vec3, doc: "The direction across the ground, with a length from `0` to `1`."}
+    fails:
+      not_found: "The actor no longer exists or isn't a captain or a dog."
+      invalid: "The direction is longer than `1`."
+      busy: "Another mod is moving this character."
+      not_ready: "Code access isn't available, or the game's code isn't the code this build of Tsuchi expects."
+    users: [online-coop, button-remap]
+
+  - name: release_move
+    doc: "Ends your mod's hold on a character's movement. The character goes back to the player's stick."
+    owns: true
+    params:
+      - {name: character, type: handle<actor>, doc: "A captain or a dog."}
+    fails:
+      not_found: "Your mod isn't moving this character."
+    users: [online-coop, button-remap]
+
+  - name: move
+    doc: "The direction that a character is moving in this frame, from the player's stick or from `hold_move`. Its length is how far the stick is pushed, and its height is `0`."
+    params:
+      - {name: character, type: handle<actor>, doc: "A captain or a dog."}
+    returns: {type: vec3, doc: "The direction across the ground."}
+    fails:
+      not_found: "The actor no longer exists or isn't a captain or a dog."
+      not_ready: "The character has no steered part yet."
+    users: [online-coop, button-remap]
+
+  - name: hold_action
+    doc: |
+      Makes a character's action read its input the way a held button reads,
+      until you release it, whatever the player does. Where the action reads a
+      press, it sees one press: every read of it in the frame of its first
+      read after you take the hold sees the press, as a button's press lasts
+      its frame.
+      Where it reads a hold, it sees one on every frame, and where it reads a
+      release, it sees one at its first read after you release the action. The
+      character's controller object also presses, holds, and releases the
+      input that the action reads, as `hold_input` does, so the game's other
+      reads of that input see a held button too. Other actions on that input
+      can start from it the way they would from the button. The game still
+      decides whether the action can happen. Only one mod at a time can hold
+      an action on a character.
+    owns: true
+    params:
+      - {name: character, type: handle<actor>, doc: "A captain or a dog."}
+      - {name: action, type: enum<Action>, doc: "The action."}
+    fails:
+      not_found: "The actor no longer exists or isn't a captain or a dog."
+      unsupported: "The action doesn't belong to this kind of character."
+      busy: "Another mod is holding or pressing this action on this character."
+      not_ready: "Code access isn't available, or the game's code isn't the code this build of Tsuchi expects."
+    users: [online-coop, button-remap]
+
+  - name: press_action
+    doc: "Presses a character's action for one frame, on the character's next controller update, the way `hold_action` and an immediate release would."
+    owns: true
+    params:
+      - {name: character, type: handle<actor>, doc: "A captain or a dog."}
+      - {name: action, type: enum<Action>, doc: "The action."}
+    fails:
+      not_found: "The actor no longer exists or isn't a captain or a dog."
+      unsupported: "The action doesn't belong to this kind of character."
+      busy: "A mod is already holding or pressing this action on this character, your mod included."
+      not_ready: "Code access isn't available, or the game's code isn't the code this build of Tsuchi expects."
+    users: [online-coop, button-remap]
+
+  - name: release_action
+    doc: "Ends your mod's hold on a character's action."
+    owns: true
+    params:
+      - {name: character, type: handle<actor>, doc: "A captain or a dog."}
+      - {name: action, type: enum<Action>, doc: "The action."}
+    fails:
+      not_found: "Your mod isn't holding this action on this character."
+    users: [online-coop, button-remap]
+
+  - name: action_held
+    doc: "Returns `true` while any mod holds or presses an action on a character."
+    params:
+      - {name: character, type: handle<actor>, doc: "A captain or a dog."}
+      - {name: action, type: enum<Action>, doc: "The action."}
+    returns: {type: bool, doc: "Returns `true` while a mod holds or presses it."}
+    fails:
+      not_found: "The actor no longer exists or isn't a captain or a dog."
+    users: [online-coop, button-remap]
+
+  - name: hold_binding
+    doc: |
+      Makes a character's action read another logical input, until you
+      release it. Bind it to `none` so that no input starts the action. The
+      action reads the new input the same way it read its own: pressed, held,
+      or released. Other actions that read the new input still do, so to move
+      an action to a button that another action uses, bind both. Holding
+      again changes the input. Only one mod at a time can bind an action on a
+      character.
+    owns: true
+    params:
+      - {name: character, type: handle<actor>, doc: "A captain or a dog."}
+      - {name: action, type: enum<Action>, doc: "The action."}
+      - {name: input, type: enum<Input>, doc: "The input that the action reads, or `none`."}
+    fails:
+      not_found: "The actor no longer exists or isn't a captain or a dog."
+      unsupported: "The action doesn't belong to this kind of character."
+      busy: "Another mod has bound this action on this character."
+      not_ready: "Code access isn't available, or the game's code isn't the code this build of Tsuchi expects."
+    users: [online-coop, button-remap]
+
+  - name: release_binding
+    doc: "Ends your mod's binding of a character's action. The action reads its own input again."
+    owns: true
+    params:
+      - {name: character, type: handle<actor>, doc: "A captain or a dog."}
+      - {name: action, type: enum<Action>, doc: "The action."}
+    fails:
+      not_found: "Your mod hasn't bound this action on this character."
+    users: [online-coop, button-remap]
+
+  - name: binding
+    doc: "The logical input that a character's action reads now: the one that a mod bound it to, or its own. For `ride`, its own is `ride`."
+    params:
+      - {name: character, type: handle<actor>, doc: "A captain or a dog."}
+      - {name: action, type: enum<Action>, doc: "The action."}
+    returns: {type: enum<Input>, doc: "The input, or `none`."}
+    fails:
+      not_found: "The actor no longer exists or isn't a captain or a dog."
+      unsupported: "The action doesn't belong to this kind of character."
+    users: [online-coop, button-remap]

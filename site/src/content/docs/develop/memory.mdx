@@ -1,0 +1,112 @@
+---
+title: Use memory directly
+description: Reserve blocks, read and write at an address, and keep offsets for each build of the game.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+[`memory`](/reference/memory/) works with addresses, as compiled code does. Lua,
+JavaScript, and compiled mods all get the same calls. Use it when no other service
+covers the job, for example to give the game a buffer of your own.
+
+Each read and write is checked against the memory that is mapped right now, so a
+wrong address fails with `not_found` instead of stopping the game. Nothing checks
+what the bytes mean. A wrong value can still crash the game or damage a save, the
+same as in compiled code.
+
+## Addresses
+
+`memory.main()` is the address where the game's code starts. Add an offset to it to
+get the address of a variable the game keeps there. Offsets belong to one build of
+the game. `mod.game_build()` names the running build the way a manifest's `game`
+list does, so a mod can keep its own offsets for each build:
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua
+local offsets = {
+    ["1.1.1"] = {formation = 0x89D4730},
+    ["2.0.0"] = {formation = 0x8A10B30},
+}
+local here = offsets[mod.game_build()]
+if not here then
+    mod.log("this build of the game isn't supported")
+    return
+end
+local formation = memory.main() + here.formation
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript
+const offsets = {
+  "1.1.1": { formation: 0x89D4730n },
+  "2.0.0": { formation: 0x8A10B30n },
+};
+const here = offsets[mod.game_build()];
+if (!here) throw new Error("this build of the game isn't supported");
+const formation = memory.main() + here.formation;
+```
+
+</TabItem>
+</Tabs>
+
+The offsets in these examples are placeholders. List the builds your mod supports
+with `game` in its manifest, so the mod list explains why it doesn't run on others.
+
+## Reading and writing
+
+`memory.read(address, count)` returns that many bytes, and `memory.write(address,
+bytes)` writes them. Either every byte is read or written, or the call fails and
+none are. Each call covers up to 1,048,576 bytes. In Lua, bytes are strings, so
+`string.pack` and `string.unpack` turn them into numbers. In JavaScript, bytes are
+a `Uint8Array`, and a `DataView` reads and writes numbers in it. The game uses
+little-endian numbers.
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua
+local count = string.unpack("<I4", memory.read(address, 4))
+memory.write(address, string.pack("<I4", count + 1))
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript
+const view = new DataView(memory.read(address, 4n).buffer);
+view.setUint32(0, view.getUint32(0, true) + 1, true);
+memory.write(address, new Uint8Array(view.buffer));
+```
+
+</TabItem>
+</Tabs>
+
+`memory.write` refuses the game's code. Change an instruction with
+[`hook.patch_instruction`](/develop/hooks/), which checks it first and puts it
+back when your mod stops.
+
+## Blocks
+
+`memory.allocate(bytes, alignment, lasting)` reserves a block from the game's own
+allocator, filled with zeros, and `memory.address(block)` says where it is. A block
+belongs to your mod. `memory.free` frees it early, and it is freed when your mod
+stops.
+
+If the game keeps a pointer to the block, pass `true` for `lasting`. Freeing memory
+the game still uses crashes it, so a lasting block stays until the game closes, even
+after your mod stops or restarts. A mod can hold 256 blocks and 64 MiB at one time,
+and keep 64 MiB in lasting blocks over the whole run. A restart doesn't reset that
+count, so reserve lasting blocks once and reuse them.
+
+## Inside hooks
+
+Inside a [hook](/develop/hooks/) callback, every other Tsuchi call fails with
+`invalid`, except `memory.main`, `memory.address`, `memory.read`, `memory.write`
+and `mod.game_build`. They don't reach the engine, so a callback can read the
+game's arguments, change memory, and point the game at a block. Reserve the block
+before the hook runs: `memory.allocate` and `memory.free` reach the game's
+allocator and fail inside a hook.
