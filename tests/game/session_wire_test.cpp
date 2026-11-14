@@ -277,6 +277,61 @@ int admission(){
 }
 
 // ---- secured sessions -----------------------------------------------------------------------------
+// A sealed datagram longer than any this protocol sends, from someone without the secret, is dropped before it is
+// opened: a JOIN to the host, a WELCOME to a joining guest, and a link datagram from the host's own address.
+// Machine 0 hosts with a secret and machine 1 has joined it.
+int oversized(const WireAddress& at_host){
+    auto fd_of=[](int machine,uint16_t port){for(int32_t fd=0;fd<32;++fd)if(net::sockets[fd].open&&net::sockets[fd].machine==machine&&net::sockets[fd].port==port)return fd;return -1;};
+    auto big=[](uint8_t* d,uint8_t type,const uint8_t* header){
+        std::memset(d,0xA5,1500);
+        if(header)std::memcpy(d,header,SESSION_HEADER_BYTES);
+        else{const uint32_t magic=SESSION_MAGIC;const uint16_t protocol=SESSION_PROTOCOL;std::memcpy(d,&magic,4);std::memcpy(d+4,&protocol,2);d[7]=255;}
+        d[6]=uint8_t(type|SESSION_SEALED);
+    };
+    uint8_t d[1500];
+    // To the host.
+    {const int32_t raw=net::open(2,0);
+     big(d,1,nullptr);net::send(raw,at_host.ip,at_host.port,d,sizeof d);
+     m0.poll(now);
+     WireInfo i{};i.size=sizeof i;CHECK(m0.info(&i,now)==TSUCHI_OK&&i.state==WIRE_SESSION_HOSTING&&i.peers==3u);
+     uint8_t ip[4];uint16_t port;uint8_t reply[1500];CHECK(net::receive(raw,ip,&port,reply,sizeof reply)<0);
+     net::close(raw);}
+    // To a guest on its way in.
+    {const WireAddress at_somewhere=net::address(3,4000);
+     uint8_t secret[SESSION_SECRET_BYTES];for(uint32_t k=0;k<SESSION_SECRET_BYTES;++k)secret[k]=uint8_t(k*13+1);
+     CHECK(m2.set_secret("a.mod",secret,SESSION_SECRET_BYTES)==TSUCHI_OK);
+     const WireOptions o=options("Moss");
+     CHECK(m2.join("a.mod",&at_somewhere,&o,now)==TSUCHI_OK);
+     m2.poll(now);
+     WireInfo joining{};joining.size=sizeof joining;CHECK(m2.info(&joining,now)==TSUCHI_OK&&joining.port!=0);
+     const int32_t raw=net::open(3,4000);
+     const WireAddress at_guest=net::address(2,joining.port);
+     big(d,2,nullptr);net::send(raw,at_guest.ip,at_guest.port,d,sizeof d);
+     m2.poll(now);
+     WireInfo i{};i.size=sizeof i;CHECK(m2.info(&i,now)==TSUCHI_OK&&i.state==WIRE_SESSION_JOINING&&i.self==WIRE_PEER_NONE&&i.refused==0);
+     net::close(raw);
+     CHECK(m2.leave("a.mod",now)==TSUCHI_OK);}
+    // On the link, with the header of one of the host's own datagrams to the guest.
+    {WireInfo g{};g.size=sizeof g;CHECK(m1.info(&g,now)==TSUCHI_OK&&g.state==WIRE_SESSION_JOINED);
+     const int32_t host_fd=fd_of(0,at_host.port),guest_fd=fd_of(1,g.port);
+     CHECK(host_fd>=0&&guest_fd>=0);
+     uint8_t header[SESSION_HEADER_BYTES]{};bool found=false;
+     for(double end=now+1;now<end&&!found;now+=1.0/60){
+         m0.poll(now);
+         for(uint32_t k=0;k<net::queued&&!found;++k)
+             if(net::queue[k].to==guest_fd&&net::queue[k].size>=SESSION_HEADER_BYTES){std::memcpy(header,net::queue[k].data,SESSION_HEADER_BYTES);found=true;}
+     }
+     CHECK(found);
+     const uint32_t messages=seen[1].messages,unreliable=seen[1].unreliable,left=seen[1].left;
+     big(d,4,header);net::deliver(host_fd,guest_fd,d,sizeof d);
+     big(d,5,header);net::deliver(host_fd,guest_fd,d,sizeof d);
+     run(0.5,2);
+     WireInfo i{};i.size=sizeof i;
+     CHECK(m1.info(&i,now)==TSUCHI_OK&&i.state==WIRE_SESSION_JOINED&&i.self==1&&i.id==g.id);
+     CHECK(seen[1].messages==messages&&seen[1].unreliable==unreliable&&seen[1].left==left);}
+    return 0;
+}
+
 int secured(){
     uint8_t secret[SESSION_SECRET_BYTES],other[SESSION_SECRET_BYTES];
     for(uint32_t i=0;i<SESSION_SECRET_BYTES;++i){secret[i]=uint8_t(i*7+3);other[i]=uint8_t(i*11+5);}
@@ -303,6 +358,7 @@ int secured(){
     net::watch=nullptr;
     {WireInfo i{};i.size=sizeof i;CHECK(m1.info(&i,now)==TSUCHI_OK&&i.state==WIRE_SESSION_JOINED&&i.self==1);}
     {uint32_t v=0;CHECK(m0.peer_channel(1,"a.mod",&v)==TSUCHI_OK&&v==3);}
+    if(oversized(at_host))return 1;
     // Reliable messages arrive once and in order through loss, damage and duplication; damaged and repeated
     // datagrams are dropped, never delivered.
     net::loss_every=9;net::damage_every=7;net::duplicate_every=5;

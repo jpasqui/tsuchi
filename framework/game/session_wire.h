@@ -150,12 +150,12 @@ private:
     void take_secret(const char* owner);
     void new_nonce(uint8_t out[SESSION_NONCE_BYTES]);
     uint32_t seal_for(Link& l,const uint8_t* d,uint32_t n,uint8_t* out);
-    bool open_from(Link& l,const uint8_t* data,uint32_t size,uint8_t* out,uint32_t& n);
+    bool open_from(Link& l,const uint8_t* data,uint32_t size,uint8_t* out,uint32_t room,uint32_t& n);
     uint32_t seal_join(const uint8_t* d,uint32_t n,uint8_t* out);
-    bool open_join(const uint8_t* data,uint32_t size,uint8_t* out,uint32_t& n,uint8_t nonce[SESSION_NONCE_BYTES]);
+    bool open_join(const uint8_t* data,uint32_t size,uint8_t* out,uint32_t room,uint32_t& n,uint8_t nonce[SESSION_NONCE_BYTES]);
     bool link_keys(Link& l,const uint8_t guest_nonce[SESSION_NONCE_BYTES],const uint8_t host_nonce[SESSION_NONCE_BYTES],uint32_t link_number,bool host);
     uint32_t seal_welcome(Link& l,const uint8_t guest_nonce[SESSION_NONCE_BYTES],const uint8_t* d,uint32_t n,uint8_t* out,bool fresh);
-    bool open_welcome(Link& l,const uint8_t* data,uint32_t size,uint8_t* out,uint32_t& n);
+    bool open_welcome(Link& l,const uint8_t* data,uint32_t size,uint8_t* out,uint32_t room,uint32_t& n);
     void send_on(Link& l,const uint8_t* d,uint32_t n);
     // session_traversal.cpp
     struct Punch {uint8_t ip[4];uint16_t port;double until,sent;};

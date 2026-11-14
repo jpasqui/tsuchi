@@ -150,11 +150,13 @@ uint32_t Session::seal_for(Link& l, const uint8_t* d, uint32_t n, uint8_t* out) 
     return SESSION_HEADER_BYTES + COUNTER + body + TAG;
 }
 
-// The body of a sealed datagram from a link, opened into out. False for anything forged, damaged or replayed.
-bool Session::open_from(Link& l, const uint8_t* data, uint32_t size, uint8_t* out, uint32_t& n) {
+// The body of a sealed datagram from a link, opened into out, which has room bytes. False for anything forged,
+// damaged, replayed or too long for out.
+bool Session::open_from(Link& l, const uint8_t* data, uint32_t size, uint8_t* out, uint32_t room, uint32_t& n) {
     if (size < SESSION_HEADER_BYTES + COUNTER + TAG) return false;
     const uint64_t counter = get64(data + SESSION_HEADER_BYTES);
     const uint32_t body = size - SESSION_HEADER_BYTES - COUNTER - TAG;
+    if (body > room) return false;
     const uint8_t* sealed = data + SESSION_HEADER_BYTES + COUNTER;
     uint64_t top = l.receive_top, window = l.receive_window;
     bool any = l.received_any;
@@ -182,10 +184,11 @@ uint32_t Session::seal_join(const uint8_t* d, uint32_t n, uint8_t* out) {
     return aad + COUNTER + body + TAG;
 }
 
-// The host: a sealed JOIN's body, and its nonce. False for one not sealed with this session's secret.
-bool Session::open_join(const uint8_t* data, uint32_t size, uint8_t* out, uint32_t& n, uint8_t nonce[SESSION_NONCE_BYTES]) {
+// The host: a sealed JOIN's body, opened into out, which has room bytes, and its nonce. False for one not sealed
+// with this session's secret or too long for out.
+bool Session::open_join(const uint8_t* data, uint32_t size, uint8_t* out, uint32_t room, uint32_t& n, uint8_t nonce[SESSION_NONCE_BYTES]) {
     const uint32_t aad = SESSION_HEADER_BYTES + SESSION_NONCE_BYTES;
-    if (size < aad + COUNTER + TAG) return false;
+    if (size < aad + COUNTER + TAG || size - aad - COUNTER - TAG > room) return false;
     for (uint32_t i = 0; i < SESSION_NONCE_BYTES; ++i) nonce[i] = data[SESSION_HEADER_BYTES + i];
     uint8_t key[32];
     if (!hkdf(secret_, nonce, SESSION_NONCE_BYTES, "tsuchi join", key, sizeof key)) return false;
@@ -245,10 +248,11 @@ void Session::send_on(Link& l, const uint8_t* d, uint32_t n) {
     if (m) send_raw(l.ip, l.port, out, m);
 }
 
-// The guest: a sealed WELCOME's body, opened with the keys it makes for link l. False for a forged one.
-bool Session::open_welcome(Link& l, const uint8_t* data, uint32_t size, uint8_t* out, uint32_t& n) {
+// The guest: a sealed WELCOME's body, opened into out, which has room bytes, with the keys it makes for link l.
+// False for a forged one or one too long for out.
+bool Session::open_welcome(Link& l, const uint8_t* data, uint32_t size, uint8_t* out, uint32_t room, uint32_t& n) {
     const uint32_t aad = SESSION_HEADER_BYTES + SESSION_NONCE_BYTES + 4;
-    if (size < aad + TAG) return false;
+    if (size < aad + TAG || size - aad - TAG > room) return false;
     const uint8_t* host_nonce = data + SESSION_HEADER_BYTES;
     const uint32_t link_number = get32(data + SESSION_HEADER_BYTES + SESSION_NONCE_BYTES);
     Link trial = l;

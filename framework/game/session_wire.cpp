@@ -404,6 +404,7 @@ void Session::on_link(Link& l,const uint8_t* body,uint32_t size,double now){
 }
 void Session::receive(const uint8_t ip[4],uint16_t port,const uint8_t* data,uint32_t size,double now){
     if(from_stun(ip,port)){on_stun(data,size);return;}
+    if(size>SESSION_DATAGRAM)return;                                             // nothing this protocol sends is longer
     R r(data,size);
     if(r.u32()!=SESSION_MAGIC)return;
     const uint16_t protocol=r.u16();const uint8_t marked=r.byte();r.byte();
@@ -428,7 +429,7 @@ void Session::receive(const uint8_t ip[4],uint16_t port,const uint8_t* data,uint
     if(type==T_JOIN){
         if(state_!=WIRE_SESSION_HOSTING)return;
         if(sealed){
-            if(!open_join(data,size,opened,n,joining_nonce_))return;                 // not sealed with this secret
+            if(!open_join(data,size,opened,sizeof opened,n,joining_nonce_))return;   // not sealed with this secret
             body=opened;
         }
         on_join(ip,port,instance,body,n,now);
@@ -438,7 +439,7 @@ void Session::receive(const uint8_t ip[4],uint16_t port,const uint8_t* data,uint
         if(state_!=WIRE_SESSION_JOINING)return;
         Link keys{};
         if(sealed){
-            if(!open_welcome(keys,data,size,opened,n))return;
+            if(!open_welcome(keys,data,size,opened,sizeof opened,n))return;
             body=opened;welcome_keys_=&keys;
         }
         on_welcome(ip,port,session,instance,body,n,now);
@@ -453,7 +454,7 @@ void Session::receive(const uint8_t ip[4],uint16_t port,const uint8_t* data,uint
         return;
     }
     if(sealed){
-        if(!open_from(*l,data,size,opened,n))return;                                 // forged, damaged or replayed
+        if(!open_from(*l,data,size,opened,sizeof opened,n))return;                   // forged, damaged or replayed
         body=opened;
     }
     l->heard=now;
