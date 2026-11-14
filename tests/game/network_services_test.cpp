@@ -28,7 +28,9 @@ int32_t send(int32_t,const uint8_t[4],uint16_t port,const void* data,uint32_t si
 int32_t receive(int32_t fd,uint8_t ip[4],uint16_t* port,void* out,uint32_t capacity){auto& s=sockets[fd];if(!s.size)return -2;uint32_t size=s.size<capacity?s.size:capacity;memcpy(out,s.bytes,size);s.size=0;ip[0]=127;ip[1]=0;ip[2]=0;ip[3]=1;*port=47700;return int32_t(size);}
 int32_t local(int32_t fd,uint8_t ip[4],uint16_t* port){memset(ip,0,4);*port=sockets[fd].port;return 0;}
 void close(int32_t fd){assert(sockets[fd].open);sockets[fd].open=false;++closes;}
-const NetBackend transport{yes,offline,open,send,receive,local,close,nullptr};
+int32_t route(uint8_t ip[4]){ip[0]=192,ip[1]=168,ip[2]=1,ip[3]=125;return 0;}
+const NetBackend transport{yes,offline,open,send,receive,local,close,nullptr,route};
+const NetBackend no_route{yes,offline,open,send,receive,local,close,nullptr};
 uint32_t starts=0,wakes=0;bool refuse_start=false;
 bool worker_start(){++starts;return !refuse_start;}
 void wake(){++wakes;auto* job=https::https_take_job();assert(job&&job->url[0]&&job->max_bytes);job->state.store(https::HTTPS_QUEUED);}
@@ -48,6 +50,9 @@ int main(){
  auto* a=mod_create("online.alpha");auto* b=mod_create("online.beta");assert(a&&b);
  const auto& n=net::table;const auto& s=session::table;
  TSUCHI_NetworkStatus status{};assert(n.status(a,&status)==TSUCHI_OK&&status.available&&!status.connected);
+ // This machine's address on its network; a transport that can't say is refused.
+ {TSUCHI_NetAddress here{};assert(n.route_address(a,&here)==TSUCHI_OK&&here.ipv4==0xC0A8017Du&&here.port==0);
+  set_network_transport(&no_route);assert(n.route_address(a,&here)==TSUCHI_UNSUPPORTED);set_network_transport(&transport);}
  TSUCHI_NetAddress address{};assert(n.resolve(a,"127.0.0.1",47700,&address)==TSUCHI_OK&&address.ipv4==0x7f000001);assert(n.resolve(a,"example.org",443,&address)==TSUCHI_UNSUPPORTED);assert(n.resolve(a,"256.0.0.1",443,&address)==TSUCHI_INVALID);assert(n.resolve(a,"1.2.3",0,&address)==TSUCHI_INVALID);
  TSUCHI_Socket socket{};assert(n.udp_open(a,47700,false,&socket)==TSUCHI_OK);const auto stale=socket;
  TSUCHI_Socket other{};assert(n.udp_open(b,47700,false,&other)==TSUCHI_BUSY);assert(n.udp_open(b,0,true,&other)==TSUCHI_OK);

@@ -1766,6 +1766,9 @@ functions:
   npad_joy_dual_state: {address: 0x62EF200, args: [pointer, const_pointer]}
   # A part: it is put on its world's list of what the end of the frame sends; its pose is to be sent, and it is put there.
   mark_end_of_frame: {address: 0x5259D50, args: [pointer]}
+  # An actor: whether it sleeps (no player sees it and no Pikmin are near) or wakes, decided and done as its own
+  # update does each frame (GActor_UpdatePhysicsFreeze, from GActor_TickPre). awake_holds keeps it awake.
+  actor_sleep_decision: {address: 0x1B81160, args: [pointer]}
   mark_pose_dirty: {address: 0x5259F70, args: [pointer]}
   # A part: the renderer's copy of it is made again at the end of the frame.
   mark_render_state: {address: 0x52597B0, args: [pointer]}

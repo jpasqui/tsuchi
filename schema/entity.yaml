@@ -184,7 +184,8 @@ functions:
     doc: |
       Suspends parts of an actor so that your mod can control it. The actor stays
       where it is, is still drawn and animated, and can still be found and hit, but
-      it stops doing things on its own. Only one mod at a time can suspend parts of
+      it stops doing things on its own. It still sleeps and wakes as the game
+      decides for any actor (see `hold_awake`), as its logic would have it. Only one mod at a time can suspend parts of
       an actor. Everything is returned to the game when your mod stops or when the
       actor leaves the world.
     owns: true
@@ -400,6 +401,34 @@ functions:
     returns: {type: bytes, doc: "One record for each handle."}
     fails:
       invalid: "`actors` isn't a whole number of handles or has more than 512, or fewer than 31 bytes an actor were asked for."
+    completes: hold_suspended
+
+  - name: hold_awake
+    doc: |
+      Keeps an actor awake. The game puts an actor to sleep when no player sees
+      it and no Pikmin are near it: it stops its logic, its animation and its
+      physics, and players can't aim at it. A sleeping actor wakes when a
+      player comes near. An actor your mod keeps awake goes on as if a player
+      were next to it, for a mod whose players the game doesn't count, like
+      one on another machine. Any number of mods can keep the same actor
+      awake. The hold ends when released, when the actor leaves the world, or
+      when your mod stops; the game then decides again.
+    owns: true
+    params:
+      - {name: actor, type: handle<actor>, doc: The actor.}
+    fails:
+      not_found: "The actor no longer exists."
+      invalid: "The actor isn't a game entity."
+    completes: hold_suspended
+
+  - name: release_awake
+    doc: "Stops keeping an actor awake. The game decides again whether it sleeps."
+    owns: true
+    params:
+      - {name: actor, type: handle<actor>, doc: The actor.}
+    fails:
+      not_found: "The actor no longer exists, or your mod doesn't keep it awake."
+      invalid: "The actor isn't a game entity."
     completes: hold_suspended
 
 events:

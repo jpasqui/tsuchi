@@ -267,7 +267,9 @@
    "track",
    "forget_track",
    "parts",
-   "read_poses"
+   "read_poses",
+   "hold_awake",
+   "release_awake"
   ],
   "file": [
    "read",
@@ -373,6 +375,7 @@
    "read",
    "cancel_request",
    "release_request",
+   "route_address",
    "on_completed"
   ],
   "pikmin": [

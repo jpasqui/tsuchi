@@ -236,6 +236,11 @@ bool keep(const Hold& hold, Held& entry) {
             entry.update_due = false;
         }
     }
+    // Its own update, switched off, made the game's decision whether it sleeps (no player sees it and no Pikmin are
+    // near) or wakes: made here instead, before its body is kept still. A copy held while it slept stayed asleep,
+    // without animation and out of the players' aim, wherever the players went (seen 11-13).
+    if ((entry.parts & kSuspendLogic) && game::table::bound(game::table::fn::actor_sleep_decision) && !game::read_or<uint8_t>(actor + game::table::game_actor::removed))
+        game::table::fn::actor_sleep_decision(reinterpret_cast<void*>(actor));
     if (entry.parts & (kSuspendPhysics | kSuspendCollision)) keep_body(actor, entry);
     if (entry.parts & kSuspendLogic) game::take_messages(actor, take, &actor);
     return true;

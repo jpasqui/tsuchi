@@ -10,6 +10,7 @@
 # `optional` lists entries the code using them asks t::bound about and goes on without, so a build lacking one loses
 # only that one path and no family.
 optional:
+  - functions.actor_sleep_decision   # suspend.cpp asks t::bound: without it a held actor keeps the sleep it had
   - functions.pikmin_deco_stored
   - functions.pikmin_deco_field
   - structs.spawn_request.decoration

@@ -296,6 +296,19 @@ functions:
   - online-coop
   - remote-inspector
   owns: true
+- name: route_address
+  doc: Returns this machine's own IPv4 address on its network, the one it sends from toward the
+    internet, with port 0. It is the address another machine on the same network reaches it at.
+    No datagram is sent, and no worker starts. A broadcast to 255.255.255.255 may leave by another
+    adapter, such as a virtual network's; the network's own broadcast address leaves by this one.
+  params: []
+  fails:
+    unsupported: This target has no network transport.
+    not_ready: There is no network, or no route toward the internet.
+  completes: local_address
+  returns:
+    type: struct<NetAddress>
+    doc: The address, and port 0.
 events:
 - name: completed
   doc: Emitted when your HTTPS request succeeds, fails, or is cancelled. Read its status and release

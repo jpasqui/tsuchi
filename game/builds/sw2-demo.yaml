@@ -1983,6 +1983,7 @@ functions:
   npad_handheld_state: 95954736
   npad_joy_dual_state: 95954768
   mark_end_of_frame: 881760
+  actor_sleep_decision: absent
   mark_pose_dirty: 874544
   mark_render_state: 6218192
   widget_scale: 3576832
