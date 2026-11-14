@@ -7594,6 +7594,8 @@ local live_setting = assert(settings.hold("set.one:count", 8))
 assert(settings.integer("set.one:count") == 8)
 assert(settings.update_hold(live_setting, 6) and settings.integer("set.one:count") == 6)
 assert(settings.release_hold(live_setting) and settings.integer("set.one:count") == 3)
+local whole_float = assert(settings.hold("set.one:count", 4/2))
+assert(settings.integer("set.one:count") == 2 and settings.release_hold(whole_float))
 settings.on_changed(function(event) print("changed", event.mod, event.key) end)
 )";
     tsuchi::set_log_sink(log_sink);
@@ -7605,7 +7607,8 @@ settings.on_changed(function(event) print("changed", event.mod, event.key) end)
     tsuchi::frame(0.03f), tsuchi::frame(0.03f);
     CHECK(logged.lines == "[set.script] changed\tset.script\tcount\n[set.script] changed\tset.script\tspeed\n[set.script] changed\tset.script\tmode\n"
                           "[set.script] changed\tset.script\textras\n[set.script] changed\tset.script\tloud\n"
-                          "[set.script] changed\tset.one\tcount\n[set.script] changed\tset.one\tcount\n[set.script] changed\tset.one\tcount\n");
+                          "[set.script] changed\tset.one\tcount\n[set.script] changed\tset.one\tcount\n[set.script] changed\tset.one\tcount\n"
+                          "[set.script] changed\tset.one\tcount\n[set.script] changed\tset.one\tcount\n");
     CHECK(kept("set.script", "{\n  \"loud\": false,\n  \"count\": 7,\n  \"speed\": 2.5,\n  \"mode\": \"wild\",\n  \"extras\": [\"hats\", \"boots\", \"capes\"]\n}\n"));
     tsuchi::set_log_sink(nullptr);
     logged.lines.clear();

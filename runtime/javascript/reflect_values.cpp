@@ -203,6 +203,10 @@ bool held_scalar(JSContext* ctx, JSValueConst from, TSUCHI_Value& value) {
     else if (JS_IsBigInt(ctx, from)) { value.kind = TSUCHI_VALUE_INTEGER; value.as.integer = tsuchi_js::i64(ctx, from); }
     else if (JS_IsNumber(from)) { value.kind = TSUCHI_VALUE_NUMBER; value.as.number = tsuchi_js::number(ctx, from); }
     else return false;
+    if (value.kind == TSUCHI_VALUE_NUMBER && value.as.number >= -9007199254740991.0 && value.as.number <= 9007199254740991.0) {
+        const int64_t integer = int64_t(value.as.number);
+        if (double(integer) == value.as.number) { value.kind = TSUCHI_VALUE_INTEGER; value.as.integer = integer; }
+    }
     return !JS_HasException(ctx);
 }
 }
@@ -226,22 +230,11 @@ JSValue tsuchi_js_reflection_update_field(JSContext* ctx, int argc, JSValueConst
     const auto result = tsuchi_js::host(ctx)->reflection->update_field(tsuchi_js::mod(ctx), hold, &value);
     return result == TSUCHI_OK ? JS_TRUE : tsuchi_js::fail(ctx, result);
 }
-
-namespace {
-bool setting_scalar(JSContext* ctx, JSValueConst from, TSUCHI_Value& value) {
-    if (!held_scalar(ctx, from, value)) return false;
-    if (value.kind == TSUCHI_VALUE_NUMBER && value.as.number >= -9007199254740991.0 && value.as.number <= 9007199254740991.0) {
-        const int64_t integer = int64_t(value.as.number);
-        if (double(integer) == value.as.number) { value.kind = TSUCHI_VALUE_INTEGER; value.as.integer = integer; }
-    }
-    return true;
-}
-}
 JSValue tsuchi_js_settings_hold(JSContext* ctx, int argc, JSValueConst* argv) {
     String key(ctx, tsuchi_js::arg(argc, argv, 0));
     if (JS_HasException(ctx)) return JS_EXCEPTION;
     TSUCHI_Value value{};
-    if (!setting_scalar(ctx, tsuchi_js::arg(argc, argv, 1), value))
+    if (!held_scalar(ctx, tsuchi_js::arg(argc, argv, 1), value))
         return JS_HasException(ctx) ? JS_EXCEPTION : tsuchi_js::fail(ctx, TSUCHI_INVALID);
     TSUCHI_SettingHold hold{};
     const auto result = tsuchi_js::host(ctx)->settings->hold(tsuchi_js::mod(ctx), key, &value, &hold);
@@ -251,7 +244,7 @@ JSValue tsuchi_js_settings_update_hold(JSContext* ctx, int argc, JSValueConst* a
     const TSUCHI_SettingHold hold{tsuchi_js::handle(ctx, tsuchi_js::arg(argc, argv, 0), "setting_hold", false)};
     if (JS_HasException(ctx)) return JS_EXCEPTION;
     TSUCHI_Value value{};
-    if (!setting_scalar(ctx, tsuchi_js::arg(argc, argv, 1), value))
+    if (!held_scalar(ctx, tsuchi_js::arg(argc, argv, 1), value))
         return JS_HasException(ctx) ? JS_EXCEPTION : tsuchi_js::fail(ctx, TSUCHI_INVALID);
     const auto result = tsuchi_js::host(ctx)->settings->update_hold(tsuchi_js::mod(ctx), hold, &value);
     return result == TSUCHI_OK ? JS_TRUE : tsuchi_js::fail(ctx, result);

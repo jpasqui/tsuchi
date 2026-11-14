@@ -27,8 +27,8 @@ respawn interval and a field capacity:
 }
 ```
 
-These are example declarations, not bundled or published gameplay mods. Install
-the required mods separately; `requires` checks versions and startup order but
+Tsuchi doesn't bundle these mods, and none of them is published. Install the
+mods you require separately, as `requires` checks versions and startup order but
 doesn't download them. [Manifest requirements](/develop/manifest/#requirements)
 describe version matching.
 
@@ -47,8 +47,8 @@ anticipate your mod. `public` controls reading settings across mods and has no
 effect on overrides.
 
 Two mods may request the same value. Different values for one setting block all
-mods requesting that setting, and mods depending on them. Load order doesn't pick
-a winner. The Mods menu refuses conflicting activation drafts before saving them;
+mods requesting that setting, and mods depending on them, whatever the load
+order. The Mods menu refuses conflicting activation drafts before saving them;
 files installed or changed outside the menu are checked again at startup. Disable
 one of the conflicting mods to choose which configuration to use.
 
@@ -63,5 +63,6 @@ A controller that fails to start or is blocked releases its overrides. A develop
 restart includes its configured dependencies, so their startup sees the selected
 values again. Removing the controller doesn't erase the player's settings.
 
-An override controls configuration, not past gameplay. Removing a mod won't undo
-enemies already defeated, collected items, or other progress saved while it ran.
+An override changes settings and nothing else, so removing a mod won't bring back
+creatures already defeated or undo collected items or other progress saved while
+it ran.
