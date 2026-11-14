@@ -80,7 +80,7 @@ enums:
       - {name: dismiss, value: 2, doc: "A captain's dismiss. Reads `dismiss`."}
       - {name: switch_type, value: 3, doc: "Switches the selected Pikmin type one way. A captain or a dog. Reads `switch_type`."}
       - {name: switch_type_back, value: 4, doc: "Switches the selected Pikmin type the other way. A captain or a dog. Reads `switch_type_back`."}
-      - {name: ride, value: 5, doc: "A captain gets on its dog, on a press or on a release just after one. Reads `ride`, or `input_4` with the direct Y menu option, and `ride_release`."}
+      - {name: ride, value: 5, doc: "A captain gets on its dog, on a press or on a release that follows one closely. Reads `ride`, or `input_4` with the direct Y menu option, and `ride_release`."}
       - {name: bite, value: 6, doc: "A dog bites when no Pikmin are riding on it. Reads `dog_throw`."}
       - {name: jump, value: 7, doc: "A dog jumps. Reads `dog_jump`."}
       - {name: rush, value: 8, doc: "A dog charges a rush, pressed and then held. Reads `dog_jump`."}

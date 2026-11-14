@@ -38,6 +38,7 @@ functions:
       invalid: "The name isn't valid UTF-8, or it is too long for a name."
       not_found: "The game has no message with that label."
       not_ready: "The game has no radio right now, as no level is being played."
+      unsupported: "This build of the game has no adapter for the radio."
     completes: banner
 
   - name: prompts_shown
@@ -53,7 +54,7 @@ functions:
     returns: {type: u32, doc: "One bit for each player's screen, `1` for the first player's and `8` for the fourth's. `0` when none is shown."}
     fails:
       not_found: "The actor no longer exists."
-      not_ready: "Watching the game's prompts has just started, or it cannot start on this game."
+      not_ready: "Watching the game's prompts is still starting, or it cannot start on this game."
     users: [online-coop, dog-coop]
 
   - name: hold_hidden_prompts

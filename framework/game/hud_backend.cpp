@@ -110,9 +110,9 @@ bool knows_label(uint64_t messages, uint64_t label) {
 TSUCHI_Result radio(const char* name) {
     size_t units = 0;
     if (!game::utf8_to_units(name, nullptr, 0, units) || !units || units > t::constant::max_name_units) return TSUCHI_INVALID;
-    if (!t::bound(t::fn::name_from_text) || !t::bound(t::fn::face_message_request) ||
-        !t::present(t::ui_manager::face_messages) || !t::present(t::face_message_manager::labels))
-        return TSUCHI_NOT_READY;
+    if (!t::bound(t::fn::name_from_text) || !t::bound(t::fn::face_message_request) || !t::present(t::ui_manager::face_messages) ||
+        !t::present(t::face_message_manager::labels) || !t::present(t::face_message_manager::label_buckets))
+        return TSUCHI_UNSUPPORTED;
     const uint64_t framework = game::game_framework();
     const uint64_t ui = framework ? live_at(framework + t::game_framework::ui) : 0;
     const uint64_t messages = ui ? live_at(ui + t::ui_manager::face_messages) : 0;

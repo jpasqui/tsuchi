@@ -50,6 +50,16 @@ optional:
   - structs.pikmin_hit.point
   - structs.action_marker.actor              # presenter_markers.cpp asks t::present: without them the game's prompts are
   - structs.ui_widget.visibility             # not watched, and hud.prompts_shown and hold_hidden_prompts are not ready
+  - functions.face_message_request           # hud_backend.cpp asks t::bound and t::present: without them hud.radio is
+  - structs.face_message_manager.labels      # unsupported
+  - structs.face_message_manager.label_buckets
+  - structs.ui_manager.face_messages
+  - structs.carry_numbers.entries            # presenter_effects.cpp asks t::present: without them the carry numbers are
+  - structs.carry_numbers.count              # not moved between steps
+  - structs.carry_number.place
+  - structs.game_framework.carry_numbers
+  - structs.ui_actor_access.captain          # content_squad.cpp asks t::present: without them squad.hold_hud_leader is
+  - structs.ui_manager.actor_access          # unsupported
 
 # `mod_start` lists entries the mods' start waits on through a helper in a family's file, which the scan of core files
 # does not see. With one absent no mod ever starts, whatever the families say, so a build cannot mark one absent.

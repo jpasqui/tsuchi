@@ -479,7 +479,9 @@ void show_icon(uint64_t icon, uint64_t material, uint64_t atlases, uint8_t toggl
 // captain its UIActorAccessMgr keeps; for that call only, it keeps this leader.
 TSUCHI_Mod* hud_holder = nullptr;
 uint64_t hud_leader = 0;   // a handle
+bool actor_access_known() { return t::present(t::ui_manager::actor_access) && t::present(t::ui_actor_access::captain); }
 uint64_t actor_access() {
+    if (!actor_access_known()) return 0;
     const uint64_t framework = g::game_framework();
     const uint64_t ui = framework ? g::read_or<uint64_t>(framework + t::game_framework::ui) : 0;
     const uint64_t access = ui && g::live(ui) ? g::read_or<uint64_t>(ui + t::ui_manager::actor_access) : 0;
@@ -501,7 +503,7 @@ TSUCHI_Result held_hud_leader(TSUCHI_Mod* mod, TSUCHI_Actor leader) {
     if (!mod_usable(mod)) return TSUCHI_INVALID;
     const uint64_t actor = g::from_handle(leader.id);
     if (!actor || !g::is_leader(actor)) return TSUCHI_NOT_FOUND;
-    if (!hud_before) return TSUCHI_UNSUPPORTED;
+    if (!hud_before || !actor_access_known()) return TSUCHI_UNSUPPORTED;
     if (hud_holder && hud_holder != mod && mod_usable(hud_holder)) return TSUCHI_BUSY;
     hud_holder = mod, hud_leader = leader.id;
     return TSUCHI_OK;

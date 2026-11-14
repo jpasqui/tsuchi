@@ -73,7 +73,8 @@ Counter* counter_of(uint64_t item) {
 
 void counters_present() {
     namespace n = t::carry_numbers;
-    if (!(moment.parts & kPartMarkers) || !t::bound(t::fn::mark_end_of_frame) || !t::present(t::game_framework::carry_numbers))
+    if (!(moment.parts & kPartMarkers) || !t::bound(t::fn::mark_end_of_frame) || !t::present(t::game_framework::carry_numbers) ||
+        !t::present(n::entries) || !t::present(n::count) || !t::present(t::carry_number::place))
         return;
     const uint64_t framework = game::global<uint64_t>(t::data::game_framework);
     const uint64_t numbers = framework ? game::read_or<uint64_t>(framework + t::game_framework::carry_numbers) : 0;
