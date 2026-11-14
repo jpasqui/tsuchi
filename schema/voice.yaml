@@ -35,6 +35,7 @@ functions:
     completes: start_capture
 
   - name: read_packet
+    owns: true
     doc: "Returns the oldest recorded packet: 20 ms of the microphone as Opus, at most 512 bytes."
     returns: {type: bytes, doc: "One packet, in the form that play_packet takes."}
     fails:
@@ -43,6 +44,7 @@ functions:
     completes: start_capture
 
   - name: level
+    owns: true
     doc: |
       Returns how loud the latest recorded 20 ms was, from 0 for silence to 1.
       Speech is usually above 0.02.

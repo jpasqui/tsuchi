@@ -468,8 +468,8 @@ TSUCHI_Result stop_capture(TSUCHI_Mod* mod) {
     return TSUCHI_OK;
 }
 
-TSUCHI_Result read_packet(void* buffer, uint64_t capacity, uint64_t* out) {
-    if (!load(capture.on)) return TSUCHI_NOT_FOUND;
+TSUCHI_Result read_packet(TSUCHI_Mod* mod, void* buffer, uint64_t capacity, uint64_t* out) {
+    if (capture.owner != mod || !load(capture.on)) return TSUCHI_NOT_FOUND;
     const Packet* packet = captured.front();
     if (!packet) return TSUCHI_NOT_READY;
     const uint64_t size = packet->size < capacity ? packet->size : capacity;
@@ -479,8 +479,8 @@ TSUCHI_Result read_packet(void* buffer, uint64_t capacity, uint64_t* out) {
     return TSUCHI_OK;
 }
 
-TSUCHI_Result level(float* out) {
-    if (!load(capture.on)) return TSUCHI_NOT_FOUND;
+TSUCHI_Result level(TSUCHI_Mod* mod, float* out) {
+    if (capture.owner != mod || !load(capture.on)) return TSUCHI_NOT_FOUND;
     *out = bits_float(load(capture.level_bits));
     return TSUCHI_OK;
 }
