@@ -85,7 +85,12 @@ TSUCHI_Result work_on(TSUCHI_Actor actor, TSUCHI_Actor on) {
     return game::send_to_work(pikmin, target);
 }
 
-const pikmin::Backend pikmin_service{list, describe, add, work_on};
+TSUCHI_Result type_count(uint32_t* out) {
+    const auto& types = pikmin::PikminType_vocabulary;
+    *out = types.own_count + types.added.count;
+    return TSUCHI_OK;
+}
+const pikmin::Backend pikmin_service{list, describe, add, work_on, type_count};
 
 // ---- squad -----------------------------------------------------------------------
 

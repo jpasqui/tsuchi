@@ -729,6 +729,7 @@ void long_names() {
 }
 
 #include "reflect_atomic_checks.h"
+#include "reflection_field_checks.h"
 
 } // namespace
 
@@ -745,6 +746,7 @@ int main() {
     listed();
     long_names();
     atomic_writes();
+    owned_fields();
     lifetimes();
     ended_while_running();
     if (failures) std::printf("%d failed\n", failures);

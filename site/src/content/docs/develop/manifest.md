@@ -52,10 +52,6 @@ or incompatible, then the mod won't load. For `1.2.0`, `1.3.0` matches and
 order, or mod ID order before the player chooses one. The mod list reports blocked
 requirements, stacked changes, and exclusive claims that need a chosen winner.
 
-:::note[Coming soon]
-The game's mod list is coming soon. Until then, Tsuchi loads every installed mod, with dependencies first and then in order of mod ID.
-:::
-
 ```json title="mod.json"
 {
   "requires": {"olimar.library": "1.0.0"},
@@ -64,11 +60,27 @@ The game's mod list is coming soon. Until then, Tsuchi loads every installed mod
 }
 ```
 
+## Restart lifetime
+
+`"restart": "game"` prevents a running mod from being stopped by a development
+restart. Use it when native allocations or other session-long effects cannot be
+undone safely while the game runs. The default, `"restart": "mod"`, allows the
+usual restart behavior.
+
+Tsuchi checks the entire dependent group before releasing anything. If any running
+member requires a game restart, all members keep their contexts, hooks and owned
+resources, and receive a `mod.restarted` event with outcome `kept` and the reason.
+This applies to explicit restart requests and development-folder changes. Ordinary
+startup failure still rolls back resources; this option does not make a failed
+start permanent, run code earlier, or change how settings take effect. A mod that
+reads settings only at startup should explain that a game restart applies changes.
+
 ## Data
 
 | Key | Description |
 | --- | --- |
 | `settings` | Settings your mod reads and changes by key. See [Settings](#settings). |
+| `settings_overrides` | Effective values for settings of required mods. See [Compose mods](/develop/compose-mods/). |
 | `tables` | Changes to the game's data tables. See [Change a table](/develop/change-tables/). |
 | `text` | Replacement text. See [Change text](/develop/change-text/). |
 | `maps` | Ground, scenery edits, navigation, placements, changes to the game's own placements, and AI for existing worlds. See [Change a map](/develop/change-a-map/) and [Add placements](/develop/add-placements/). |
@@ -91,10 +103,6 @@ Declare one entry per setting under `settings`. Its key follows the
 `default`. Use `name` and `description` for its display text. Settings can appear
 in the game's Settings tabs or on the mod's page.
 
-:::note[Coming soon]
-The settings screens in the game are coming soon. Until then, only your mod can change its settings.
-:::
-
 | Key | Required | Value |
 | --- | --- | --- |
 | `type` | Yes | `toggle`, `integer`, `number`, `text`, `choice`, or `set`. |
@@ -102,8 +110,11 @@ The settings screens in the game are coming soon. Until then, only your mod can 
 | `name` | No | Display name as text. |
 | `description` | No | Help text for the setting. |
 | `public` | No | `true` lets other mods read the setting. Defaults to `false`. |
+| `hidden` | No | `true` hides an internal setting from generated forms and refuses overrides. Defaults to `false`. |
+| `overridable` | No | `false` prevents other mods from declaring an override. Visible settings default to `true`. This does not grant direct write access. |
 | `min` | No | Inclusive lower bound for `integer` or `number`. |
 | `max` | No | Inclusive upper bound for `integer` or `number`. |
+| `step` | No | Positive finite increment for a `number` setting in the generated arrow selector; defaults to 1, or one twentieth of a bounded range at most 1 wide. Saved and API values need not lie on that menu grid. |
 | `max_length` | No | Maximum UTF-8 bytes for `text`, as a nonnegative whole number. |
 | `choices` | For `choice` and `set` | A nonempty list of distinct, nonempty words. |
 
@@ -127,6 +138,13 @@ Tsuchi saves the player's values with your mod's save data. Read and change the
 values through the [settings API](/reference/settings/), and subscribe to changes
 as [Add settings](/develop/settings/) shows. Another mod reads a public setting
 as `<mod id>:<key>` and can't change it.
+
+A running mod can narrow an integer setting's range with
+[`settings.set_integer_range`](/reference/settings/#set_integer_range). The normal
+form updates its arrows and displayed value. Reads clamp to that range while
+saved preferences remain intact, so restoring content restores a previously
+chosen higher value. Direct writes must fit the current range. The owner alone
+can set it, and stopping that mod releases the range.
 
 ## Code
 

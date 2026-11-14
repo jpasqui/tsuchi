@@ -37,14 +37,20 @@ struct ModRecord {
     uint32_t rank;        // its first context's rank, kept by every restart; 0 until it has had a context
     bool dev_folder;      // its development folder on the SD card was there as it last started
     bool restart_asked;   // a restart waits for the end of the step
-    uint64_t dev_print;   // what its development folder held as it last started or was last watched; 0 for none
+    uint64_t dev_print;   // its development folder's files, by path and size, as last seen; 0 for none
+    uint64_t dev_content; // their bytes, as last read through
+    uint64_t dev_partial; // the bytes read so far of the pass under way, and the file it goes on from
+    uint32_t dev_next;
     // For the framework's own use while it works out which can run and in what order.
     uint32_t seen;
     bool circular;
     bool manifest_valid; // read and admitted before activation or dependency decisions
     const char* clash;
     const char* clash_version;
+    bool override_active = false;
+    bool override_conflict = false;
     bool prepared = false; // the opted-in early declarations began successfully in this context
+    bool game_restart = false; // native allocations/effects require a new game process before restarting this mod
     char folder[384]{}; // selected immutable physical folder; empty for the ordinary RomFS location
     uint32_t capabilities = 0; // the kModCapability bits its manifest's "capabilities" names
 };
@@ -88,6 +94,8 @@ bool add_manifest_key_off(const char* key, const char* family);
 TSUCHI_Result manifest_part(const char* key, TSUCHI_Mod* mod, const Json& part, Text& problem, bool apply);
 // What is done for a mod that has its context, before its code runs.
 void set_before_start(void (*prepare)(ModRecord& record));
+void set_setting_override_changed(void (*changed)(ModRecord&, const Setting&));
+void refresh_setting_overrides();
 
 // Reads one manifest into a record that has its ID. False when the mod is blocked by what its manifest says or
 // fails to say; `problem` then tells why.
@@ -134,6 +142,12 @@ void set_dev_folder(const char* root, bool (*begin)(), void (*end)());
 // Watches the development folders: every `steps` steps, a mod that has had its turn is restarted when its
 // development folder was made, taken away, or had a file added, removed or changed since it last started. 0, as
 // before the first call, watches nothing. See DESIGN.md, "The development folder".
+//
+// Each look lists the folder: a file added, removed or of another size is seen at once, and no file is opened for
+// it. The files' bytes, 1 MiB of them in all, are read a few at a time, in passes over the folder (kWatchFiles
+// files and kWatchBytes bytes a look, at least one file), so a change that keeps a file's size is seen at the end
+// of a pass: the one under way when the file was still to be read, the next when it had been read. A mod with a
+// few small files has a pass every look.
 void set_dev_watch(uint32_t steps);
 // Looks at the development folders when the interval set_dev_watch gave has passed. Runs after each step, before
 // run_restarts.

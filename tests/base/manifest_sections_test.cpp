@@ -21,6 +21,7 @@ std::map<std::string, std::string> files;
 std::vector<std::string> events;
 std::map<std::string, TSUCHI_Mod*> expected_contexts;
 std::map<std::string, int> released;
+std::map<std::string, std::pair<TSUCHI_RestartOutcome, std::string>> restart_outcomes;
 uint32_t folder_reads = 0, manifest_reads = 0, choices_attempts = 0, before_calls = 0, code_calls = 0;
 TSUCHI_Result choices_result = TSUCHI_OK;
 const char* activation = "", *order = "";
@@ -129,7 +130,7 @@ void reset() {
         (void)id;
         CHECK(!mod_running(context) && !owned_count(context));
     }
-    files.clear(); events.clear(); expected_contexts.clear(); released.clear();
+    files.clear(); events.clear(); expected_contexts.clear(); released.clear(); restart_outcomes.clear();
     before_calls = code_calls = choices_attempts = 0;
     choices_result = TSUCHI_OK; activation = order = "";
     CHECK(load_mod_choices() == TSUCHI_OK);
@@ -158,7 +159,12 @@ const char* result_name(TSUCHI_Result result) {
     default: return "other";
     }
 }
-namespace mod { void set_backend(const Backend*) {} void emit_restarted(const TSUCHI_ModRestarted&) {} }
+namespace mod {
+void set_backend(const Backend*) {}
+void emit_restarted(const TSUCHI_ModRestarted& event) {
+    restart_outcomes[event.mod] = {event.outcome, event.problem};
+}
+}
 namespace file { void set_backend(const Backend*) {} }
 namespace game {
 bool files_known() { return true; }
@@ -177,6 +183,8 @@ TSUCHI_Result list_folder(const char* path, Texts&, Texts& folders) {
     for (const auto& id : ids) if (!folders.add(id.c_str())) return TSUCHI_NO_MEMORY;
     return TSUCHI_OK;
 }
+// The same with sizes, as the development folders are listed: this stand-in lists folders only, so there are none.
+TSUCHI_Result list_folder(const char* path, Texts& files, Texts& folders, List<uint64_t>&) { return list_folder(path, files, folders); }
 TSUCHI_Result file_size(const char* path, uint64_t& size) {
     const std::string* file = find_file(path);
     if (!file) return TSUCHI_NOT_FOUND;
@@ -196,6 +204,9 @@ TSUCHI_Result read_whole_file(const char* path, char*& data, uint64_t& size) {
 }
 } // namespace game
 } // namespace tsuchi
+
+#include "settings_overrides_checks.h"
+#include "restart_lifetime_checks.h"
 
 int main() {
     CHECK(add_manifest_section({"busy", any_part, busy_begin}));
@@ -374,6 +385,8 @@ int main() {
     choices_result = TSUCHI_OK;
     CHECK(find_mods() == TSUCHI_OK && mod_count() == 1);
     reset();
+    settings_overrides_checks();
+    restart_lifetime_checks();
     set_before_start(nullptr); set_mod_choices_loader(nullptr);
     if (!failed) std::puts("manifest phases: private pending selection, adoption, ordering, rollback and reentry checked");
     return failed;

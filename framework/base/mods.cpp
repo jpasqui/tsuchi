@@ -32,6 +32,7 @@ List<ManifestSection> sections;
 struct KeyOff { const char* key; const char* family; };
 List<KeyOff> keys_off;
 void (*before_start)(ModRecord&) = nullptr;
+void (*override_changed)(ModRecord&, const Setting&) = nullptr;
 void (*log_sink)(const char*, const char*) = nullptr;
 uint32_t lines_logged = 0;
 TSUCHI_Result (*installed_folders)(Texts&) = nullptr;
@@ -42,6 +43,7 @@ struct Lifecycle {
     uint64_t generation = discovery_generation;
     Lifecycle() { lifecycle_active = true; }
     ~Lifecycle() {
+        if (!forget_pending) refresh_setting_overrides();
         lifecycle_active = false;
         if (forget_pending) { forget_pending = false; forget_mods(); }
     }
@@ -125,7 +127,8 @@ void forget(ModRecord& record) {
 // The keys a manifest may have at its top. Anything else is a mistake its author should hear of.
 bool known_key(const char* key) {
     const char* const every[] = {"id", "name", "version", "framework", "game", "author", "description", "url", "meta",
-                                 "requires", "optional", "conflicts", "settings", "capabilities"};
+                                 "requires", "optional", "conflicts", "settings", "settings_overrides", "restart",
+                                 "capabilities"};
     for (const char* known : every)
         if (!strcmp(key, known)) return true;
     for (uint32_t i = 0; i < sections.count; ++i)
@@ -194,6 +197,12 @@ bool read_manifest(ModRecord& record, const char* text, size_t bytes) {
         const Json* said = manifest.find(key);
         if (said && (said->kind != Json::Kind::text || strlen(said->text) != said->bytes)) return blocked(record, "mod.json: \"", key, "\" is text");
     }
+    if (const Json* restart = manifest.find("restart")) {
+        if (restart->kind != Json::Kind::text || strlen(restart->text) != restart->bytes ||
+            (strcmp(restart->text, "mod") && strcmp(restart->text, "game")))
+            return blocked(record, "mod.json: \"restart\" is either \"mod\" or \"game\"");
+        record.game_restart = !strcmp(restart->text, "game");
+    }
     // A mod that only works with some builds of the game says which, by key or by version.
     if (const Json* game = manifest.find("game")) {
         const auto names_this_build = [](const Json& said) {
@@ -237,6 +246,16 @@ bool read_manifest(ModRecord& record, const char* text, size_t bytes) {
             if (each->kind != Json::Kind::text || strlen(each->text) != each->bytes) return blocked(record, "mod.json: \"capabilities\" is a list of names, such as [\"packages\"]");
             if (!strcmp(each->text, "packages")) record.capabilities |= kModCapabilityPackages;
             else return blocked(record, "it needs the capability ", each->text, ", which this version of the framework does not have");
+        }
+    }
+    if (const Json* overrides = manifest.find("settings_overrides")) {
+        if (overrides->kind != Json::Kind::object) return blocked(record, "mod.json: settings_overrides must be an object of required mod IDs");
+        const Json* needs = manifest.find("requires");
+        for (const Json* target = overrides->first; target; target = target->next) {
+            if (!needs || !needs->find(target->name)) return blocked(record, "settings_overrides needs a direct requires dependency: ", target->name);
+            if (target->kind != Json::Kind::object || !target->count) return blocked(record, "settings_overrides needs setting keys and values for ", target->name);
+            for (const Json* value = target->first; value; value = value->next)
+                if (!valid_mod_id(value->name)) return blocked(record, "settings_overrides has an invalid setting key: ", value->name);
         }
     }
     Text wrong;
@@ -288,6 +307,59 @@ void block_unmet() {
             changed = changed || record.state != ModState::ready;
         }
     }
+}
+
+const Json* overrides_of(const ModRecord& source, const char* target) {
+    const Json* overrides = source.manifest ? source.manifest->find("settings_overrides") : nullptr;
+    return overrides ? overrides->find(target) : nullptr;
+}
+
+void validate_overrides() {
+    for (uint32_t i = 0; i < records.count; ++i) {
+        ModRecord& source = records[i];
+        if (source.state != ModState::ready) continue;
+        const Json* overrides = source.manifest->find("settings_overrides");
+        for (const Json* target = overrides ? overrides->first : nullptr; target && source.state == ModState::ready; target = target->next) {
+            ModRecord* there = find_mod(target->name);
+            for (const Json* value = target->first; value && source.state == ModState::ready; value = value->next) {
+                Setting* setting = there ? find_setting(there->settings, value->name) : nullptr;
+                if (!setting) blocked(source, "settings_overrides: unknown setting ", target->name, ":", value->name);
+                else if (!setting->overridable) blocked(source, "settings_overrides: setting does not allow overrides: ", target->name, ":", value->name);
+                else if (!setting_value_allowed(*setting, *value)) blocked(source, "settings_overrides: invalid value for ", target->name, ":", value->name);
+            }
+        }
+    }
+    block_unmet();
+    for (uint32_t t = 0; t < records.count; ++t) {
+        ModRecord& target = records[t];
+        for (uint32_t s = 0; s < target.settings.list.count; ++s) {
+            const Setting& setting = target.settings.list[s];
+            const Json* first = nullptr;
+            bool clash = false;
+            for (uint32_t i = 0; i < records.count; ++i) {
+                const ModRecord& source = records[i];
+                const Json* part = source.state == ModState::ready ? overrides_of(source, target.id) : nullptr;
+                const Json* value = part ? part->find(setting.key()) : nullptr;
+                if (!value) continue;
+                if (first && !setting_values_equal(setting, *first, *value)) clash = true;
+                first = value;
+            }
+            if (!clash) continue;
+            for (uint32_t i = 0; i < records.count; ++i) {
+                ModRecord& source = records[i];
+                const Json* part = source.state == ModState::ready ? overrides_of(source, target.id) : nullptr;
+                if (!part || !part->find(setting.key())) continue;
+                source.override_conflict = true;
+                // Retain selection until every contested setting has been examined.
+                const ModState state = source.state;
+                blocked(source, "conflicting settings_overrides for ", target.id, ":", setting.key());
+                source.state = state;
+            }
+        }
+    }
+    for (uint32_t i = 0; i < records.count; ++i)
+        if (records[i].override_conflict) records[i].state = ModState::blocked;
+    block_unmet();
 }
 
 // Blocks every mod that cannot run beside one that can: one it says it conflicts with, or one it works with only
@@ -654,6 +726,8 @@ TSUCHI_Result find_mods() {
     block_clashes();
     do block_unmet();
     while (order_mods());
+    validate_overrides();
+    refresh_setting_overrides();
     return TSUCHI_OK;
 }
 
@@ -725,7 +799,7 @@ bool needs_running(ModRecord& record) {
 }
 
 extern uint32_t watch_every;
-uint64_t dev_print_of(const char* id);
+void take_dev_print(ModRecord& record);
 
 // Gives a mod that has its turn its context, in its old place when it has had one, then does what its manifest
 // declares and runs its code. A mod prepared before the world keeps its context and does only the rest. False,
@@ -749,7 +823,7 @@ bool start_one(ModRecord& record) {
             record.problem.clear();
             if (record.dev_folder)
                 mod_note(record.id, "its files are read from its development folder on the SD card first, tsuchi/dev/ and its ID");
-            if (watch_every) record.dev_print = dev_print_of(record.id);
+            if (watch_every) take_dev_print(record);
             if (before_start) before_start(record);
             if (!current()) return false;
             started = record.state == ModState::running && mod_usable(record.context) &&
@@ -823,7 +897,11 @@ void mark_with_dependents(ModRecord& target) {
         grew = false;
         for (uint32_t i = 0; i < records.count; ++i) {
             ModRecord& record = records[i];
-            if (record.seen == stamp || !had_turn(record) || !requires_marked(record)) continue;
+            if (record.seen == stamp || !had_turn(record)) continue;
+            bool included = requires_marked(record);
+            for (uint32_t j = 0; j < records.count && !included; ++j)
+                included = records[j].seen == stamp && overrides_of(records[j], record.id);
+            if (!included) continue;
             record.seen = stamp;
             grew = true;
         }
@@ -832,13 +910,21 @@ void mark_with_dependents(ModRecord& target) {
 
 // Restarts the mods marked with the current stamp together.
 void restart_marked() {
-    // Nothing stops unless the entry of every running one compiles, read from where its next start reads it.
+    // Nothing stops unless every running mod permits restart and its entry compiles.
+    // Check the whole dependent group first: removing even a provider's resources
+    // could invalidate a session-long consumer's native allocations.
     Text problem;
     bool fine = true;
     for (uint32_t i = 0; i < records.count; ++i) {
         ModRecord& record = records[i];
         if (record.seen != stamp) continue;
         record.restart_asked = false;
+        if (fine && record.state == ModState::running && record.game_restart) {
+            Texts why;
+            if (why.add(record.id, " requires restarting the game")) problem.set(why.data);
+            why.clear();
+            fine = false;
+        }
         const bool before = record.dev_folder;
         record.dev_folder = dev_folder_there(record.id);
         if (fine && record.state == ModState::running && !compiles(record, problem)) fine = false;
@@ -860,6 +946,9 @@ void restart_marked() {
             stop_context(record);
             record.state = ModState::stopped;
         }
+    for (uint32_t i = 0; i < records.count; ++i)
+        if (records[i].seen == stamp) records[i].state = ModState::stopped;
+    refresh_setting_overrides();
     for (uint32_t place = 0; place < records.count; ++place)
         for (uint32_t i = 0; i < records.count; ++i)
             if (records[i].seen == stamp && records[i].order == place) start_one(records[i]);
@@ -909,65 +998,120 @@ void mix(uint64_t& hash, const void* bytes, uint64_t size) {
     for (uint64_t i = 0; i < size; ++i) hash = (hash ^ at[i]) * 1099511628211ull;
 }
 
-struct PrintBudget {
-    uint32_t files = 256;          // files looked at, at most
-    uint64_t bytes = 1024 * 1024; // bytes read, at most; past it a file counts by its size alone
+constexpr uint64_t kHashStart = 14695981039346656037ull;
+constexpr uint32_t kDevFiles = 256;           // files of a development folder looked at, at most
+constexpr uint64_t kDevBytes = 1024 * 1024;   // bytes of them read, at most; past it a file counts by its path and size alone
+constexpr uint32_t kWatchFiles = 8;            // files whose bytes one look reads, at most
+constexpr uint64_t kWatchBytes = 256 * 1024;   // and their bytes, at most, past the first file
+
+// The files of a development folder, folders looked into four deep: each one's whole path and size, in the order
+// the listings give them. Only the folders are opened.
+struct DevFiles {
+    Texts paths;
+    List<uint64_t> sizes;
+    uint32_t count = 0;
+    size_t within = 0; // where a path within the development folder starts
+    ~DevFiles() { paths.clear(), sizes.clear(); }
 };
 
-// Adds the files under `folder` to the hash: each one's path within the development folder, its size and, while the
-// budget lasts, its bytes. Folders are looked into four deep.
-void print_folder(uint64_t& hash, const char* folder, size_t within, uint32_t depth, PrintBudget& budget) {
+bool list_dev_files(const char* folder, uint32_t depth, DevFiles& out) {
     Texts files, folders;
-    if (game::list_folder(folder, files, folders) != TSUCHI_OK) {
-        files.clear(), folders.clear();
-        return;
-    }
-    for (const char* name = files.first(); name && budget.files; name = files.after(name)) {
-        --budget.files;
+    List<uint64_t> sizes;
+    const TSUCHI_Result listed = game::list_folder(folder, files, folders, sizes);
+    bool ok = listed == TSUCHI_OK;
+    uint32_t i = 0;
+    for (const char* name = ok ? files.first() : nullptr; name && out.count < kDevFiles; name = files.after(name), ++i) {
         Texts path;
-        if (!path.add(folder, "/", name)) break;
-        uint64_t size = 0;
-        if (game::file_size(path.data, size) == TSUCHI_OK) {
-            mix(hash, path.data + within, strlen(path.data + within) + 1);
-            mix(hash, &size, sizeof size);
-            if (size <= budget.bytes) {
-                char* data = nullptr;
-                uint64_t got = 0;
-                if (game::read_whole_file(path.data, data, got) == TSUCHI_OK) {
-                    mix(hash, data, got);
-                    budget.bytes -= got < budget.bytes ? got : budget.bytes;
-                }
-                release(data);
-            }
-        }
+        uint64_t size = i < sizes.count ? sizes[i] : game::kSizeUnknown;
+        ok = path.add(folder, "/", name);
+        if (ok && size == game::kSizeUnknown && game::file_size(path.data, size) != TSUCHI_OK) size = game::kSizeUnknown;
+        ok = ok && out.paths.add(path.data) && out.sizes.add(size);
+        path.clear();
+        if (!ok) break;
+        ++out.count;
+    }
+    for (const char* name = ok ? folders.first() : nullptr; name && depth; name = folders.after(name)) {
+        Texts path;
+        if (path.add(folder, "/", name)) list_dev_files(path.data, depth - 1, out);
         path.clear();
     }
-    for (const char* name = folders.first(); name && depth; name = folders.after(name)) {
-        Texts path;
-        if (path.add(folder, "/", name)) print_folder(hash, path.data, within, depth - 1, budget);
-        path.clear();
-    }
-    files.clear(), folders.clear();
+    files.clear(), folders.clear(), sizes.clear();
+    return listed == TSUCHI_OK;
 }
 
-// What the mod's development folder holds now, as one number: 0 when there is none, or the card cannot be read.
-uint64_t dev_print_of(const char* id) {
-    if (!dev.root || !game::files_known()) return 0;
+// The mod's development folder now: false when there is none, or the card cannot be read.
+bool look_at_dev_folder(const char* id, const DevScope& scope, DevFiles& out) {
+    if (!dev.root || !game::files_known() || !scope.open) return false;
     Texts where;
-    uint64_t hash = 0;
-    if (path_in(where, dev.root, id, "")) {
-        DevScope scope;
-        Texts files, folders;
-        if (scope.open && game::list_folder(where.data, files, folders) == TSUCHI_OK) {
-            hash = 14695981039346656037ull;
-            PrintBudget budget;
-            print_folder(hash, where.data, where.used, 4, budget);
-            if (!hash) hash = 1;
-        }
-        files.clear(), folders.clear();
+    bool there = path_in(where, dev.root, id, "");
+    if (there) {
+        out.within = where.used;
+        there = list_dev_files(where.data, 4, out);
     }
     where.clear();
-    return hash;
+    return there;
+}
+
+// Its files by path and size, as one number other than 0.
+uint64_t shape_of(const DevFiles& files) {
+    uint64_t hash = kHashStart;
+    uint32_t i = 0;
+    for (const char* path = files.paths.first(); path && i < files.count; path = files.paths.after(path), ++i) {
+        mix(hash, path + files.within, strlen(path + files.within) + 1);
+        mix(hash, &files.sizes[i], sizeof files.sizes[i]);
+    }
+    return hash ? hash : 1;
+}
+
+// Adds the bytes of its files from `from` on to `hash`, each after its path, while the budget lasts: at least one
+// file, and no more than `most_files` or past `most_bytes`. Gives the file the next look goes on from.
+//
+// Of the whole folder kDevBytes are read, counted from its first file by the sizes listed, so every look of a pass
+// and the read at a start agree on which files those are.
+uint32_t read_dev_files(const DevFiles& files, uint32_t from, uint32_t most_files, uint64_t most_bytes, uint64_t& hash) {
+    uint32_t i = 0, read = 0;
+    uint64_t bytes = 0, left = kDevBytes;
+    for (const char* path = files.paths.first(); path && i < files.count; path = files.paths.after(path), ++i) {
+        const uint64_t size = files.sizes[i];
+        const bool counted = size != game::kSizeUnknown && size <= left;
+        if (counted) left -= size;
+        if (i < from) continue;
+        if (read && (read >= most_files || (counted && bytes + size > most_bytes))) break;
+        mix(hash, path + files.within, strlen(path + files.within) + 1);
+        if (counted) {
+            char* data = nullptr;
+            uint64_t got = 0;
+            if (game::read_whole_file(path, data, got) == TSUCHI_OK) mix(hash, data, got);
+            release(data);
+            bytes += size;
+        }
+        ++read;
+    }
+    return i;
+}
+
+// Notes what the mod's development folder holds now, the whole of it, as a start or a change it restarts for.
+void take_dev_print(ModRecord& record) {
+    DevScope scope;
+    DevFiles files;
+    record.dev_print = look_at_dev_folder(record.id, scope, files) ? shape_of(files) : 0;
+    record.dev_content = kHashStart;
+    if (record.dev_print) read_dev_files(files, 0, kDevFiles, UINT64_MAX, record.dev_content);
+    record.dev_partial = kHashStart, record.dev_next = 0;
+}
+
+// One look at the mod's development folder: true when it changed since the last.
+bool dev_folder_changed(ModRecord& record) {
+    DevScope scope;
+    DevFiles files;
+    const uint64_t shape = look_at_dev_folder(record.id, scope, files) ? shape_of(files) : 0;
+    if (shape != record.dev_print) return true;
+    if (!shape) return false;
+    record.dev_next = read_dev_files(files, record.dev_next, kWatchFiles, kWatchBytes, record.dev_partial);
+    if (record.dev_next < files.count) return false;
+    const bool changed = record.dev_partial != record.dev_content;
+    record.dev_partial = kHashStart, record.dev_next = 0;
+    return changed;
 }
 
 const mod::Backend mods_backend{id, name, version, version_of, log, framework, restart, state, problem};
@@ -1018,7 +1162,10 @@ void set_dev_folder(const char* root, bool (*begin)(), void (*end)()) { dev.root
 
 void set_dev_watch(uint32_t steps) {
     watch_every = steps, watch_steps = 0;
-    for (uint32_t i = 0; i < records.count; ++i) records[i].dev_print = steps && had_turn(records[i]) ? dev_print_of(records[i].id) : 0;
+    for (uint32_t i = 0; i < records.count; ++i) {
+        if (steps && had_turn(records[i])) take_dev_print(records[i]);
+        else records[i].dev_print = 0;
+    }
 }
 
 void watch_dev_folders() {
@@ -1027,10 +1174,9 @@ void watch_dev_folders() {
     for (uint32_t i = 0; i < records.count; ++i) {
         ModRecord& record = records[i];
         if (!had_turn(record) || record.restart_asked) continue;
-        const uint64_t now = dev_print_of(record.id);
-        if (now == record.dev_print) continue;
-        record.dev_print = now;
-        mod_note(record.id, now ? "its development folder changed, so it restarts" : "its development folder was taken away, so it restarts");
+        if (!dev_folder_changed(record)) continue;
+        take_dev_print(record); // what it restarts for: a restart that keeps the running code doesn't ask again
+        mod_note(record.id, record.dev_print ? "its development folder changed, so it restarts" : "its development folder was taken away, so it restarts");
         record.restart_asked = true;
     }
 }
@@ -1115,6 +1261,59 @@ TSUCHI_Result manifest_part(const char* key, TSUCHI_Mod* mod, const Json& part, 
     return TSUCHI_NOT_READY;
 }
 void set_before_start(void (*prepare)(ModRecord&)) { before_start = prepare; }
+void set_setting_override_changed(void (*changed)(ModRecord&, const Setting&)) { override_changed = changed; }
+
+void refresh_setting_overrides() {
+    if (forget_pending) return;
+    if (!lifecycle_active) {
+        Lifecycle phase;
+        refresh_setting_overrides();
+        return;
+    }
+    bool changed = false;
+    for (uint32_t i = 0; i < records.count; ++i) {
+        ModRecord& source = records[i];
+        const bool active = source.manifest_valid && source.manifest->find("settings_overrides") &&
+            (source.state == ModState::ready || source.state == ModState::stopped ||
+             (source.state == ModState::running && mod_usable(source.context)));
+        changed |= active != source.override_active;
+        source.override_active = active;
+    }
+    if (!changed) return;
+    bool failed = false;
+    for (uint32_t t = 0; t < records.count; ++t) {
+        ModRecord& target = records[t];
+        for (uint32_t s = 0; s < target.settings.list.count; ++s) {
+            Setting& setting = target.settings.list[s];
+            const Json* value = nullptr;
+            Texts owners;
+            for (uint32_t i = 0; i < records.count; ++i) {
+                const ModRecord& source = records[i];
+                const Json* part = source.override_active ? overrides_of(source, target.id) : nullptr;
+                const Json* declared = part ? part->find(setting.key()) : nullptr;
+                if (!declared) continue;
+                value = declared;
+                if (owners.used) --owners.used;
+                if (!owners.add(owners.used ? ", " : "", source.id)) failed = true;
+            }
+            const bool different = value != setting.override_value || strcmp(setting.controllers.get(), owners.used ? owners.data : "");
+            setting.override_value = value;
+            setting.controllers.clear();
+            setting.controllers.data = owners.data;
+            setting.controllers.capacity = owners.capacity;
+            owners = {};
+            if (different && target.state == ModState::running && override_changed) override_changed(target, setting);
+        }
+    }
+    if (failed) {
+        // A provenance allocation failure must not publish an unlabelled or partial override.
+        for (uint32_t i = 0; i < records.count; ++i)
+            if (records[i].override_active) blocked(records[i], "settings_overrides: there is no memory for the controlling mod IDs");
+        block_unmet();
+        refresh_setting_overrides();
+        stop_blocked_contexts();
+    }
+}
 
 void forget_mods() {
     if (lifecycle_active) { ++discovery_generation; forget_pending = true; return; }
