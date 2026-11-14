@@ -49,6 +49,7 @@ struct Dialog {
     int32_t label_lengths[2];
     uint64_t widget;          // the dialog's widget once the game has set it up, as a handle
     uint32_t choice;          // 0 the first button, 1 the second, 2 Back or closed from code
+    bool closing;             // its ending message is with the game: a second close sends none
 };
 List<Dialog> asked; // oldest first
 uint64_t next_dialog = 1;
@@ -236,8 +237,10 @@ TSUCHI_Result ask(TSUCHI_Mod* mod, const char* text, bool question, TSUCHI_Dialo
         if (!labels[0] || !labels[1] || lengths[0] < 2 || lengths[1] < 2) { release(labels[0]); release(labels[1]); return TSUCHI_INVALID; }
     }
     if (!wrapped || !line() || !t::bound(t::fn::dialog_request) || !t::bound(t::fn::dialog_request_dispose) || !t::bound(t::fn::dialog_function_transfer) || !t::bound(t::fn::text_from_string) ||
-        (!question && !t::bound(t::fn::rich_text_set)))
+        (!question && !t::bound(t::fn::rich_text_set))) {
+        release(labels[0]); release(labels[1]);
         return TSUCHI_NOT_READY;
+    }
     auto* units = static_cast<char16_t*>(allocate((count + 1) * 2));
     if (!units) { release(labels[0]); release(labels[1]); return TSUCHI_NO_MEMORY; }
     game::utf8_to_units(text, units, count, count);
@@ -245,7 +248,7 @@ TSUCHI_Result ask(TSUCHI_Mod* mod, const char* text, bool question, TSUCHI_Dialo
     const uint64_t id = next_dialog;
     const bool first = asked.count == 0; // every one here is waiting for its turn or for its answer
     Dialog* dialog = asked.add(Dialog{id, mod, units, int32_t(count + 1), 0, question, false, false, false,
-                                      {labels[0], labels[1]}, {lengths[0], lengths[1]}, 0, 0});
+                                      {labels[0], labels[1]}, {lengths[0], lengths[1]}, 0, 0, false});
     if (!dialog) {
         release(units); release(labels[0]); release(labels[1]);
         return TSUCHI_NO_MEMORY;
@@ -302,6 +305,7 @@ TSUCHI_Result close(TSUCHI_Mod* mod, TSUCHI_Dialog handle) {
     Dialog* dialog = mine(mod, handle);
     if (!dialog) return TSUCHI_NOT_FOUND;
     if (!dialog->handed) { dialog->answered = true; dialog->accepted = false; dialog->choice = 2; return TSUCHI_OK; }
+    if (dialog->closing) return TSUCHI_OK; // the game has the message that ends it, and answers it once
     if (!t::present(t::data::dialog_result_table) || !t::present(t::data::dialog_result_header) || !t::present(t::ui_manager::open_dialog) ||
         !t::present(t::dialog_widget::kind) || !t::present(t::dialog_result::size)) return TSUCHI_UNSUPPORTED;
     const uint64_t widget = game::from_handle(dialog->widget);
@@ -320,6 +324,7 @@ TSUCHI_Result close(TSUCHI_Mod* mod, TSUCHI_Dialog handle) {
     note[t::dialog_result::dialog_kind] = game::read_or<uint8_t>(widget + t::dialog_widget::kind);
     note[t::dialog_result::as_flow] = 1;
     game::method(queue, t::request_queue_table::push)(reinterpret_cast<void*>(queue), note);
+    dialog->closing = true;
     return TSUCHI_OK;
 }
 
