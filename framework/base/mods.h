@@ -8,7 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "json.h"
+#include "../core/json.h"
 #include "registry.h"
 #include "settings.h"
 #include "text.h"
@@ -51,7 +51,12 @@ struct ModRecord {
     bool override_conflict = false;
     bool prepared = false; // the opted-in early declarations began successfully in this context
     bool game_restart = false; // native allocations/effects require a new game process before restarting this mod
+    char folder[384]{}; // selected immutable physical folder; empty for the ordinary RomFS location
+    uint32_t capabilities = 0; // the kModCapability bits its manifest's "capabilities" names
 };
+
+// What a manifest's "capabilities" can name.
+inline constexpr uint32_t kModCapabilityPackages = 1; // "packages": the packages service
 
 // Where mods are looked for.
 extern const char* const kModsFolder;
@@ -95,6 +100,10 @@ void refresh_setting_overrides();
 // Reads one manifest into a record that has its ID. False when the mod is blocked by what its manifest says or
 // fails to say; `problem` then tells why.
 bool read_manifest(ModRecord& record, const char* text, size_t bytes);
+// Framework-owned downloaded packages supply complete physical mod folders at startup.
+void set_installed_folders(TSUCHI_Result (*list)(Texts&));
+bool mod_folder_path(Texts&, const char* id, const char* within);
+TSUCHI_Result validate_mod_installation(const Texts& incoming, const Texts& installed, Text& problem, const Texts* replaced = nullptr);
 
 // Finds the mods in the mods folder, reads their manifests, and works out which can run and in what order.
 // TSUCHI_NOT_READY while files or saved choices are unavailable, and TSUCHI_NO_MEMORY when memory runs out;

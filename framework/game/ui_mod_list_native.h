@@ -8,6 +8,7 @@ struct UiModListRow {
     bool requested;
     const char* status;
     bool has_settings = false;
+    bool button = false; // a mod's entry on the page: its name shows in the box, and Confirm chooses it
 };
 struct UiModListNativeCallbacks {
     uint32_t (*count)();
@@ -42,6 +43,8 @@ void ui_mod_list_native_footer_release(uint64_t host);
 TSUCHI_Result ui_mod_list_native_hold(uint64_t host);
 TSUCHI_Result ui_mod_list_native_release(uint64_t host);
 TSUCHI_Result ui_mod_list_native_cycle(uint64_t host, bool previous);
+// Goes to the Mods tab from whichever tab shows.
+TSUCHI_Result ui_mod_list_native_show(uint64_t host);
 bool ui_mod_list_native_active(uint64_t host);
 TSUCHI_Result ui_mod_list_native_selected(uint64_t host, uint32_t& index);
 TSUCHI_Result ui_mod_list_native_sync(uint64_t host);

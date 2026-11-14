@@ -41,6 +41,7 @@ key that it doesn't recognize.
 | `requires` | Required mods. A numbered requirement matches the same major version with a minor/patch version at least as high, and `*` accepts any version. |
 | `optional` | Optional integrations, using the same version rules as `requires`. |
 | `conflicts` | Other mods that can't be used together with yours. |
+| `capabilities` | What your mod may do beyond the ordinary calls, as a list of names. `packages` lets it use [`packages`](/develop/packages/). A mod that names one this version of Tsuchi doesn't have won't load. |
 
 Read the running API number with [`mod.framework()`](/reference/mod/#framework).
 Use [Compatibility](/develop/versions/) to choose the minimum number for your mod.

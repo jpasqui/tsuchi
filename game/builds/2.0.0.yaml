@@ -10,6 +10,16 @@ identity:
 - offset: 54927072
   hash: 1456083659582364098
 data:
+  options_direction_delegate_table: absent
+  options_input_delegate_table: absent
+  dialog_answer_yes: absent
+  dialog_answer_no: absent
+  dialog_answer_cancel: absent
+  dialog_answer_return: absent
+  dialog_result_table: absent
+  dialog_result_header: absent
+  title_input_delegate_table: absent
+  title_direction_delegate_table: absent
   wwise_audio_manager: 154517736
   wwise_parameter_manager: 154517792
   ui_select_sound: 154883344
@@ -85,6 +95,18 @@ data:
   gimmick_warp_stage_function: 21777120
   content_icon_size: 155059432
 constants:
+  options_entry_icon: 0
+  options_row_pitch: 117
+  options_up_key: 0
+  options_down_key: 1
+  options_last_stock: 3
+  title_flow_players_wait: 0x24
+  dialog_result_message: 0x45
+  title_confirm_key: 0x16
+  title_back_key: 0x17
+  title_menu_state: 5
+  game_menu_presenter: 91
+  game_menu_settings_page: 2
   stream_block_load: 128
   stream_source_cdo: 16
   physics_dynamic_kind: 6
@@ -238,6 +260,7 @@ constants:
   mutex_ready: 1
   shader_map_registered: 1
   listed_pikmin_types: 8
+  widget_visible: 0
   widget_collapsed: 1
   widget_hidden: 2
   collision_records_most: 128
@@ -266,6 +289,18 @@ constants:
   effect_spawn_blocked: 2097664
   ui_keyboard_characters: 31
 structs:
+  options_button: {fields: {look: absent, look_bytes: absent}}
+  options_presenter: {fields: {input: absent, view: absent}}
+  game_menu_presenter: {fields: {view: absent}}
+  presenter_table: {fields: {reset: absent}}
+  options_view: {fields: {state: absent, buttons: absent, count: absent, room: absent, selected: absent}}
+  title_flow: {fields: {state: absent, answered: absent, answer: absent}}
+  dialog_result: {size: absent, fields: {self: absent, header: absent, message: absent, dialog_kind: absent, as_flow: absent}}
+  title_presenter: {fields: {cursor: absent, view: absent, input: absent, state: absent}}
+  title_view: {fields: {description: absent, buttons: absent, count: absent, room: absent, hidden_select: absent, hide: absent, hidden: absent, hidden_other: absent}}
+  title_button: {fields: {id: absent, label: absent, mark: absent}}
+  title_input: {fields: {data: absent, count: absent, capacity: absent}}
+  title_handler: {fields: {key: absent, instance: absent, kind: absent, presenter_index: absent, presenter_serial: absent, function: absent, zero: absent}}
   console_manager_table:
     fields:
       find_variable: 176
@@ -414,6 +449,9 @@ structs:
   ui_panel_slot:
     fields:
       content: 48
+      size_rule: 56
+      padding: 64
+      alignment: 88
   pikmin_counter:
     size: 39704
     fields:
@@ -587,9 +625,11 @@ structs:
       player: 480
   dialog_widget:
     fields:
+      kind: absent
       text: 1416
   ui_manager:
     fields:
+      open_dialog: absent
       announcer: 752
   announcer:
     fields:
@@ -1668,6 +1708,21 @@ structs:
     fields:
       throw_length_max: 1100
 functions:
+  options_button_icon: absent
+  options_direction: absent
+  options_confirm: absent
+  ui_presenter_find: absent
+  presenter_begin: absent
+  game_menu_open_page: absent
+  options_gate: absent
+  options_list_grow: absent
+  options_button_highlight: absent
+  title_confirm: absent
+  ui_set_render_opacity: absent
+  title_direction: absent
+  title_back: absent
+  title_list_grow: absent
+  ui_vertical_slot_sync: absent
   map_add_stream: 96503216
   map_remove_stream: 96504400
   map_duplicate_stream: 60934416
@@ -1922,6 +1977,9 @@ functions:
   squad_icon_count: 39465440
   squad_throw_trajectory: 24420608
 slots:
+  options_presenter_tick: absent
+  title_flow_update: absent
+  title_presenter_tick: absent
   physics_contacts:
     table: 145026920
     offset: 632

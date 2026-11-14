@@ -14,6 +14,16 @@ build_names: [game_container, shader_format]
 
 
 data:
+  options_direction_delegate_table: 0x9600
+  options_input_delegate_table: 0x9608
+  dialog_answer_yes: 0x9400
+  dialog_answer_no: 0x9408
+  dialog_answer_cancel: 0x9410
+  dialog_answer_return: 0x9418
+  dialog_result_table: 0x9420
+  dialog_result_header: 0x9428
+  title_input_delegate_table: 0x9100
+  title_direction_delegate_table: 0x9108
   wwise_audio_manager: 0x610
   wwise_parameter_manager: 0x618
   ui_select_sound: 0x600 # native common UI focus FName, initialized as Select
@@ -93,6 +103,18 @@ data:
   status_words: 17920
   content_icon_size: 17928
 constants:
+  options_entry_icon: 0
+  options_row_pitch: 117
+  options_up_key: 0
+  options_down_key: 1
+  options_last_stock: 3
+  title_flow_players_wait: 0x24
+  dialog_result_message: 0x45
+  title_confirm_key: 0x16
+  title_back_key: 0x17
+  title_menu_state: 5
+  game_menu_presenter: 0x5B
+  game_menu_settings_page: 2
   stream_block_load: 0x80
   stream_source_cdo: 0x10
   physics_dynamic_kind: 9
@@ -250,6 +272,7 @@ constants:
   shader_map_registered: 0x4
   listed_pikmin_types: 8
   widget_collapsed: 4
+  widget_visible: 0
   widget_hidden: 6
   collision_records_most: 128       # how many collision parts the game's own rebuild of an actor's tree has room for,
   collision_shapes_most: 128        # and how many borrowed shapes
@@ -282,6 +305,31 @@ constants:
   effect_spawn_blocked: 0x80040
   ui_keyboard_characters: 31
 names:
+  options_button_icon_child: Icon
+  options_panel_child: Panel
+  options_view_class: OptionsView
+  title_view_class: TitleView
+  game_menu_presenter_class: GameMenuPresenter
+  title_buttons_child: Buttons
+  title_canvas_child: TitleCanvas
+  title_input_class: InputMap
+  title_buttons_box_class: VerticalBox
+  title_button_slot_class: VerticalBoxSlot
+  title_button_normal: Normal
+  host_page_article: Article
+  host_page_scroll: Scroll
+  host_page_scrollbar: ScrollBar
+  host_page_pager: Pager
+  host_page_canvas: Canvas
+  host_page_header: Header
+  host_header_text: HeaderText
+  host_page_footer: Footer
+  host_button_text: Text
+  host_button_new: New
+  host_button_selected: Focus
+  host_button_focus: Normal2Focus
+  host_button_unfocus: Focus2Normal
+  host_line_text: LineText
   content_texture_class: Texture2D
   save_class: CarrotSaveGame
   navigation_system_class: NavigationSystemV1
@@ -400,6 +448,10 @@ names:
   gimmick_vent_class: HibaBaseAIComponent
   gimmick_warp_class: WarpCarryAIComponent
 assets:
+  options_button_class: /G/MenuButton.MenuButton_C
+  title_button_class: /G/TitleButton.TitleButton_C
+  host_page_class: /G/Page.Page_C
+  host_line_class: /G/Line.Line_C
   ui_mod_list_tab_class: /Game/Carrot4/UI/InGame/Tablet/Parts/WBP_ui_Tablet_PA_Tab_Item.WBP_ui_Tablet_PA_Tab_Item_C
   tick_state_actor: /G/Revive.Revive_C
   ai_order_map: /G/ReleaseAI_P
@@ -425,6 +477,19 @@ rows:
   area_messages: [Note_More, Note_Base, Note_Done]
 
 structs:
+  options_button: {fields: {look: 0x4D8, look_bytes: 0x15}}
+  options_presenter: {fields: {input: 0x78, view: 0x80}}
+  options_view: {fields: {state: 0x4D8, buttons: 0x4F8, count: 0x500, room: 0x504, selected: 0x508}}
+  title_flow: {fields: {state: 0xD8, answered: 0xE8, answer: 0xEC}}
+  dialog_result: {size: 0x50, fields: {self: 0x18, header: 0x28, message: 0x38, dialog_kind: 0x3C, as_flow: 0x4D}}
+  title_presenter: {fields: {cursor: 0x80, view: 0x88, input: 0xA8, state: 0xB0}}
+  game_menu_presenter: {fields: {view: 0x90}}
+  presenter_table:
+    fields: {reset: {at: 0x38, args: [pointer, u32]}}
+  title_view: {fields: {description: 0x560, buttons: 0x568, count: 0x570, room: 0x574, hidden_select: 0x5AB, hide: 0x5AC, hidden: 0x5B0, hidden_other: 0x5B4}}
+  title_button: {fields: {id: 0x300, label: 0x528, mark: 0x540}}
+  title_input: {fields: {data: 0xC8, count: 0xD0, capacity: 0xD4}}
+  title_handler: {fields: {key: 0, instance: 8, kind: 0x10, presenter_index: 24, presenter_serial: 28, function: 32, zero: 40}}
   console_manager_table:
     fields: {find_variable: {at: 0x40, returns: pointer, args: [pointer, const_pointer, bool]}}
   console_variable_table:
@@ -568,6 +633,9 @@ structs:
   ui_panel_slot:
     fields:
       content: 64
+      size_rule: 72
+      padding: 80
+      alignment: 96
   pikmin_counter:
     size: 0x9B18
     fields: {bank: 0x998C, read_bank: 0x9988, initialized: 0x9990, force_recount: 0x9B10,
@@ -656,9 +724,9 @@ structs:
     size: 0x90
     fields: {kind: 0x14, answerer: 0x20, shape: 0x58, mode: 0x5D, player: 0x60}
   dialog_widget:
-    fields: {text: 0x50}
+    fields: {text: 0x50, kind: 0x60}
   ui_manager:
-    fields: {announcer: 0x48}
+    fields: {announcer: 0x48, open_dialog: 0x70}
   announcer:
     fields: {banner: 0x50}
   banner_widget:
@@ -1245,6 +1313,21 @@ structs:
 
   # carry: stand-in fields for the attachment-list backend.
 functions:
+  options_button_icon: {address: 0x9750, returns: void, args: [pointer, i32]}
+  options_direction: {address: 0x9700, returns: bool, args: [pointer, bool]}
+  options_confirm: {address: 0x9710, returns: bool, args: [pointer]}
+  options_gate: {address: 0x9720, returns: bool, args: [pointer]}
+  options_list_grow: {address: 0x9730, returns: void, args: [pointer]}
+  options_button_highlight: {address: 0x9740, returns: void, args: [pointer, bool, bool]}
+  title_confirm: {address: 0x9200, returns: bool, args: [pointer]}
+  title_back: {address: 0x9210, returns: bool, args: [pointer]}
+  title_direction: {address: 0x9220, returns: bool, args: [pointer, i32]}
+  title_list_grow: {address: 0x9230, returns: void, args: [pointer]}
+  ui_presenter_find: {address: 0x9760, returns: pointer, args: [pointer, u32]}
+  presenter_begin: {address: 0x9770, returns: void, args: [pointer, bool]}
+  game_menu_open_page: {address: 0x9780, returns: void, args: [pointer, pointer, u32]}
+  ui_vertical_slot_sync: {address: 0x9240, returns: void, args: [pointer]}
+  ui_set_render_opacity: {address: 0x9250, returns: void, args: [pointer, f32]}
   map_add_stream: {address: 0x3D30, args: [pointer, pointer]}
   map_remove_stream: {address: 0x3D40, returns: bool, args: [pointer, pointer]}
   map_duplicate_stream: {address: 0x3D50, returns: pointer, args: [const_pointer, pointer, u64, u32, pointer, i32, u32]}
@@ -1742,6 +1825,9 @@ slot_groups:
   widget_tick: {tables: widget_tick_tables, offset: 0x10, stock: [0x4280, 0x42C0], args: [pointer, const_pointer, f32]}
 
 slots:
+  options_presenter_tick: {table: 0x9800, offset: 0x280, stock: 0x9810, args: [pointer, f32]}
+  title_flow_update: {table: 0x9500, offset: 0x28, stock: 0x9510, args: [pointer, f32]}
+  title_presenter_tick: {table: 0x9300, offset: 0x280, stock: 0x9310, args: [pointer, f32]}
   physics_contacts: {table: 0x6820, offset: 0x18, stock: 0x6840, args: [pointer, pointer]}
   ui_mod_list_construct:
     table: 23040

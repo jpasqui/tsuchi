@@ -13,8 +13,8 @@
 namespace tsuchi {
 namespace {
 struct Definition { UiScreen* screen; };
-struct Showing { uint64_t id; void* view; UiRenderer* renderer = nullptr; bool accepted = false; };
-UiRenderer renderer{};
+struct Showing { uint64_t id; void* view; UiRenderer* renderer = nullptr; bool accepted = false; bool over = false; };
+UiRenderer renderer{}, title_renderer{};
 bool engine_listening = false;
 uint64_t next_id = 1;
 uint32_t tab_revision = 1;
@@ -101,7 +101,7 @@ TSUCHI_Result show(const Hold& hold, Showing& kept, const Showing& wanted, bool 
     UiScreen* screen = find(wanted.id);
     if (!screen) return TSUCHI_NOT_FOUND;
     if (!screen->controls.count) return TSUCHI_INVALID;
-    const UiRenderer opening = renderer;
+    const UiRenderer opening = screen->native_renderer ? *screen->native_renderer : wanted.over ? title_renderer : renderer;
     if (!opening.open || !opening.update || !opening.live || !opening.close) return TSUCHI_NOT_READY;
     auto* captured = static_cast<UiRenderer*>(allocate(sizeof(UiRenderer)));
     if (!captured) return TSUCHI_NO_MEMORY;
@@ -114,7 +114,7 @@ TSUCHI_Result show(const Hold& hold, Showing& kept, const Showing& wanted, bool 
     if (!guard.permits() || !find(wanted.id)) { opening.close(view); release(captured); return TSUCHI_NOT_READY; }
     // The native model needs this staged association during its first update.
     // The hold operation retains it until callbacks return, including stop.
-    kept = {wanted.id, view, captured};
+    kept = {wanted.id, view, captured, false, wanted.over};
     hold_apply_checkpoint(hold);
     if (update_showing(hold, kept)) { kept.accepted = true; return TSUCHI_OK; }
     end_showing(hold);
@@ -251,6 +251,13 @@ TSUCHI_Result hold_open(TSUCHI_Mod* mod, TSUCHI_Screen handle) {
     UiScreen* screen = nullptr;
     const auto result = own_screen(mod, handle, screen);
     return result == TSUCHI_OK ? showing.take(mod, 0, 0, Showing{handle.id, nullptr}) : result;
+}
+TSUCHI_Result hold_open_over(TSUCHI_Mod* mod, TSUCHI_Screen handle, TSUCHI_Menu menu) {
+    if (menu != TSUCHI_MENU_TITLE) return TSUCHI_INVALID;
+    if (!title_renderer.open) return TSUCHI_UNSUPPORTED;
+    UiScreen* screen = nullptr;
+    const auto result = own_screen(mod, handle, screen);
+    return result == TSUCHI_OK ? showing.take(mod, 0, 0, Showing{handle.id, nullptr, nullptr, false, true}) : result;
 }
 TSUCHI_Result release_open(TSUCHI_Mod* mod, TSUCHI_Screen handle) {
     UiScreen* screen = nullptr;
@@ -390,7 +397,7 @@ TSUCHI_Result release_tab(TSUCHI_Mod* mod, TSUCHI_Screen handle) {
 }
 ui::Backend backend{create, load, destroy, add_button, add_choice, add_integer, add_text, hold_open, release_open, is_open, choice, set_choice, integer, set_integer, text, set_text, hold_tab, release_tab,
     nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
-    glyph, set_footer, nullptr};
+    glyph, set_footer, nullptr, hold_open_over, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
 } // namespace
 ui::Backend& ui_screen_backend() { return backend; }
 TSUCHI_Result ui_screen_add_number(TSUCHI_Mod* mod, TSUCHI_Screen screen,
@@ -435,8 +442,15 @@ TSUCHI_Result ui_screen_integer_range(TSUCHI_Mod* mod, TSUCHI_Screen handle, con
     return TSUCHI_OK;
 }
 void ui_screen_resettable(TSUCHI_Screen handle) { if (auto* screen = find(handle.id)) { screen->resettable = true; ++screen->revision; } }
+bool ui_screen_focus(TSUCHI_Screen handle, const char* control) {
+    auto* screen=find(handle.id);if(!screen)return false;
+    for(uint32_t i=0;i<screen->controls.count;++i)if(screen->controls[i].kind!=UiKind::text&&!strcmp(screen->controls[i].id,control)){screen->selected=i;++screen->revision;return true;}
+    return false;
+}
 void ui_start() { ui_native_prepare_input(); definitions.start(); showing.start(); ui::set_backend(&backend); each_frame(deliver); }
 uint32_t ui_events_dropped() { return notices_dropped; }
+void ui_set_title_renderer(const UiRenderer* value) { title_renderer = value ? *value : UiRenderer{}; }
+bool ui_active_over_menu() { const auto* kept = showing.find(0, 0); return kept && kept->over && kept->view; }
 void ui_set_renderer(const UiRenderer* value) {
     renderer = value ? *value : UiRenderer{};
     // Native startup registers its layout epoch before publishing the renderer.
@@ -572,5 +586,12 @@ TSUCHI_Result ui_settings_tab_open(uint32_t index) {
 void ui_settings_tab_close() {
     const auto* screen = ui_active_screen();
     if (screen && screen->settings_tab) showing.release(screen->mod, 0, 0);
+}
+}
+
+namespace tsuchi {
+bool ui_screen_native_renderer(TSUCHI_Mod* owner,TSUCHI_Screen id,const UiRenderer* renderer){
+ auto* screen=find(id.id);if(!on_game_thread()||!screen||screen->mod!=owner||ui_active_screen()==screen)return false;
+ screen->native_renderer=renderer;return true;
 }
 }

@@ -1,0 +1,124 @@
+---
+title: Add menu entries
+description: Add an entry to the title menu, its Options menu, or the Mods page.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+Use [`ui.hold_menu_entry`](/reference/ui/#hold_menu_entry) to add an entry to one of the game's
+menus. The player chooses it like the game's own entries, and your mod receives
+[`entry_chosen`](/reference/ui/#entry_chosen). The entry ends when you release it or your mod stops.
+
+## Menus
+
+| Menu | Where it is | Entries |
+| --- | --- | --- |
+| `title` | The title screen's menu, with **Story** and **Dandori Battle**. | Three from mods, after Tsuchi's own **Mods** entry. The description shows under the menu. |
+| `title_options` | The menu that **+** opens on the title screen. | Two from mods. It shows no description. |
+| `mods` | The Mods page. | One for each mod, as a button under the list of mods. It shows no description. |
+
+`hold_menu_entry` returns `capacity` when the menu has no room, and `unsupported` on a build of the
+game that Tsuchi has no adapter for.
+
+## An entry
+
+Give the entry an ID of your own, a label, and a description. Holding the same ID again changes
+its texts.
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua title="main.lua"
+assert(ui.hold_menu_entry("title", "garden", "Garden", "Visit the garden."))
+
+ui.on_entry_chosen(function(event)
+    if event.menu == "title" and event.entry == "garden" then
+        print("Garden was chosen")
+    end
+end)
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript title="main.js"
+ui.hold_menu_entry("title", "garden", "Garden", "Visit the garden.");
+
+ui.on("entry_chosen", (event) => {
+    if (event.menu === "title" && event.entry === "garden") print("Garden was chosen");
+});
+```
+
+</TabItem>
+<TabItem label="C">
+
+```c title="main.c"
+static void chosen(void *user, const TSUCHI_UiEntryChosen *event) {
+    (void)user;
+    if (event->menu == TSUCHI_MENU_TITLE && !strcmp(event->entry, "garden")) {
+        /* The player chose Garden. */
+    }
+}
+
+TSUCHI_Result add_entry(const TSUCHI_Host *host, TSUCHI_Mod *mod) {
+    TSUCHI_Subscription subscription;
+    TSUCHI_Result result = host->ui->hold_menu_entry(mod, TSUCHI_MENU_TITLE, "garden", "Garden", "Visit the garden.");
+    if (result != TSUCHI_OK) return result;
+    return host->ui->on_entry_chosen(mod, chosen, NULL, &subscription);
+}
+```
+
+</TabItem>
+</Tabs>
+
+Call [`ui.release_menu_entry`](/reference/ui/#release_menu_entry) with the same menu and ID to remove
+it.
+
+## The Mods page
+
+Tsuchi lists the installed mods on the Mods page. Players open it with **Mods** on the title screen,
+or as the **Mods** tab of **Settings**. See [Manage mods](/players/mod-list/).
+
+A mod can add one entry to it, as a button under the list. Use it for a page of your own that belongs
+with the mods, such as a browser for more of them. The button shows the next time the page opens.
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua title="main.lua"
+assert(ui.hold_menu_entry("mods", "browse", "Browse mods", ""))
+
+ui.on_entry_chosen(function(event)
+    if event.menu == "mods" and event.entry == "browse" then
+        print("Browse mods was chosen")
+    end
+end)
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript title="main.js"
+ui.hold_menu_entry("mods", "browse", "Browse mods", "");
+
+ui.on("entry_chosen", (event) => {
+    if (event.menu === "mods" && event.entry === "browse") print("Browse mods was chosen");
+});
+```
+
+</TabItem>
+</Tabs>
+
+[`ui.open_mods`](/reference/ui/#open_mods) opens the page. From the title screen's menu, the page opens
+on its own and **B** returns to the title. While **Settings** is open, the call shows the **Mods**
+tab. Anywhere else it returns `not_ready`.
+
+## Screens and typed text
+
+[`ui.hold_open_over`](/reference/ui/#hold_open_over) opens a [screen](/develop/screens/) over the
+title menu, as after one of your entries was chosen. **B** closes the screen and returns to the title
+menu.
+
+[`ui.ask_text`](/reference/ui/#ask_text) shows the system's software keyboard. Your mod receives
+[`text_entered`](/reference/ui/#text_entered) with what the player typed, or with `accepted` set to
+`false` if they cancelled.

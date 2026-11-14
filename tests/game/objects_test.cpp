@@ -9506,6 +9506,9 @@ void conversing() {
     };
     fake::put<uint64_t>(running.context + t::game_context::dialogs, 0);
     CHECK(refused(TSUCHI_NOT_READY, "no line to hand a request in"));
+    const size_t labels_before = blocks_out.size();
+    CHECK(ask.ask(mod, "Ready?", "Install", "Cancel", &id) == TSUCHI_NOT_READY &&
+          blocks_out.size() == labels_before && talk.posted.empty());
     fake::put(running.context + t::game_context::dialogs, queue);
     fake::put<uint64_t>(queue_table + t::request_queue_table::push, 0x1234);
     CHECK(refused(TSUCHI_NOT_READY, "a line without the function for it"));
@@ -9530,9 +9533,10 @@ void conversing() {
     const size_t out = blocks_out.size();
     refused_size = 14; // no memory for the text of either
     CHECK(refused(TSUCHI_NO_MEMORY, "no memory for the text") && blocks_out.size() == out);
-    refused_size = 16 * 40; // nor for the first dialogs
-    CHECK(refused(TSUCHI_NO_MEMORY, "no memory for the list") && blocks_out.size() == out);
     refused_size = 0;
+    watched_fail_after = 1; // allow the text, then refuse the first dialog-list allocation
+    CHECK(refused(TSUCHI_NO_MEMORY, "no memory for the list") && blocks_out.size() == out);
+    watched_fail_after = -1;
     const int freed = fake::engine().freed;
     talk.transfer = Talk::kFails; // the game does not take the function
     CHECK(ask.confirm(mod, "Ready?", &id) == TSUCHI_NOT_READY && log_is("made disposed ") && talk.posted.empty() && tsuchi::dialogs_waiting() == 0 &&
@@ -9775,6 +9779,29 @@ void conversing() {
     game_answers(kept, 0x55, accept), game_lets_go(kept);
     tsuchi::frame(0.03f);
     CHECK(log_is("made setup:9/0 buttons:9:Still? disposed ") && tsuchi::dialogs_waiting() == 0 && words.well_formed);
+    // Closed from code while on the screen: one message that ends it goes to the game, however often close is
+    // called, and the answer is told once.
+    {
+        TSUCHI_Dialog closing{};
+        TSUCHI_Subscription hearing{};
+        CHECK(ask.on_answered(mod, on_answered, nullptr, &hearing) == TSUCHI_OK);
+        CHECK(ask.confirm(mod, "Close me?", &closing) == TSUCHI_OK && tsuchi::dialogs_waiting() == 1);
+        const uint64_t shown = game_shows(posted());
+        talk.log.clear();
+        const uint64_t manager = fake::memory(0x400), old_manager = fake::get<uint64_t>(w.framework + t::game_framework::ui);
+        fake::put(w.framework + t::game_framework::ui, manager);
+        fake::put(manager + t::ui_manager::open_dialog, talk.widget);
+        CHECK(ask.close(mod, closing) == TSUCHI_OK && talk.posted.size() == 1);
+        CHECK(ask.close(mod, closing) == TSUCHI_OK && talk.posted.size() == 1);
+        posted();
+        game_answers(shown, 0, accept), game_lets_go(shown);
+        tsuchi::frame(0.03f);
+        CHECK(heard({(std::to_string(closing.id) + ":no").c_str()}) && tsuchi::dialogs_waiting() == 0);
+        CHECK(ask.close(mod, closing) == TSUCHI_NOT_FOUND);
+        fake::put(w.framework + t::game_framework::ui, old_manager);
+        tsuchi::cancel(mod, hearing);
+        talk.log.clear();
+    }
 }
 
 int script(const char* path) {

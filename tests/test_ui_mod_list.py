@@ -21,7 +21,7 @@ def build_fixture():
                'framework/core/texts.cpp', 'framework/core/json.cpp', 'framework/base/mod_choices.cpp',
                'framework/base/mod_manager.cpp', 'framework/base/settings.cpp', 'framework/base/external_mods.cpp',
                'framework/game/holds.cpp', 'framework/game/ui_screens.cpp',
-               'framework/game/ui_mod_list.cpp', 'tests/game/ui_mod_list_test.cpp']
+               'framework/game/ui_mod_list.cpp', 'framework/game/ui_cheats.cpp', 'tests/game/ui_mod_list_test.cpp']
     command = [shutil.which('clang++'), '-std=c++17', '-Wall', '-Wextra', '-Werror']
     for folder in [gen / 'include', gen / 'framework', ROOT / 'framework/core',
                    ROOT / 'framework/base', ROOT / 'framework/game']:
