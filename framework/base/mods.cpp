@@ -882,7 +882,7 @@ void mix(uint64_t& hash, const void* bytes, uint64_t size) {
 
 constexpr uint64_t kHashStart = 14695981039346656037ull;
 constexpr uint32_t kDevFiles = 256;           // files of a development folder looked at, at most
-constexpr uint64_t kDevLargest = 1024 * 1024; // a larger file counts by its path and size alone
+constexpr uint64_t kDevBytes = 1024 * 1024;   // bytes of them read, at most; past it a file counts by its path and size alone
 constexpr uint32_t kWatchFiles = 8;            // files whose bytes one look reads, at most
 constexpr uint64_t kWatchBytes = 256 * 1024;   // and their bytes, at most, past the first file
 
@@ -947,13 +947,16 @@ uint64_t shape_of(const DevFiles& files) {
 
 // Adds the bytes of its files from `from` on to `hash`, each after its path, while the budget lasts: at least one
 // file, and no more than `most_files` or past `most_bytes`. Gives the file the next look goes on from.
+// Of the whole folder kDevBytes are read, counted from its first file by the sizes listed, so every look of a pass
+// and the read at a start agree on which files those are.
 uint32_t read_dev_files(const DevFiles& files, uint32_t from, uint32_t most_files, uint64_t most_bytes, uint64_t& hash) {
     uint32_t i = 0, read = 0;
-    uint64_t bytes = 0;
+    uint64_t bytes = 0, left = kDevBytes;
     for (const char* path = files.paths.first(); path && i < files.count; path = files.paths.after(path), ++i) {
-        if (i < from) continue;
         const uint64_t size = files.sizes[i];
-        const bool counted = size != game::kSizeUnknown && size <= kDevLargest;
+        const bool counted = size != game::kSizeUnknown && size <= left;
+        if (counted) left -= size;
+        if (i < from) continue;
         if (read && (read >= most_files || (counted && bytes + size > most_bytes))) break;
         mix(hash, path + files.within, strlen(path + files.within) + 1);
         if (counted) {
