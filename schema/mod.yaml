@@ -27,7 +27,7 @@ enums:
     doc: "How a restart ended."
     values:
       - {name: restarted, value: 0, doc: "The mod stopped and started again, and it's running."}
-      - {name: kept, value: 1, doc: "Nothing stopped, because a script's entry file didn't compile. The mod runs as it did before, or stays blocked."}
+      - {name: kept, value: 1, doc: "Nothing stopped, because an entry file didn't compile or a running mod requires a game restart. The mod runs as it did before, or stays blocked."}
       - {name: blocked, value: 2, doc: "The mod stopped, and it couldn't start again. It's blocked until it restarts without the problem."}
 
 functions:
@@ -89,7 +89,8 @@ functions:
       and its code runs again from its entry file in a new script state. Its settings
       and saved data stay. Its manifest isn't read again. Every running mod that
       requires it is restarted after it. If a running script's entry file doesn't
-      compile, nothing stops and the old code keeps running. `restarted` tells how the
+      compile, or any running mod in the group declares `"restart": "game"`, nothing
+      stops and the old code keeps running. `restarted` tells how the
       restart ended. If the folder `sd:/tsuchi/dev/<id>/` exists on the SD card, the
       mod's files are read from there first.
     params:

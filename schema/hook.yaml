@@ -301,3 +301,28 @@ functions:
       not_ready: "This install doesn't have code access."
       capacity: "Every one of the 256 script hook gateways is in use."
     completes: wrap_site
+
+  - name: wrap_call
+    only: native
+    owns: true
+    doc: |
+      Wraps one direct BL call instruction by its offset in main code. Your
+      wrapper must match the called function's ABI and call Hook.original to
+      continue the chain. It can run work before and after that call; its active
+      invocation remains pinned until the wrapper returns, including if the
+      hook is removed meanwhile. Other calls to the same function are unchanged.
+      Only direct BL instructions whose destination is in main code are accepted.
+      The gateway stays assigned until the game closes. As with function-entry
+      wrappers, the callee's link register belongs to the hook chain; functions
+      that inspect their caller's return address need a different approach.
+    params:
+      - {name: address, type: u64, doc: "The call instruction's offset in main code."}
+      - {name: expected, type: u32, doc: "The original BL instruction."}
+      - {name: wrapper, type: pointer, doc: "Your mod's function, with the callee's signature."}
+    returns: {type: struct<Hook>, doc: The hook.}
+    fails:
+      invalid: "The instruction is not a direct BL to main code, or its offset is invalid."
+      busy: "The instruction differs, or another kind of code change owns the location."
+      not_ready: "The matching patch or writable code-alias support is unavailable."
+      capacity: "No gateway or hook record remains."
+    completes: wrap_site
