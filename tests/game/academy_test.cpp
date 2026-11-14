@@ -45,10 +45,29 @@ void dates() {
     CHECK(ticks_of("2026-10-31T19:00:00-05:00") == ticks_of("2026-11-01T00:00:00Z"));
     CHECK(ticks_of("2026-11-01T00:00:00.5Z") == ticks_of("2026-11-01T00:00:00Z") + kSecond / 2);
     CHECK(ticks_of("2024-02-29T23:59:59Z") + kSecond == ticks_of("2024-03-01T00:00:00Z"));
+    CHECK(ticks_of("2000-02-29") + 86400 * kSecond == ticks_of("2000-03-01"));
+    CHECK(ticks_of("2026-11-01T09:00:00+0900") == ticks_of("2026-11-01T00:00:00Z"));
+    CHECK(ticks_of("2026-11-01T09:00:00+09") == ticks_of("2026-11-01T00:00:00Z"));
+    CHECK(ticks_of("2026-11-01T00:00:00+23:59") == ticks_of("2026-10-31T00:01:00Z"));
     int64_t ignored = 0;
     for (const char* wrong : {"", "2026-11-01T", "2026-13-01", "2026-11-01T24:00:00Z", "2026-11-01 00:00:00",
-                              "2026-11-01T00:00:00.Z", "2026-11-01T00:00:00Zjunk", "26-11-01"})
+                              "2026-11-01T00:00:00.Z", "2026-11-01T00:00:00Zjunk", "26-11-01",
+                              "2026-02-29", "2026-02-31", "2026-04-31", "1900-02-29", "2026-11-32",
+                              "2026-11-01T00:00:00+24:00", "2026-11-01T00:00:00+09:60", "2026-11-01T00:00:00+99:99",
+                              "2026-11-01T00:00:00+09:"})
         CHECK(!iso_ticks(wrong, ignored));
+    // A fraction finer than a millisecond is cut to the millisecond, so what is written back reads the same.
+    CHECK(ticks_of("2026-11-01T00:00:00.0005Z") == ticks_of("2026-11-01T00:00:00.000Z"));
+    CHECK(ticks_of("2026-11-01T00:00:00.1239999Z") == ticks_of("2026-11-01T00:00:00.123Z"));
+    {
+        char written[25];
+        iso_text(ticks_of("2026-11-01T00:00:00.0005Z"), written);
+        CHECK(!strcmp(written, "2026-11-01T00:00:00.000Z"));
+        CHECK(ticks_of(written) == ticks_of("2026-11-01T00:00:00.0005Z"));
+        iso_text(ticks_of("2026-11-01T00:00:00.1239999Z"), written);
+        CHECK(!strcmp(written, "2026-11-01T00:00:00.123Z"));
+        CHECK(ticks_of(written) == ticks_of("2026-11-01T00:00:00.1239999Z"));
+    }
     // The game's own form of a delivery date, which the save keeps.
     char text[25];
     iso_text(ticks_of("2026-11-01T00:00:00Z"), text);

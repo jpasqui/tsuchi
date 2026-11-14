@@ -11,7 +11,8 @@ The Switch 2 Edition's Dandori Academy opens its exams in periods. The game down
 the schedule of those periods from Nintendo's service, so without it (offline, or once the
 service has ended) no exam opens. A mod can supply that schedule instead. While the mod
 runs, the Academy opens, lists, and announces exams the way it does online, and keeps them
-in the player's save as it does online. Nothing is sent to the service.
+in the player's save as it does online. Tsuchi doesn't send anything or connect to the
+service.
 
 Before you start, [create your mod](/develop/first-mod/).
 

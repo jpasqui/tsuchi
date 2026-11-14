@@ -14,7 +14,7 @@
 // `Latest`'s DeliveryDate, and is needed when `Latest.Stage` is more than 1. Dates are ISO 8601. While the mod runs,
 // the framework keeps the schedule manager holding what the game's own parser would make of these configs, and makes
 // the delivery the game makes when it is signed in, so the Academy opens, lists, announces and keeps its exams the way
-// it does online, the save included. Nothing is sent.
+// it does online, the save included. Tsuchi sends nothing and makes no connection.
 #include <string.h>
 
 #include "files.h"
@@ -84,12 +84,16 @@ bool digits(const char*& at, int count, int64_t& out) {
 }
 
 // ISO 8601 as the game's own parser takes it: YYYY-MM-DD, optionally THH:MM[:SS[.fraction]], optionally Z or
-// +HH:MM / -HH:MM. The result is an FDateTime: 100-nanosecond ticks since 0001-01-01, in UTC.
+// +HH:MM / -HH:MM. The result is an FDateTime: 100-nanosecond ticks since 0001-01-01, in UTC. It is cut to the
+// millisecond, which is as fine as iso_text writes a date back, so a date read from the save compares as it was set.
 bool iso_ticks(const char* text, int64_t& ticks) {
     const char* at = text;
     int64_t year, month, day, hour = 0, minute = 0, second = 0, fraction = 0;
     if (!digits(at, 4, year) || *at++ != '-' || !digits(at, 2, month) || *at++ != '-' || !digits(at, 2, day)) return false;
-    if (month < 1 || month > 12 || day < 1 || day > 31 || year < 1) return false;
+    if (month < 1 || month > 12 || day < 1 || year < 1) return false;
+    const bool leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    const int64_t month_days[] = {31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    if (day > month_days[month - 1]) return false;
     if (*at == 'T' || *at == 't') {
         ++at;
         if (!digits(at, 2, hour) || *at++ != ':' || !digits(at, 2, minute)) return false;
@@ -100,11 +104,12 @@ bool iso_ticks(const char* text, int64_t& ticks) {
                 ++at;
                 int places = 0;
                 while (*at >= '0' && *at <= '9') {
-                    if (places < 7) fraction = fraction * 10 + (*at - '0'), ++places;
-                    ++at;
+                    if (places < 3) fraction = fraction * 10 + (*at - '0');
+                    ++places, ++at;
                 }
                 if (!places) return false;
-                while (places < 7) fraction *= 10, ++places;
+                for (; places < 3; ++places) fraction *= 10;
+                fraction *= 10000; // milliseconds to ticks
             }
         }
         if (hour > 23 || minute > 59 || second > 59) return false;
@@ -115,8 +120,9 @@ bool iso_ticks(const char* text, int64_t& ticks) {
             const bool ahead = *at++ == '+';
             int64_t oh, om = 0;
             if (!digits(at, 2, oh)) return false;
-            if (*at == ':') ++at;
+            if (*at == ':' && !*++at) return false;
             if (*at && !digits(at, 2, om)) return false;
+            if (oh > 23 || om > 59) return false;
             offset = (oh * 60 + om) * (ahead ? 1 : -1);
         }
         minute -= offset;

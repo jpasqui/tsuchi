@@ -125,7 +125,15 @@ void copy_field(uint64_t handle, uint64_t row, const char* path, bool is_text) {
         if (is_text) {
             char text[512];
             uint64_t needed = 0;
-            if (text_at(type, base, path, text, sizeof text, &needed) == TSUCHI_OK && needed < sizeof text) write_text_at(type, copy, path, text);
+            const TSUCHI_Result read = text_at(type, base, path, text, sizeof text, &needed);
+            if (read == TSUCHI_OK) {
+                write_text_at(type, copy, path, text);
+            } else if (read == TSUCHI_CAPACITY) {
+                Text whole; // text longer than the room on the stack
+                if (whole.reserve(size_t(needed)) && text_at(type, base, path, whole.data, whole.capacity, &needed) == TSUCHI_OK)
+                    write_text_at(type, copy, path, whole.data);
+                whole.clear();
+            }
         } else {
             TSUCHI_Value value{};
             if (read_at(type, base, path, &value) == TSUCHI_OK) write_at(type, copy, path, &value);
