@@ -137,6 +137,57 @@ int main(int argc, char** argv) {
     memcpy(image + t::stub::block, mark, sizeof mark);
     CHECK(tsuchi::find_patch() == tsuchi::Patch::right);
     auto* api = tsuchi::host.hook;
+    if (!strcmp(scenario, "call")) {
+        CHECK(TSUCHI_HAS(api, wrap_call));
+        for (uint32_t bad : {0xd503201fu, 0x14000010u, 0xd63f0000u, 0x96000000u}) {
+            put(0x1000, bad);
+            CHECK(api->wrap_call(owner, 0x1000, bad, reinterpret_cast<void*>(a), &first) == TSUCHI_INVALID);
+        }
+        CHECK(!alias_calls && !arena_calls);
+        constexpr uint32_t call_word = 0x94000200; // BL 0x1800
+        put(0x1000, call_word);
+        CHECK(api->wrap_call(owner, 0x1000, call_word + 1, reinterpret_cast<void*>(a), &first) == TSUCHI_BUSY);
+        aliases_enabled = false;
+        CHECK(api->wrap_call(owner, 0x1000, call_word, reinterpret_cast<void*>(a), &first) == TSUCHI_NOT_READY);
+        aliases_enabled = true;
+        CHECK(api->wrap_call(owner, 0x1000, call_word, reinterpret_cast<void*>(a), &first) == TSUCHI_OK);
+        const uint32_t published = word(0x1000);
+        CHECK((published & 0xfc000000u) == 0x94000000u);
+        CHECK(gateway_word(0) == 0x58000050 && gateway_word(0, 4) == 0xd61f0200);
+        uint64_t entry = 0; memcpy(&entry, storage.rw + 8, 8);
+        auto index_of = [&](uint64_t pointer) {
+            for (unsigned i = 0; i < thunks.size(); ++i)
+                if (reinterpret_cast<uint64_t>(thunks[i]) == pointer) return i;
+            CHECK(false); return unsigned(thunks.size());
+        };
+        const unsigned thunk_index = index_of(entry);
+        CHECK(tsuchi_hook_target(thunk_index) == reinterpret_cast<uint64_t>(a));
+        CHECK(tsuchi_hook_target(index_of(reinterpret_cast<uint64_t>(first.original))) == base() + 0x1800);
+        CHECK(api->wrap_inline(owner, 0x1000, call_word, reinterpret_cast<void*>(a), &other) == TSUCHI_BUSY);
+        TSUCHI_HookId patch{};
+        CHECK(api->patch_instruction(owner, 0x1000, published, 0xd503201f, &patch) == TSUCHI_BUSY);
+        CHECK(api->wrap_call(another, 0x1000, call_word, reinterpret_cast<void*>(b), &second) == TSUCHI_OK);
+        CHECK(tsuchi_hook_target(thunk_index) == reinterpret_cast<uint64_t>(b));
+        CHECK(tsuchi_hook_target(index_of(reinterpret_cast<uint64_t>(second.original))) == reinterpret_cast<uint64_t>(a));
+        auto selected = tsuchi_hook_enter(thunk_index, 0x123400, 0x12345678);
+        CHECK(selected.tracked && selected.target == reinterpret_cast<uint64_t>(b));
+        const auto active_id = second.id.id;
+        tsuchi::mod_stop(another);
+        CHECK(!tsuchi::hook_retired(active_id));
+        CHECK(api->remove(owner, first.id) == TSUCHI_OK);
+        CHECK(tsuchi_hook_target(index_of(reinterpret_cast<uint64_t>(second.original))) == base() + 0x1800);
+        CHECK(tsuchi_hook_leave(0x123400) == 0x12345678 && tsuchi::hook_retired(active_id));
+        CHECK(tsuchi_hook_target(thunk_index) == base() + 0x1800);
+        CHECK(word(0x1000) == published);
+        CHECK(api->wrap_call(owner, 0x1000, call_word, reinterpret_cast<void*>(a), &first) == TSUCHI_OK);
+        CHECK(tsuchi::native_hooks_stats().targets_assigned == 1);
+        put(0x1000, 0xd503201f);
+        CHECK(api->wrap_call(owner, 0x1000, call_word, reinterpret_cast<void*>(a), &other) == TSUCHI_BUSY);
+        tsuchi::mod_stop(owner);
+        CHECK(word(0x1000) == 0xd503201f);
+        std::printf("native call ownership, continuation lifetime and stock fallback: %s\n", failures ? "FAIL" : "PASS");
+        return failures;
+    }
     if (*scenario) {
         if (!strcmp(scenario, "backward-branch")) {
             put(0x1000, 0x16000000); // B at the negative limit of its original reach.

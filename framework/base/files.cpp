@@ -53,7 +53,8 @@ TSUCHI_Result read_whole_file(const char* path, char*& data, uint64_t& size) {
     });
 }
 
-TSUCHI_Result list_folder(const char* path, Texts& files, Texts& folders) {
+namespace {
+TSUCHI_Result list_into(const char* path, Texts& files, Texts& folders, List<uint64_t>* sizes) {
     FileScope scope(path);
     auto* entry = static_cast<uint8_t*>(allocate(t::fs_entry::size));
     if (!entry) return TSUCHI_NO_MEMORY;
@@ -68,14 +69,27 @@ TSUCHI_Result list_folder(const char* path, Texts& files, Texts& folders) {
     while (memory) { // one entry at a time, until the folder has no more
         failed = t::fn::fs_read_folder(&got, entry, folder, 1) != 0;
         if (failed || got != 1) break;
-        Texts& list = entry[t::fs_entry::kind] == t::constant::fs_entry_folder ? folders : files;
+        const bool folder_entry = entry[t::fs_entry::kind] == t::constant::fs_entry_folder;
+        Texts& list = folder_entry ? folders : files;
         memory = list.add(reinterpret_cast<const char*>(entry + t::fs_entry::name));
+        if (memory && sizes && !folder_entry) {
+            int64_t bytes = -1;
+            if (t::present(t::fs_entry::bytes)) memcpy(&bytes, entry + t::fs_entry::bytes, sizeof bytes);
+            memory = sizes->add(bytes >= 0 ? uint64_t(bytes) : kSizeUnknown) != nullptr;
+        }
     }
     t::fn::fs_close_folder(folder);
     release(entry);
     // A listing cut short is not the folder's contents.
     if (failed) return TSUCHI_IO;
     return memory ? TSUCHI_OK : TSUCHI_NO_MEMORY;
+}
+} // namespace
+
+TSUCHI_Result list_folder(const char* path, Texts& files, Texts& folders) { return list_into(path, files, folders, nullptr); }
+
+TSUCHI_Result list_folder(const char* path, Texts& files, Texts& folders, List<uint64_t>& sizes) {
+    return list_into(path, files, folders, &sizes);
 }
 
 } // namespace tsuchi::game

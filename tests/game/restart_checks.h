@@ -247,6 +247,28 @@ void restarting() {
     logged.lines.clear();
     for (int i = 0; i < 3; ++i) tsuchi::frame(0.03f);
     CHECK(has("[re.other] other fixed") && heard("re.other restarted\n"));
+    // A folder of many files: a look lists it and reads the bytes of a few files at most, so a change of size is
+    // seen at the next look and one that keeps it within a pass over the folder.
+    for (int f = 0; f < 20; ++f) disk.files[dev_at + "re.other/data/f" + std::to_string(f) + ".txt"] = "data " + std::to_string(100 + f);
+    for (int i = 0; i < 3; ++i) tsuchi::frame(0.03f);
+    CHECK(heard("re.other restarted\n"));
+    restarts_heard.clear();
+    for (int i = 0; i < 20; ++i) tsuchi::frame(0.03f); // passes over the folder that find nothing changed
+    CHECK(heard(""));
+    size_t opened_before = disk.opened.size();
+    tsuchi::frame(0.03f), tsuchi::frame(0.03f); // one look
+    CHECK(disk.opened.size() - opened_before >= 1 && disk.opened.size() - opened_before <= 8);
+    disk.files[dev_at + "re.other/data/f19.txt"] = "data 999"; // the same size
+    for (int i = 0; i < 2; ++i) tsuchi::frame(0.03f);
+    int looks = 1;
+    for (; looks < 8 && restarts_heard.empty(); ++looks) tsuchi::frame(0.03f), tsuchi::frame(0.03f);
+    CHECK(heard("re.other restarted\n") && looks <= 5);
+    disk.files[dev_at + "re.other/data/f3.txt"] = "data 1030"; // another size: the next look
+    tsuchi::frame(0.03f), tsuchi::frame(0.03f);
+    CHECK(heard("re.other restarted\n"));
+    for (int f = 0; f < 20; ++f) disk.files.erase(dev_at + "re.other/data/f" + std::to_string(f) + ".txt");
+    for (int i = 0; i < 3; ++i) tsuchi::frame(0.03f);
+    restarts_heard.clear();
     // Taken away: the mod's own files again.
     disk.files.erase(dev_at + "re.other/main.lua");
     logged.lines.clear();
