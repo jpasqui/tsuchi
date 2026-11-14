@@ -1643,6 +1643,7 @@ functions:
   npad_handheld_state: {address: 0x40C0, args: [pointer, const_pointer]}
   npad_joy_dual_state: {address: 0x4180, args: [pointer, const_pointer]}
   mark_end_of_frame: {address: 0x4500, args: [pointer]}
+  actor_sleep_decision: {address: 0x46A0, args: [pointer]}
   mark_pose_dirty: {address: 0x4540, args: [pointer]}
   mark_render_state: {address: 0x4580, args: [pointer]}
   widget_scale: {address: 0x45C0, returns: f32, args: [pointer]}
