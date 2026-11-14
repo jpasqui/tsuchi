@@ -452,6 +452,9 @@ structs:
   ui_panel_slot:
     fields:
       content: 48
+      size_rule: 56
+      padding: 64
+      alignment: 88
   pikmin_counter:
     size: 39704
     fields:
@@ -614,7 +617,7 @@ structs:
     fields:
       name: 0
       kind: 772
-      bytes: absent
+      bytes: 776
   dialog_request:
     size: 944
     fields:

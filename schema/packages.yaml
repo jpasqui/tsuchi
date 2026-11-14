@@ -27,13 +27,13 @@ enums:
     - {name: validating, value: 2, doc: The manifests and requirements are being checked.}
     - {name: installed, value: 3, doc: The package is installed.}
     - {name: failed, value: 4, doc: The install failed and nothing was installed.}
-    - {name: cancelled, value: 5, doc: The install was cancelled and nothing was installed.}
+    - {name: cancelled, value: 5, doc: "Your mod cancelled the install or stopped, and Tsuchi installed nothing."}
   PackageKind:
     open: false
     doc: What a package holds.
     values:
     - {name: mods, value: 0, doc: "Tsuchi mods, each in its own folder under `romfs/tsuchi/mods/`."}
-    - {name: assets, value: 1, doc: "One cooked asset container: a `.pak`, `.utoc` and `.ucas` of the same name."}
+    - {name: assets, value: 1, doc: "One cooked asset container: a `.pak`, `.utoc`, and `.ucas` of the same name."}
     - {name: cheats, value: 2, doc: "Cheat files named by the game's build ID."}
 structs:
   InstallStatus:
@@ -101,7 +101,7 @@ functions:
     not_found: The install is not your mod's latest one.
   users: [mod-downloader, mod-updater]
 - name: count
-  doc: Returns how many packages are installed. Removed packages are not counted.
+  doc: Returns how many packages are installed. The count leaves out removed packages.
   owns: true
   returns: {type: u32, doc: The number of installed packages.}
   fails:

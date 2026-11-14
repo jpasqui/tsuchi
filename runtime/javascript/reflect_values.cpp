@@ -197,6 +197,58 @@ JSValue access(JSContext* ctx, int argc, JSValueConst* argv, bool table, bool wr
 }
 JSValue tsuchi_js_reflection_get(JSContext* c, int n, JSValueConst* a) { return access(c, n, a, false, false); }
 JSValue tsuchi_js_reflection_set(JSContext* c, int n, JSValueConst* a) { return access(c, n, a, false, true); }
+namespace {
+bool held_scalar(JSContext* ctx, JSValueConst from, TSUCHI_Value& value) {
+    if (JS_IsBool(from)) { value.kind = TSUCHI_VALUE_BOOLEAN; value.as.boolean = JS_ToBool(ctx, from); }
+    else if (JS_IsBigInt(ctx, from)) { value.kind = TSUCHI_VALUE_INTEGER; value.as.integer = tsuchi_js::i64(ctx, from); }
+    else if (JS_IsNumber(from)) { value.kind = TSUCHI_VALUE_NUMBER; value.as.number = tsuchi_js::number(ctx, from); }
+    else return false;
+    if (value.kind == TSUCHI_VALUE_NUMBER && value.as.number >= -9007199254740991.0 && value.as.number <= 9007199254740991.0) {
+        const int64_t integer = int64_t(value.as.number);
+        if (double(integer) == value.as.number) { value.kind = TSUCHI_VALUE_INTEGER; value.as.integer = integer; }
+    }
+    return !JS_HasException(ctx);
+}
+}
+JSValue tsuchi_js_reflection_hold_field(JSContext* ctx, int argc, JSValueConst* argv) {
+    const TSUCHI_Object object{tsuchi_js::handle(ctx, tsuchi_js::arg(argc, argv, 0), "object", false)};
+    String path(ctx, tsuchi_js::arg(argc, argv, 1)), identity(ctx, tsuchi_js::arg(argc, argv, 3));
+    if (JS_HasException(ctx)) return JS_EXCEPTION;
+    TSUCHI_Value value{};
+    if (!held_scalar(ctx, tsuchi_js::arg(argc, argv, 2), value))
+        return JS_HasException(ctx) ? JS_EXCEPTION : tsuchi_js::fail(ctx, TSUCHI_INVALID);
+    TSUCHI_FieldHold hold{};
+    const auto result = tsuchi_js::host(ctx)->reflection->hold_field(tsuchi_js::mod(ctx), object, path, &value, identity, &hold);
+    return result == TSUCHI_OK ? tsuchi_js::push_handle(ctx, "field_hold", hold.id) : tsuchi_js::fail(ctx, result);
+}
+JSValue tsuchi_js_reflection_update_field(JSContext* ctx, int argc, JSValueConst* argv) {
+    const TSUCHI_FieldHold hold{tsuchi_js::handle(ctx, tsuchi_js::arg(argc, argv, 0), "field_hold", false)};
+    if (JS_HasException(ctx)) return JS_EXCEPTION;
+    TSUCHI_Value value{};
+    if (!held_scalar(ctx, tsuchi_js::arg(argc, argv, 1), value))
+        return JS_HasException(ctx) ? JS_EXCEPTION : tsuchi_js::fail(ctx, TSUCHI_INVALID);
+    const auto result = tsuchi_js::host(ctx)->reflection->update_field(tsuchi_js::mod(ctx), hold, &value);
+    return result == TSUCHI_OK ? JS_TRUE : tsuchi_js::fail(ctx, result);
+}
+JSValue tsuchi_js_settings_hold(JSContext* ctx, int argc, JSValueConst* argv) {
+    String key(ctx, tsuchi_js::arg(argc, argv, 0));
+    if (JS_HasException(ctx)) return JS_EXCEPTION;
+    TSUCHI_Value value{};
+    if (!held_scalar(ctx, tsuchi_js::arg(argc, argv, 1), value))
+        return JS_HasException(ctx) ? JS_EXCEPTION : tsuchi_js::fail(ctx, TSUCHI_INVALID);
+    TSUCHI_SettingHold hold{};
+    const auto result = tsuchi_js::host(ctx)->settings->hold(tsuchi_js::mod(ctx), key, &value, &hold);
+    return result == TSUCHI_OK ? tsuchi_js::push_handle(ctx, "setting_hold", hold.id) : tsuchi_js::fail(ctx, result);
+}
+JSValue tsuchi_js_settings_update_hold(JSContext* ctx, int argc, JSValueConst* argv) {
+    const TSUCHI_SettingHold hold{tsuchi_js::handle(ctx, tsuchi_js::arg(argc, argv, 0), "setting_hold", false)};
+    if (JS_HasException(ctx)) return JS_EXCEPTION;
+    TSUCHI_Value value{};
+    if (!held_scalar(ctx, tsuchi_js::arg(argc, argv, 1), value))
+        return JS_HasException(ctx) ? JS_EXCEPTION : tsuchi_js::fail(ctx, TSUCHI_INVALID);
+    const auto result = tsuchi_js::host(ctx)->settings->update_hold(tsuchi_js::mod(ctx), hold, &value);
+    return result == TSUCHI_OK ? JS_TRUE : tsuchi_js::fail(ctx, result);
+}
 JSValue tsuchi_js_datatable_get(JSContext* c, int n, JSValueConst* a) { return access(c, n, a, true, false); }
 JSValue tsuchi_js_datatable_override(JSContext* c, int n, JSValueConst* a) { return access(c, n, a, true, true); }
 JSValue tsuchi_js_reflection_call(JSContext* ctx, int argc, JSValueConst* argv) {

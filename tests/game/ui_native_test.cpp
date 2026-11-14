@@ -769,6 +769,13 @@ int main() {
     assert(labels[field(active_selector(1), t::ui_mod_list_selector::value)] == u"9223372036854775807" && texts[old_middle].references == 0);
     assert(visibility[field(active_selector(1), t::ui_mod_list_selector::left)] == t::constant::widget_shown);
     assert(visibility[field(active_selector(1), t::ui_mod_list_selector::right)] == t::constant::widget_hidden);
+    // Decimal settings retain a native arrow selector and show their value.
+    screen.controls[1].number.enabled=true;screen.controls[1].text.set("0.875");
+    ++screen.revision;assert(renderer->update(active_view,screen));
+    assert(labels[field(active_selector(1),t::ui_mod_list_selector::value)]==u"0.875");
+    assert(fake::get<Array>(active_selector(1)+t::ui_mod_list_selector::choices).count==3);
+    screen.controls[1].number.enabled=false;++screen.revision;
+    assert(renderer->update(active_view,screen));
     screen.selected = 1; action_changes = true;
     thread = 2; assert(intercepted(reinterpret_cast<void*>(host), 2) && accepted_calls == 0); thread = 1;
     assert(intercepted(reinterpret_cast<void*>(root), 3) && accepted_calls == 0);

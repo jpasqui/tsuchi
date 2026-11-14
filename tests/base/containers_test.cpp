@@ -952,6 +952,7 @@ void late_downloaded_assets() {
     CHECK(tsuchi::mount_downloaded_assets("external.test",folder.c_str(),problem)==TSUCHI_OK);
     CHECK(mounts.size()==1&&mounts.back().path==folder+"/Map_P.pak");
     CHECK(tsuchi::container_mounted_for("external.test"));
+    CHECK(tsuchi::container_mounted_from("tsuchisd:/tsuchi/downloads/test/")&&!tsuchi::container_mounted_from("tsuchisd:/tsuchi/downloads/other/"));
     CHECK(tsuchi::mount_downloaded_assets("external.test",folder.c_str(),problem)==TSUCHI_OK&&mounts.size()==1);
     CHECK(tsuchi::mount_downloaded_assets("external.test","tsuchisd:/another/version",problem)==TSUCHI_BUSY);
     problem.clear();

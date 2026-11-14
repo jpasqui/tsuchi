@@ -111,6 +111,12 @@ class PackageArchives(unittest.TestCase):
         for files in (cooked('Map_P')[:-1], cooked('Map_P') + cooked('Second_P'), cooked('Map_P') + [('exefs/main', b'x')],
                       cooked('Map_P') + [('cheats/060F827BD2B38703.txt', CHEAT)], cooked('Map_P') + [('romfs/tsuchi/mods/author.mod/mod.json', b'{}')]):
             self.run_case('zip', archive(files), 'derived', success=False)
+        # An assets package installs its container and nothing else, even under its own derived ID.
+        own = 'romfs/tsuchi/mods/external.0123456789abcdef01234567/'
+        for files in (cooked('mod') + [(own + 'mod.nro', b'x')], cooked('main') + [(own + 'main.lua', b'print(1)')],
+                      cooked('Map_P') + [(own + 'mod.json', b'{}')]):
+            with self.subTest(files=files[-1][0]):
+                self.run_case('zip', archive(files), 'derived', success=False)
 
     def test_cheat_archives_keep_names_and_refuse_mixed_or_wrong_game(self):
         bare = self.run_case('zip', archive([('060f827bd2b38703.txt', CHEAT)]), 'derived')

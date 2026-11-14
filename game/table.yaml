@@ -691,6 +691,9 @@ structs:
   ui_panel_slot:
     fields:
       content: 48
+      size_rule: 0x38   # a VerticalBoxSlot's size rule, 8 bytes
+      padding: 0x40     # a VerticalBoxSlot's padding: left, top, right and bottom floats
+      alignment: 0x58   # a VerticalBoxSlot's horizontal and vertical alignment bytes
   pikmin_counter:
     size: 0x9B18                    # native allocation at 021541AC
     fields: {bank: 0x998C,            # the bank the game counts into: 0 or 1

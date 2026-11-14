@@ -187,7 +187,7 @@ bool row(uint32_t index, UiModListRow& out) {
         if (rows[index].native) {
             auto& record = *rows[index].native; plain(record.name.get()[0] ? record.name.get() : record.id, caption, 300);
             plain(description(record), status, 300);
-            out = {record.id, caption, manager.draft().enabled(record.id), status, record.settings.list.count != 0};
+            out = {record.id, caption, manager.draft().enabled(record.id), status, has_visible_settings(record.settings)};
         } else {
             auto& record = *rows[index].external; plain(record.name.get()[0] ? record.name.get() : record.id, caption, 300);
             plain(external_description(record), status, 300);
@@ -438,7 +438,7 @@ bool selected_action(uint64_t host, uint32_t index, uint32_t action, bool reques
         const auto result = manager.propose(record.id, requested);
         if (result == TSUCHI_OK) { if (manager.pending()) review(); else sync(); }
         else note(manager.problem()[0] ? manager.problem() : "This mod cannot be enabled.");
-    } else if (action == 4 && record.settings.list.count) {
+    } else if (action == 4 && has_visible_settings(record.settings)) {
         TSUCHI_Screen screen{};
         if (ui_mod_settings(record, &screen) == TSUCHI_OK) {
             if (live() && ui::table.hold_open(frontend_mod, screen) == TSUCHI_OK) settings = screen;

@@ -235,8 +235,7 @@ bool insert(uint64_t widget, Entry& entry) {
     if (!slots || slot_count < 1 || slot_count > 12 || !game::readable(slots, uint64_t(slot_count) * 8)) { note_failure("the box's slots"); return false; }
     if (!t::bound(t::fn::ui_remove_child_at)) { note_failure("a function is missing"); return false; }
     // The game's own entries leave the box and come back under the new one, each with its own layout.
-    // A VerticalBoxSlot's size rule (+0x38), padding (+0x40) and alignments (+0x58); its Slate slot at +0x50
-    // stays the new slot's own.
+    // A VerticalBoxSlot's size rule, padding and alignments; its Slate slot stays the new slot's own.
     struct Layout { uint8_t size[8], padding[16], align[2]; };
     constexpr int32_t kStock = 12;
     uint64_t contents[kStock]{}; Layout layouts[kStock]{};
@@ -247,9 +246,9 @@ bool insert(uint64_t widget, Entry& entry) {
         if (!game::live(stock) || !game::is_a(stock, slot_class)) { note_failure("the box's slot"); return false; }
         contents[i] = child(stock, t::ui_panel_slot::content);
         if (!contents[i]) { note_failure("the box's slot"); return false; }
-        game::read_bytes(stock + 0x38, layouts[i].size, 8);
-        game::read_bytes(stock + 0x40, layouts[i].padding, 16);
-        game::read_bytes(stock + 0x58, layouts[i].align, 2);
+        game::read_bytes(stock + t::ui_panel_slot::size_rule, layouts[i].size, 8);
+        game::read_bytes(stock + t::ui_panel_slot::padding, layouts[i].padding, 16);
+        game::read_bytes(stock + t::ui_panel_slot::alignment, layouts[i].align, 2);
     }
     const uint64_t button = reinterpret_cast<uint64_t>(t::fn::ui_create_widget(reinterpret_cast<void*>(widget), reinterpret_cast<void*>(kind), nullptr));
     // The size, text place and font the Blueprint gave its own entries, copied before the button is built on
@@ -265,9 +264,9 @@ bool insert(uint64_t widget, Entry& entry) {
     const auto place = [&](uint64_t content, const Layout& layout) {
         const uint64_t slot = reinterpret_cast<uint64_t>(t::fn::ui_add_child(reinterpret_cast<void*>(box), reinterpret_cast<void*>(content)));
         if (!game::live(slot)) return false;
-        for (uint64_t k = 0; k < 8; ++k) game::write<uint8_t>(slot + 0x38 + k, layout.size[k]);
-        for (uint64_t k = 0; k < 16; ++k) game::write<uint8_t>(slot + 0x40 + k, layout.padding[k]);
-        for (uint64_t k = 0; k < 2; ++k) game::write<uint8_t>(slot + 0x58 + k, layout.align[k]);
+        for (uint64_t k = 0; k < 8; ++k) game::write<uint8_t>(slot + t::ui_panel_slot::size_rule + k, layout.size[k]);
+        for (uint64_t k = 0; k < 16; ++k) game::write<uint8_t>(slot + t::ui_panel_slot::padding + k, layout.padding[k]);
+        for (uint64_t k = 0; k < 2; ++k) game::write<uint8_t>(slot + t::ui_panel_slot::alignment + k, layout.align[k]);
         t::fn::ui_vertical_slot_sync(reinterpret_cast<void*>(slot));
         return true;
     };

@@ -114,8 +114,9 @@ bool validate(Context&c,uint32_t&count){
         for(uint32_t i=0;i<count;++i){const Entry& e=c.w->entries[i];const uint32_t n=len(e.base);if(!e.directory&&n>4&&equal(e.base+n-4,".pak")&&++paks>1)return c.fail(Error::Unsupported);}
         for(uint32_t i=0;i<count;++i){const Entry& e=c.w->entries[i];if(e.directory||!e.base[0])continue;
             if(!begins(e.base,c.request.derived_id)||e.base[len(c.request.derived_id)]!='/')return c.fail(Error::Unsupported);
+            // Only the container itself installs: a script, manifest or executable beside it would run as a mod.
             const char* dot=nullptr;for(const char* p=e.base;*p;++p)if(*p=='.')dot=p;
-            if(!dot)return c.fail(Error::Unsupported);uint32_t stem=uint32_t(dot-e.base),mask=0;
+            if(!dot||!(equal(dot,".pak")||equal(dot,".utoc")||equal(dot,".ucas")))return c.fail(Error::Unsupported);uint32_t stem=uint32_t(dot-e.base),mask=0;
             for(uint32_t j=0;j<count;++j){const Entry& other=c.w->entries[j];if(other.directory||len(other.base)<=stem||__builtin_memcmp(other.base,e.base,stem)||other.base[stem]!='.')continue;
                 const char* ext=other.base+stem;mask|=equal(ext,".pak")?1:equal(ext,".utoc")?2:equal(ext,".ucas")?4:0;}
             if(mask!=7)return c.fail(Error::Unsupported);

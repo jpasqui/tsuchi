@@ -56,11 +56,6 @@ TSUCHI_Result write_nested(const ModChoices& choices) {
 }
 }
 namespace tsuchi {
-const Json* Json::find(const char* key) const {
-    for (const Json* child = first; child; child = child->next)
-        if (child->name && !std::strcmp(child->name, key)) return child;
-    return nullptr;
-}
 uint32_t mod_count() { return count; }
 ModRecord* mod_at(uint32_t index) { return index < count ? &records[index] : nullptr; }
 ModRecord* find_mod(const char* id) {
@@ -193,4 +188,29 @@ int main() {
     assert(manager.propose(names[0], false) == TSUCHI_OK && manager.changes().count == 40);
     assert(manager.confirm() == TSUCHI_OK && !manager.changed());
     manager.cleanup(); saved.clear(); activation.clear();
+    reset();
+    {
+    auto& provider = installed("rule.provider");
+    const char* settings_text = R"({"days":{"type":"integer","default":3,"min":1,"max":5}})";
+    const Json* declarations = read_json(settings_text, std::strlen(settings_text)); Text problem;
+    assert(declare_settings(provider.settings, declarations, problem));
+    auto& first = installed("rule.first"); auto& second = installed("rule.second");
+    edge(first,"requires",provider.id); edge(second,"requires",provider.id);
+    const char* a_text = R"({"rule.provider":{"days":1}})";
+    const char* b_text = R"({"rule.provider":{"days":2}})";
+    Json* a = const_cast<Json*>(read_json(a_text,std::strlen(a_text)));
+    Json* b = const_cast<Json*>(read_json(b_text,std::strlen(b_text)));
+    a->name = "settings_overrides"; b->name = "settings_overrides";
+    append(const_cast<Json*>(first.manifest),a); append(const_cast<Json*>(second.manifest),b);
+    assert(saved.load("p4a1:rule.first:rule.second:","") == TSUCHI_OK && manager.begin(saved) == TSUCHI_OK);
+    assert(manager.propose(first.id,true) == TSUCHI_OK && manager.confirm() == TSUCHI_OK);
+    assert(manager.propose(second.id,true) == TSUCHI_INVALID && !manager.pending());
+    assert(std::strstr(manager.problem(),"rule.provider:days"));
+    assert(manager.draft().enabled(first.id) && !manager.draft().enabled(second.id));
+    const_cast<Json*>(b->first->first)->integer = 1;
+    assert(manager.propose(second.id,true) == TSUCHI_OK && manager.confirm() == TSUCHI_OK);
+    manager.cleanup(); saved.clear();
+    forget_settings(provider.settings); problem.clear();
+    release_json(a); release_json(b); release_json(declarations);
+    }
 }

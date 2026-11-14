@@ -122,6 +122,7 @@ struct NativeHooks {
     TSUCHI_Result (*patch)(TSUCHI_Mod*, uint64_t, uint32_t, uint32_t, uint64_t*);
     TSUCHI_Result (*remove)(TSUCHI_Mod*, uint64_t);
     TSUCHI_Result (*check)(uint64_t, const void*, uint64_t);
+    TSUCHI_Result (*call)(TSUCHI_Mod*, uint64_t, uint32_t, void*, uint64_t*, void**) = nullptr;
 };
 void set_native_hooks(const NativeHooks* backend);
 // The backend set_native_hooks installed, or null.
