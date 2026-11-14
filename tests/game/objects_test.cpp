@@ -7196,9 +7196,9 @@ void configuring() {
          R"(mod.json: the setting "a2345678901234567890123456789012345678901234567x" has a key that is not spelled as a mod's ID is)"},
         {R"({"loud": true})", R"(mod.json: the setting "loud" is an object, in braces)"},
         {R"({"loud": {"type": "toggle", "default": true, "colour": 1}})", R"(mod.json: the setting "loud" has a key the framework does not know: colour)"},
-        {R"({"loud": {"default": true}})", R"(mod.json: the setting "loud" needs a "type": toggle, integer, number, text, choice or set)"},
-        {R"({"loud": {"type": "switch", "default": true}})", R"(mod.json: the setting "loud" needs a "type": toggle, integer, number, text, choice or set)"},
-        {R"({"loud": {"type": 1, "default": true}})", R"(mod.json: the setting "loud" needs a "type": toggle, integer, number, text, choice or set)"},
+        {R"({"loud": {"default": true}})", R"(mod.json: the setting "loud" needs a "type": toggle, integer, number, text, choice, set or binding)"},
+        {R"({"loud": {"type": "switch", "default": true}})", R"(mod.json: the setting "loud" needs a "type": toggle, integer, number, text, choice, set or binding)"},
+        {R"({"loud": {"type": 1, "default": true}})", R"(mod.json: the setting "loud" needs a "type": toggle, integer, number, text, choice, set or binding)"},
         {R"({"loud": {"type": "toggle", "default": true, "name": 5}})", R"(mod.json: the setting "loud" has a name or a description that is not a text)"},
         {R"({"loud": {"type": "toggle", "default": true, "description": []}})", R"(mod.json: the setting "loud" has a name or a description that is not a text)"},
         {R"({"loud": {"type": "toggle", "default": true, "public": "yes"}})", R"(mod.json: the setting "loud" has a "public" that is not true or false)"},
@@ -7222,6 +7222,9 @@ void configuring() {
         {R"({"mode": {"type": "choice", "default": "a", "choices": ["a", ""]}})", R"(mod.json: the setting "mode" has a choice that is not a word)"},
         {R"({"mode": {"type": "choice", "default": "a", "choices": ["a", "b\u0000c"]}})", R"(mod.json: the setting "mode" has a choice that is not a word)"},
         {R"({"mode": {"type": "set", "default": [], "choices": ["a", "b", "a"]}})", R"(mod.json: the setting "mode" has the same choice twice: a)"},
+        {R"({"loud": {"type": "toggle", "default": true, "accepts": "pad"}})", R"(mod.json: the setting "loud" has an "accepts", which only a binding has)"},
+        {R"({"talk": {"type": "binding", "default": "pad:zl", "accepts": "mouse"}})", R"(mod.json: the setting "talk" has an "accepts" that is not pad, key or any)"},
+        {R"({"talk": {"type": "binding", "default": "pad:zl", "max_length": 8}})", R"(mod.json: the setting "talk" has a "max_length", which only a text has)"},
     };
     for (const auto& each : wrong) {
         manifest("set.wrong", each.settings);
@@ -7237,7 +7240,8 @@ void configuring() {
                                  R"({"a": {"type": "text", "default": 5}})", R"({"a": {"type": "text", "default": "four", "max_length": 3}})",
                                  R"({"a": {"type": "text", "default": "a\u0000b"}})", R"({"a": {"type": "choice", "default": "c", "choices": ["a", "b"]}})",
                                  R"({"a": {"type": "choice", "default": 1, "choices": ["a", "b"]}})", R"({"a": {"type": "set", "default": "a", "choices": ["a", "b"]}})",
-                                 R"({"a": {"type": "set", "default": ["a", "c"], "choices": ["a", "b"]}})", R"({"a": {"type": "set", "default": [1], "choices": ["a", "b"]}})"}) {
+                                 R"({"a": {"type": "set", "default": ["a", "c"], "choices": ["a", "b"]}})", R"({"a": {"type": "set", "default": [1], "choices": ["a", "b"]}})",
+                                 R"({"a": {"type": "binding"}})", R"({"a": {"type": "binding", "default": "pad:zz"}})", R"({"a": {"type": "binding", "default": "key:4", "accepts": "pad"}})"}) {
         manifest("set.wrong", settings);
         const std::string why = started("set.wrong");
         if (why != R"(mod.json: the setting "a" needs a "default" its kind and its limits allow)") std::printf("  %s\n  is blocked with: %s\n", settings, why.c_str());
@@ -7259,7 +7263,8 @@ void configuring() {
         "nick": {"type": "text", "default": "Olimar", "max_length": 8, "public": false},
         "note": {"type": "text", "default": ""},
         "mode": {"type": "choice", "default": "calm", "choices": ["calm", "wild", "odd one"], "public": true},
-        "extras": {"type": "set", "default": ["hats", "capes"], "choices": ["hats", "boots", "capes"]}
+        "extras": {"type": "set", "default": ["hats", "capes"], "choices": ["hats", "boots", "capes"]},
+        "talk": {"type": "binding", "default": "pad:zl", "accepts": "pad"}
     })";
     manifest("set.one", every);
     manifest("set.two", R"({"count": {"type": "integer", "default": 77}})", ", \"requires\": {\"set.one\": \"*\"}");
@@ -7281,6 +7286,9 @@ void configuring() {
     CHECK(set.text(one, "nick", text, sizeof text, &needed) == TSUCHI_OK && !std::strcmp(text, "Olimar") && needed == 7 && set.text(one, "note", text, sizeof text, &needed) == TSUCHI_OK &&
           !text[0] && needed == 1 && set.text(one, "mode", text, sizeof text, &needed) == TSUCHI_OK && !std::strcmp(text, "calm"));
     CHECK(set.has(one, "extras", "hats", &in) == TSUCHI_OK && in && set.has(one, "extras", "boots", &in) == TSUCHI_OK && !in && set.has(one, "extras", "capes", &in) == TSUCHI_OK && in);
+    // A binding reads as its text, and takes only a binding of a device its `accepts` allows.
+    CHECK(set.text(one, "talk", text, sizeof text, &needed) == TSUCHI_OK && !std::strcmp(text, "pad:zl") && set.set_text(one, "talk", "key:4") == TSUCHI_INVALID &&
+          set.set_text(one, "talk", "pad:nope") == TSUCHI_INVALID && set.integer(one, "talk", &whole) == TSUCHI_INVALID);
     std::memset(text, 'x', sizeof text);
     CHECK(set.text(one, "nick", text, 6, &needed) == TSUCHI_CAPACITY && needed == 7 && text[0] == 'x' && set.text(one, "nick", text, 7, &needed) == TSUCHI_OK && text[7] == 'x');
     // A setting there is none of, one of another kind, a word that is no choice of the set's.
@@ -7529,6 +7537,8 @@ print(settings.set_number("speed", 2.5), settings.set_text("mode", "wild"), sett
 print(settings.integer("set.one:count"), settings.toggle("set.one:loud"))
 print(settings.integer("count"), settings.number("speed"), settings.text("mode"), settings.has("extras", "boots"), settings.toggle("loud"))
 print(pcall(settings.set_integer, "count", 1.5), pcall(settings.toggle))
+print("binding", settings.text("talk"), settings.set_text("talk", "key:4"))
+print("binding", settings.set_text("talk", "pad:zr"), settings.text("talk"))
 settings.on_changed(function(event) print("changed", event.mod, event.key) end)
 )";
     tsuchi::set_log_sink(log_sink);
@@ -7536,11 +7546,12 @@ settings.on_changed(function(event) print("changed", event.mod, event.key) end)
     CHECK(started("set.script") == "<running>");
     CHECK(logged.lines.find("[set.script] true\t3\t1.5\tOlimar\tcalm\ttrue\n[set.script] true\tnil\tinvalid\n[set.script] true\ttrue\ttrue\ttrue\ttrue\n"
                             "[set.script] 3\tnil\tdenied\n[set.script] 7\t2.5\twild\ttrue\tfalse\n[set.script] false\t") == 0);
+    CHECK(logged.lines.find("[set.script] binding\tpad:zl\tnil\tinvalid\n[set.script] binding\ttrue\tpad:zr\n") != std::string::npos);
     logged.lines.clear();
     tsuchi::frame(0.03f), tsuchi::frame(0.03f);
     CHECK(logged.lines == "[set.script] changed\tset.script\tcount\n[set.script] changed\tset.script\tspeed\n[set.script] changed\tset.script\tmode\n"
-                          "[set.script] changed\tset.script\textras\n[set.script] changed\tset.script\tloud\n");
-    CHECK(kept("set.script", "{\n  \"loud\": false,\n  \"count\": 7,\n  \"speed\": 2.5,\n  \"mode\": \"wild\",\n  \"extras\": [\"hats\", \"boots\", \"capes\"]\n}\n"));
+                          "[set.script] changed\tset.script\textras\n[set.script] changed\tset.script\tloud\n[set.script] changed\tset.script\ttalk\n");
+    CHECK(kept("set.script", "{\n  \"loud\": false,\n  \"count\": 7,\n  \"speed\": 2.5,\n  \"mode\": \"wild\",\n  \"extras\": [\"hats\", \"boots\", \"capes\"],\n  \"talk\": \"pad:zr\"\n}\n"));
     tsuchi::set_log_sink(nullptr);
     logged.lines.clear();
     settings_heard.clear();

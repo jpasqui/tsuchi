@@ -1414,6 +1414,8 @@ structs:
     fields:
       maximum: 940
       minimum: 944
+      input_form: 952
+      new_lines: 956
       utf8: 957
       work: 1232
       work_bytes: 1240

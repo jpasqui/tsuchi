@@ -1032,6 +1032,8 @@ structs:
     fields:
       maximum: 948
       minimum: 952
+      input_form: 960
+      new_lines: 964
       utf8: 965
       work: 1240
       work_bytes: 1248
@@ -1577,6 +1579,12 @@ functions:
     - pointer
     - const_pointer
     returns: u32
+  os_current_thread: {address: 0x9760, returns: pointer, args: []}
+  os_thread_priority: {address: 0x9770, returns: i32, args: [pointer]}
+  os_create_thread: {address: 0x9780, returns: u32, args: [pointer, pointer, pointer, pointer, u64, i32]}
+  os_set_thread_name: {address: 0x9790, returns: void, args: [pointer, const_pointer]}
+  os_start_thread: {address: 0x97A0, returns: void, args: [pointer]}
+  os_sleep_thread: {address: 0x97B0, returns: void, args: [i64]}
 
   # ui
   effect_create: {address: 0x5000, returns: pointer, args: [pointer, pointer, pointer, const_pointer, pointer, pointer, const_pointer]}
