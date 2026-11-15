@@ -2441,6 +2441,9 @@ tables:
   - absent
   - absent
   - absent
+  character_remap_sites: [absent, absent, absent, absent, absent, absent, absent]
+  character_remap_words: [absent, absent, absent, absent, absent, absent, absent]
+  character_remap_registers: [absent, absent, absent, absent, absent, absent, absent]
   character_site_registers:
   - absent
   - absent

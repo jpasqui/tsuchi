@@ -1982,6 +1982,12 @@ tables:
                          0xD63F0100, 0xD63F0100, 0xD63F0100, 0xD61F0080, 0xD61F0040, 0xD63F0100, 0xBD412500, 0xD63F0100,
                          0xBD414500, 0xD63F0100, 0xD63F0100, 0xD63F0100, 0xD63F0100, 0xB50037F4, 0xF9417D16]
   character_site_registers: [19, 19, 19, 31, 19, 19, 19, 23, 23, 23, 31, 31, 31, 31, 53, 31, 53, 31, 31, 31, 31, 19, 19]
+  # Isolated action states additionally cover both throw-release held reads
+  # and the alternate throw predicate's shared return, before its epilogue.
+  # Then dismount's input 14 and RushCharge's own held-20 maintenance read.
+  character_remap_sites: [0x15A0C20, 0x15A196C, 0x15A06F4, 0xE02F70, 0x13BB5D0, 0x13E839C, 0x13E969C]
+  character_remap_words: [0xD63F0100, 0xD63F0100, 0xA9427BFD, 0xD63F0100, 0xD63F0100, 0xD63F0100, 0xD63F0100]
+  character_remap_registers: [31, 31, 19, 31, 31, 31, 31]
 
 # One entry in each of a list of tables, with the functions the game puts there.
 slot_groups:

@@ -10,6 +10,9 @@
 # `optional` lists entries the code using them asks t::bound about and goes on without, so a build lacking one loses
 # only that one path and no family.
 optional:
+  - tables.character_remap_sites   # isolated action states check every extra read; older action calls keep their sites
+  - tables.character_remap_words
+  - tables.character_remap_registers
   - functions.actor_sleep_decision   # suspend.cpp asks t::bound: without it a held actor keeps the sleep it had
   - functions.pikmin_deco_stored
   - functions.pikmin_deco_field

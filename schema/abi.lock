@@ -616,7 +616,9 @@
    "action_held",
    "hold_binding",
    "release_binding",
-   "binding"
+   "binding",
+   "hold_action_state",
+   "release_action_state"
   ]
  }
 }
