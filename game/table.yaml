@@ -425,6 +425,7 @@ names:
   material_class: MaterialInterface
   skeletal_class: SkeletalMeshComponent
   clip_class: AnimationAsset
+  motion_blueprint_class: CarrotAnimInstance  # the game's own animation blueprints, which play motions by name
   map_rule_class: CarrotGameRule
   level_class: Level
   streaming_class: LevelStreamingDynamic
@@ -1111,6 +1112,19 @@ structs:
     fields: {next: 0x8, actor: 0x10}
   engine_actor:
     fields: {root: 0x130, play_state: 0x5C}
+  skeletal_mesh:                    # a skeletal mesh part
+    fields: {blueprint: 0x720}        # the animation blueprint that runs on it now (AnimScriptInstance)
+  motion_blueprint:                 # one of the game's own animation blueprints (CarrotAnimInstance)
+    fields: {speed: 0x2B8,            # what it blends walking and running by
+             motions: 0x3F0,          # its state machines by name, in slots laid out as a row_list, each a motion_entry
+             move_motion: 0x440}      # the name of its move motion, at the start of a record like a motion_entry's
+  motion_entry:                     # one slot: a state machine's name and the motion it plays
+    size: 0xA0
+    fields: {state_machine: 0x0, motion: 0x8}
+  motion_blueprint_table:           # entries in its function table, each overridden by some kinds of blueprint
+    fields: {set_motion: {at: 0x350, args: [pointer, u64, u64]},  # (blueprint, motion name, state machine name)
+             set_move_motion: {at: 0x358, args: [pointer, u64]},  # (blueprint, move motion name)
+             set_speed: {at: 0x360, args: [pointer, f32]}}        # (blueprint, speed); some kinds ease toward it
   ordinary_actor_vtable:
     fields:
       end_play: {at: 0x348, args: [u64, u8]}
@@ -1148,6 +1162,7 @@ structs:
              support_contact: 0x1820, # accepted upward support in the current native contact update
              air_steps: 0x1CB8,       # steps since a contact reset; some wall contacts reset this too
              contact_step: 0x1CBC,    # TickPre sets this; collision processing consumes it before resetting contacts
+             body: 0x2F0,             # its skeletal mesh, animated by one of the game's own blueprints
              placement: 0x27C8}
   spawn_request:                    # what the game's spawner is given
     size: 0xE8

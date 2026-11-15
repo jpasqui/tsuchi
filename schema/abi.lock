@@ -56,7 +56,19 @@
    "set_clip_rate",
    "seek_clip",
    "clip",
-   "release_clip"
+   "release_clip",
+   "state_machines",
+   "motion",
+   "hold_motion",
+   "release_motion",
+   "move_motion",
+   "hold_move_motion",
+   "release_move_motion",
+   "speed",
+   "hold_speed",
+   "release_speed",
+   "on_motion_changed",
+   "on_move_motion_changed"
   ],
   "asset": [
    "load",

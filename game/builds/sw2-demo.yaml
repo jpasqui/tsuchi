@@ -1177,6 +1177,25 @@ structs:
       air_steps: 7384
       contact_step: 7388
       placement: 10344
+      body: absent
+  skeletal_mesh:
+    fields:
+      blueprint: absent
+  motion_blueprint:
+    fields:
+      speed: absent
+      motions: absent
+      move_motion: absent
+  motion_entry:
+    size: absent
+    fields:
+      state_machine: absent
+      motion: absent
+  motion_blueprint_table:
+    fields:
+      set_motion: absent
+      set_move_motion: absent
+      set_speed: absent
   spawn_request:
     size: 232
     fields:

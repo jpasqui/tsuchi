@@ -398,6 +398,7 @@ names:
   material_class: MaterialInterface
   skeletal_class: SkeletalMeshComponent
   clip_class: AnimationAsset
+  motion_blueprint_class: Choreography
   map_rule_class: CarrotGameRule
   level_class: Level
   streaming_class: LevelStreamingDynamic
@@ -959,6 +960,16 @@ structs:
     fields: {root: 0x48, play_state: 0x69}
   actor_component:
     fields: {lifecycle_flags: 0x7C}
+  skeletal_mesh:
+    fields: {blueprint: 0xB0}
+  motion_blueprint:
+    fields: {speed: 0x44, motions: 0x48, move_motion: 0x80}
+  motion_entry:
+    size: 0x18
+    fields: {state_machine: 0x8, motion: 0x10}
+  motion_blueprint_table:
+    fields: {set_motion: {at: 0x48, args: [pointer, u64, u64]}, set_move_motion: {at: 0x50, args: [pointer, u64]},
+             set_speed: {at: 0x58, args: [pointer, f32]}}
   instanced_static_mesh_component:
     fields: {start_cull_distance: 0x59C, end_cull_distance: 0x5A0}
   ordinary_actor_vtable:
@@ -974,7 +985,7 @@ structs:
              physics: 0x78, body_awake: 0x80, simulating: 0x81, simulating_known: 0x82, speed_clamp: 0x83, keep_vertical: 0x84,
              velocity_pending: 0x85, velocity_added_1: 0x86, velocity_added_2: 0x87, velocity_added_3: 0x88, freeze_delay: 0x8C,
              awake_holds: 0x90, velocity: 0x94, air_steps: 0xA0, rest: 0xA4, movement: 0xA8, ai: 0xB0, collision_tree: 0xB8,
-             rigid_body: 0xC0, tick_requested: 0x6E, support_contact: 0x100, contact_step: 0x101}
+             rigid_body: 0xC0, tick_requested: 0x6E, support_contact: 0x100, contact_step: 0x101, body: 0x108}
   spawn_request:
     size: 0x90
     fields: {class: 0x8, object_flags: 0x10, location: 0x14, rotation: 0x20, velocity: 0x2C, scale: 0x38, team: 0x44,

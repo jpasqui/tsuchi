@@ -113,6 +113,12 @@ families:
   animation:
     services: [animation]
     files: [game/clips.cpp]
+  motions:
+    # Only the motion calls: a build without the game's own blueprint layout keeps the clip calls.
+    calls: [animation.state_machines, animation.motion, animation.hold_motion, animation.release_motion,
+            animation.move_motion, animation.hold_move_motion, animation.release_move_motion, animation.speed,
+            animation.hold_speed, animation.release_speed]
+    files: [game/blueprint_motions.cpp]
   asset:
     services: [asset]
     files: [game/asset_bundles.cpp, game/assets_backend.cpp]
