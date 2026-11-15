@@ -1940,6 +1940,7 @@ functions:
   squad_icon_count: {address: 0x25542E0, args: [pointer, i32]}
   squad_throw_trajectory: {address: 0x1728E90, returns: u32, args: [pointer]}
 tables:
+  ui_hint_text_words: [0xD10543FF] # native rich-text SetText entry
   actor_tables: [0x8884F20, 0x8885C88, 0x8886398, 0x8886AA8, 0x88871B8, 0x8887F20, 0x8889FB0, 0x888C6A8, 0x888D040,
                  0x8891F00, 0x8892628, 0x88933F8, 0x8893B20, 0x8894248, 0x8894970, 0x8895098, 0x88957C0, 0x8895EE8,
                  0x88965F8, 0x8896D20, 0x8897448, 0x8897B70, 0x8898280, 0x88989A8, 0x88990D0, 0x88997F8, 0x8899F20,

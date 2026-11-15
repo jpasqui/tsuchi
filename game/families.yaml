@@ -186,8 +186,8 @@ families:
     services: [input]
     files: [game/input_backend.cpp]
   icon_textures:
-    calls: [ui.hold_icon_texture, ui.release_icon_texture]
-    files: [game/ui_icons.cpp]
+    calls: [ui.hold_icon_texture, ui.release_icon_texture, ui.hold_control_hint, ui.release_control_hint, ui.refresh_control_hints]
+    files: [game/ui_icons.cpp, game/ui_control_hints.cpp]
   net:
     services: [net]
     files: [game/network_native.cpp, target/https_platform.cpp]

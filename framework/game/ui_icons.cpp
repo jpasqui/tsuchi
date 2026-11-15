@@ -1,4 +1,5 @@
 #include "ui_icons.h"
+#include "ui_control_hints.h"
 #include "ui_screens.h"
 #include "ui_service.h"
 #include "ui_feedback.h"
@@ -43,6 +44,7 @@ bool refresh(void*, uint64_t object) {
         };
         // Sync rebuilds the decorators' copied brushes. Reapply the retained
         // localized FText so existing image runs use those decorators too.
+        ui_control_hints_refreshing(true);
         t::fn::ui_rich_text_sync(reinterpret_cast<void*>(object));
         if (current(shown)) {
             char16_t empty = 0; alignas(8) uint8_t string[t::array::size]{};
@@ -55,6 +57,7 @@ bool refresh(void*, uint64_t object) {
             }
             game::drop_shared(blank.counter());
         }
+        ui_control_hints_refreshing(false);
         game::drop_shared(shown.counter());
     }
     release_game_object(handle); return true;
@@ -191,9 +194,11 @@ TSUCHI_Result release_texture(TSUCHI_Mod* mod, TSUCHI_Object table, const char* 
 }
 
 } // namespace
-void ui_icons_start(TSUCHI_Mod*) {
+void ui_icons_changed() { dirty = true; }
+void ui_icons_start(TSUCHI_Mod* self) {
     if (!registered) registered = each_engine_frame(refresh_changed);
     auto& backend = ui_screen_backend();
     backend.hold_icon_texture = hold_texture; backend.release_icon_texture = release_texture;
+    ui_control_hints_start(self);
 }
 }

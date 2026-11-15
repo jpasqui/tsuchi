@@ -586,7 +586,10 @@
    "hold_mark",
    "release_mark",
    "hold_icon_texture",
-   "release_icon_texture"
+   "release_icon_texture",
+   "hold_control_hint",
+   "release_control_hint",
+   "refresh_control_hints"
   ],
   "world": [
    "ground",

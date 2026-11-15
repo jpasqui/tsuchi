@@ -824,6 +824,40 @@ functions:
     not_found: Your mod has no such icon hold.
   completes: hold_icon_texture
 
+- name: hold_control_hint
+  doc: |
+    Replaces the button glyph beside a localized action label in the game's paired
+    HUD and control-guide columns. Pass the label's namespace and key, such as
+    ActionMarker and ThrowPikmin. Each line is resolved independently, so actions
+    that normally share a button can show different bindings. The replacement may
+    contain glyph() markup or a plain key name. Original localized FTexts remain
+    retained and are restored on release or mod stop. Native hint changes are
+    followed before SetText returns. Menu confirmation glyphs are unaffected.
+  owns: true
+  params:
+  - {name: space, type: text, doc: The action label's localization namespace.}
+  - {name: key, type: text, doc: The action label's localization key.}
+  - {name: glyph, type: text, doc: "Native glyph markup or a plain key name, up to 191 UTF-8 bytes."}
+  fails:
+    invalid: A key is empty or too long, or the glyph contains unsupported markup.
+    not_found: The localized label is absent.
+    busy: Another mod owns this action's hint.
+    not_ready: Called off the game thread or native code access is unavailable.
+  users: [mod-settings-screens, custom-mod-menus]
+- name: release_control_hint
+  doc: Restores the game's button glyphs beside this action label.
+  owns: true
+  params:
+  - {name: space, type: text, doc: The label's localization namespace.}
+  - {name: key, type: text, doc: The label's localization key.}
+  fails:
+    invalid: A key is empty or too long.
+    not_found: Your mod does not own this hint.
+  completes: hold_control_hint
+- name: refresh_control_hints
+  doc: Rebuilds existing localized icon text and action hint columns on the next engine frame, after a batch of text replacements.
+  users: [mod-settings-screens, custom-mod-menus]
+
 events:
 - name: activated
   doc: Emitted when the player selects a button. Only the screen's owning mod receives this event.

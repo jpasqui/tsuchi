@@ -38,6 +38,8 @@ game::EngineText blank_text(const void*){game::EngineText value{};uint64_t data=
 void set_text(void* object,void* text){assert(object==widget);std::memcpy(widget+t::ui_footer_label::text,text,20);std::memset(widget+t::ui_footer_label::text+20,0xA5,4);++text_sets;}
 }
 namespace tsuchi {
+void ui_control_hints_start(TSUCHI_Mod*){}
+void ui_control_hints_refreshing(bool){}
 bool each_frame(void(*)()){return true;}
 bool each_engine_frame(void(*f)()){frame_work.push_back(f);return true;}
 bool on_actor_left(void(*)(uint64_t,uint64_t,ActorLeft)){return true;}

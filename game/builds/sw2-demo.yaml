@@ -1346,23 +1346,23 @@ structs:
       squad: 2336
   character_part:
     fields:
-      controller: absent
-      move: absent
+      controller: 1880
+      move: 1860
   game_controller:
     fields:
-      unpaused_frames: absent
-      lock_mask: absent
-      lock_timer: absent
-      press_ages: absent
-      press_age_count: absent
+      unpaused_frames: 128
+      lock_mask: 136
+      lock_timer: 144
+      press_ages: 152
+      press_age_count: 160
   press_age:
-    size: absent
+    size: 16
     fields:
-      seconds: absent
+      seconds: 4
   game_controller_table:
     fields:
-      locked: absent
-      pressed: absent
+      locked: 216
+      pressed: 96
   whistle_part:
     fields:
       radius: 564
@@ -2274,11 +2274,24 @@ slots:
     table: 122212384
     offset: 2600
     stock: 53396560
-  controller_held: absent
-  controller_pressed: absent
-  controller_released: absent
-  controller_update: absent
+  controller_held:
+    offset: 56
+    stock: 58148912
+    table: 123424176
+  controller_pressed:
+    offset: 96
+    stock: 23917488
+    table: 123424176
+  controller_released:
+    offset: 104
+    stock: 58150304
+    table: 123424176
+  controller_update:
+    offset: 144
+    stock: 1497312
+    table: 123424176
 tables:
+  ui_hint_text_words: [0xD503237F] # native rich-text SetText entry
   actor_tables:
   - 122040608
   - 122125712
@@ -2394,80 +2407,101 @@ tables:
   - 124718056
   - 124832120
   character_sites:
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
+  - 3233236
+  - 3233316
+  - 1952712
+  - 53396240
+  - 10812284
+  - 4909764
+  - 4909792
+  - 48776132
+  - 48776200
+  - 48776224
+  - 7296360
+  - 1923844
+  - 52556624
+  - 12624852
+  - 12624864
+  - 52510248
+  - 52510260
+  - 52510300
+  - 7295568
+  - 7295636
+  - 52511316
+  - 7869116
+  - 7887560
   character_site_words:
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  character_remap_sites: [absent, absent, absent, absent, absent, absent, absent]
-  character_remap_words: [absent, absent, absent, absent, absent, absent, absent]
-  character_remap_registers: [absent, absent, absent, absent, absent, absent, absent]
+  - 3594453248
+  - 3594453248
+  - 3594453248
+  - 3592355904
+  - 3594453248
+  - 922749696
+  - 3594453248
+  - 3594453248
+  - 3594453248
+  - 3594453248
+  - 3594453248
+  - 3592355968
+  - 3592355904
+  - 3594453248
+  - 3175163136
+  - 3594453248
+  - 3175171328
+  - 3594453248
+  - 3594453248
+  - 3594453248
+  - 3594453248
+  - 3036714996
+  - 4181818644
+  character_remap_sites:
+  - 9649668
+  - 9649732
+  - 1953020
+  - 5614632
+  - 52506492
+  - 12631124
+  - 12633416
+  character_remap_words:
+  - 3594453248
+  - 3594453248
+  - 2839695348
+  - 3594453248
+  - 3594453248
+  - 3594453248
+  - 3594453248
+  character_remap_registers:
+  - 31
+  - 31
+  - 19
+  - 31
+  - 31
+  - 31
+  - 31
   character_site_registers:
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
+  - 19
+  - 19
+  - 19
+  - 31
+  - 19
+  - 19
+  - 19
+  - 23
+  - 23
+  - 23
+  - 31
+  - 31
+  - 31
+  - 31
+  - 53
+  - 31
+  - 53
+  - 31
+  - 31
+  - 31
+  - 31
+  - 19
+  - 19
 slot_groups:
   actor_register:
     offset: 1744

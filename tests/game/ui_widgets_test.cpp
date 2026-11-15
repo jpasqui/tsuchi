@@ -647,7 +647,7 @@ void test_owned_widget_text() {
     assert(ui_set_widget_text(owner, label, "") == TSUCHI_OK && shown_text(widget).empty());
     const unsigned before_invalid = text_sets, before_invalid_conversion = text_conversions;
     const char* invalid[] = {"[", "]", "[Unknown/]", "Line\r\nTwo", "Tab\tTwo", "DEL\x7f",
-        "[PictureFont:IconData key=\"A_Button\" scale=\"1.0\"/]", "[PictureFont:IconData key=\"ZL_Button\" scale=\"0.76\"/]",
+        "[PictureFont:IconData key=\"A_Button\" scale=\"1.0\"/]",
         "\xc0\xaf", "\x80", "\xe2\x82", "\xed\xa0\x80", "\xf4\x90\x80\x80", "\xf8\x90\x80\x80"};
     for (const auto text : invalid) assert(ui_set_widget_text(owner, label, text) == TSUCHI_INVALID);
     const std::string oversized = std::string(639, 'a') + "\xc3\xa9";
