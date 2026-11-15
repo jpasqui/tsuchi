@@ -13,12 +13,24 @@ code-write build requirements, read [Port native hooks](/develop/native-hooks/).
 ## Scripts
 
 Use `hook.wrap(target, fn)` to run a synchronous callback in place of a function.
-Your mod supplies `target`: either `entry_at` and `stock` for a function-table
-entry, or `function_at` and `expected` for a function's first instruction. All
-offsets are relative to the game's main module. Leave out `stock`, or set it to
-zero, when you don't know it.
-Both targets need a `signature`, such as `"bool(pointer, i32)"`, verified for the
+Your mod supplies `target`: `entry_at` and `stock` for a function-table entry,
+`function_at` and `expected` for a function's first instruction, or `slot` for an
+entry the game table names, like `engine_tick`. Offsets are relative to the game's
+main module. Leave out `stock`, or set it to zero, when you don't know it. A `slot`
+names the same entry on every build of the game that the table knows, so it needs
+no offsets.
+Every target needs a `signature`, such as `"bool(pointer, i32)"`, verified for the
 game builds listed in your mod's manifest.
+
+```lua
+local id, why = hook.wrap({slot = "engine_tick", signature = "void(pointer, f32, bool)"}, function(original, engine, seconds, idle)
+    return original(engine, seconds, idle)
+end)
+```
+
+Scripts can also check and patch single instructions with `hook.check_code` and
+`hook.patch_instruction`, the same calls compiled mods use. They need code access,
+and their offsets belong to one build of the game.
 
 For example, a callback can pass the arguments and result through unchanged:
 
@@ -91,6 +103,8 @@ Tsuchi supports several builds of the game with one module, and `hook.wrap_slot`
 `hook.wrap_site` find their entry by name on each. An offset belongs to one build. A mod that
 calls `hook.wrap_address` works only on the builds whose offsets its author wrote, so name those
 builds with `game` in its manifest. A hook on an entry a build doesn't have returns `unsupported`.
+A script names an entry with `slot` in its target to get the same help. For offsets of its own,
+a mod can check `mod.game_build()` and pick the ones it keeps for that build.
 
 ## Wrappers
 

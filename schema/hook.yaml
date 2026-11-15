@@ -163,7 +163,6 @@ functions:
     completes: wrap_site
 
   - name: patch_instruction
-    only: native
     doc: |
       Replaces one aligned instruction after checking its original word. The
       patch is exclusive with hooks and patches at that location. Remove it
@@ -185,7 +184,6 @@ functions:
     completes: wrap_site
 
   - name: check_code
-    only: native
     doc: |
       Compares the running game's code with expected bytes before installing
       hooks. This call changes nothing and needs no code-write permissions.
@@ -214,12 +212,14 @@ functions:
       `target` describes the function, and every part of it comes from your mod:
       either `function_at` and `expected`, the function's offset in the game's main
       code and its first instruction, or `entry_at` and `stock`, the offset of a
-      function-table entry and of the function the game stores there. Leave out
-      `stock`, or pass `0`, if it isn't known. Both need `signature`, such as
+      function-table entry and of the function the game stores there, or `slot`,
+      the name of an entry in the game table, like `engine_tick`. Leave out
+      `stock`, or pass `0`, if it isn't known. Each needs `signature`, such as
       `"bool(pointer, i32)"`. The types
       are `bool`, `i32`, `u32`, `u64`, `pointer`, `const_pointer`, `f32` and
-      `text16`, and a result can also be `void`. The offsets belong to one build of
-      the game, so list the builds your mod supports with `game` in its manifest.
+      `text16`, and a result can also be `void`. Offsets belong to one build of
+      the game, so list the builds your mod supports with `game` in its manifest. A
+      `slot` names the same entry on every build the game table knows.
 
       A `text16` argument and text passed to `original` are limited to 256 UTF-16
       units. Longer incoming text skips your function and calls the original with
@@ -237,7 +237,7 @@ functions:
       what `original` returns for its own arguments. If it raises after, the game
       gets the last result `original` gave.
     params:
-      - {name: target, type: value, doc: "A table with `function_at` and `expected`, or `entry_at` and `stock`, and `signature`."}
+      - {name: target, type: value, doc: "A table with `function_at` and `expected`, `entry_at` and `stock`, or `slot`, and `signature`."}
       - {name: fn, type: callback, doc: "Your function. It gets `original` and then the game's arguments."}
     returns: {type: handle<hook_id>, doc: "The hook, to pass to `remove`."}
     fails:
@@ -264,7 +264,7 @@ functions:
       characters, before the game's function runs. A `pointer` is only a number: by
       the next frame, the thing it pointed to may be gone.
     params:
-      - {name: target, type: value, doc: "A table with `function_at` and `expected`, or `entry_at` and `stock`, and `signature`."}
+      - {name: target, type: value, doc: "A table with `function_at` and `expected`, `entry_at` and `stock`, or `slot`, and `signature`."}
       - {name: fn, type: callback, doc: "Your function. It gets one table per call."}
     returns: {type: handle<hook_id>, doc: "The hook, to pass to `remove`."}
     fails:

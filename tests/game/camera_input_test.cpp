@@ -133,6 +133,9 @@ bool player_pad(uint32_t p, uint32_t& out) {
     out = routes[p] < 0 ? routed_pad : uint32_t(routes[p]);
     return true;
 }
+uint64_t mount_of(uint64_t) {
+    return 0;   // nobody rides here
+}
 bool get_transform(uint64_t actor, Transform& out) {
     if (!live(actor))
         return false;

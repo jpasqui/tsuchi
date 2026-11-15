@@ -139,6 +139,7 @@ functions:
     fails:
       invalid: "That slot doesn't exist, or the path points outside of it."
       busy: "Another mod has a replacement, or your mod's replacement is for a different slot."
+      capacity: "The replacement already has 1024 files, or the file would take it past 64 MiB."
       no_memory: "The game is out of memory."
     users: [online-coop, dog-coop]
 

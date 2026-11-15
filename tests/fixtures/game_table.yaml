@@ -194,7 +194,7 @@ constants:
   play_mode_two: 5
   pad_none: 6
   pause_stops_control: 0x5
-  max_objects: 4096
+  max_objects: 8192
   objects_per_chunk: 64
   unreachable_flags: 0x30
   kept_flag: 0x40

@@ -4143,10 +4143,14 @@ struct Herding {
     uint16_t filter = 9;
 } herd;
 void game_eject_pikmin(void* leader, void* transform, int32_t type, int32_t leaf, int32_t count, uint64_t sublevel, bool not_counted, int32_t decoration) {
-    const auto* f = static_cast<const float*>(transform);
+    // The transform is read where the table says each part is, as the game reads one.
+    namespace x = t::engine_transform;
+    const auto* bytes = static_cast<const uint8_t*>(transform);
+    float q[4], at[3], size[3];
+    memcpy(q, bytes + uint64_t(x::rotation), sizeof q), memcpy(at, bytes + uint64_t(x::translation), sizeof at), memcpy(size, bytes + uint64_t(x::scale), sizeof size);
     char line[256];
     std::snprintf(line, sizeof line, "eject type%d leaf%d x%d part%llx%s deco%d turn%g,%g,%g,%g at%g,%g,%g scale%g,%g,%g ", type, leaf, count,
-                  static_cast<unsigned long long>(sublevel), not_counted ? " apart" : "", decoration, f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[8], f[9], f[10]);
+                  static_cast<unsigned long long>(sublevel), not_counted ? " apart" : "", decoration, q[0], q[1], q[2], q[3], at[0], at[1], at[2], size[0], size[1], size[2]);
     herd.log += line;
     herd.dismissed = reinterpret_cast<uint64_t>(leader);
     if (reinterpret_cast<uint64_t>(transform) % 16) herd.log += "crooked ";

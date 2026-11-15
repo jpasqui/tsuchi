@@ -113,6 +113,8 @@ TSUCHI_Result write_text(const Place& place, const char* text);
 // TSUCHI_CAPACITY for text longer than the game stores, TSUCHI_NOT_READY while the
 // game cannot be asked.
 TSUCHI_Result name_from_utf8(const char* text, Name& out);
+// The game's name for the text only if it has one already: not_found otherwise, and nothing is added.
+TSUCHI_Result existing_name_from_utf8(const char* text, Name& out);
 // UTF-8 to the engine's 16-bit units. Counts every unit and writes those that
 // fit, without a terminator. False for text that is not well-formed UTF-8.
 bool utf8_to_units(const char* text, char16_t* out, size_t capacity, size_t& count);

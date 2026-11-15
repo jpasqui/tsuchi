@@ -170,6 +170,12 @@ check(not pcall(reflection.get, 5, "Health"))
 check(not pcall(reflection.get, red))
 check(not pcall(reflection.set, red, "Health"))
 
+-- A field list, one name at a time: the class's own fields, then its parent's.
+check(reflection.field_at(red, "", 0) == "Anger" and reflection.field_at(red, "", 3) == "Health")
+check(reflection.field_at(red, "Location", 2) == "Z")
+check(fails("not_found", reflection.field_at(red, "Location", 3)))
+check(fails("invalid", reflection.field_at(red, "Health", 0)))
+
 -- The typed services take the same handle.
 local original_health = reflection.get(red, "Health")
 local held = assert(reflection.hold_field(red, "Health", 0.1, ""))

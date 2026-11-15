@@ -21,13 +21,14 @@ description: |
   handle, `nil` for an empty object reference, a table of fields for a struct,
   and a list for an array. In JavaScript, structs are objects, arrays are Arrays,
   integer fields are BigInt, and an empty object reference is `null`. Both languages
-  call a reflected function in one step with `call`.
+  call a reflected function in one step with `call`. `field_at` lists the
+  fields of an object or a struct, one name at a time.
 
   In a compiled mod, you read and write one value at a time: a boolean, an
   integer, a number, an object, or nothing for an empty object reference.
   Reading a struct or an array returns its kind, and for an array it also
   returns the length. Their members have their own paths, and `field_at` lists
-  a struct's fields. Text has its own functions. To call a function, you begin
+  their fields. Text has its own functions. To call a function, you begin
   a call, set its arguments by name, invoke it, read its results by name, and
   end the call. A function's return value is named `ReturnValue`.
 
@@ -193,7 +194,6 @@ functions:
     users: [groink, online-coop]
 
   - name: field_at
-    only: native
     doc: |
       The name of one field of an object or a struct, by its index. To list every
       field, count up from `0` until the call fails. A class's own fields come

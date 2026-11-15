@@ -906,9 +906,10 @@ void check_kill_actor(void* record_pointer, void* which) {
 void check_eject_pikmin(void* leader, void* transform, int32_t type, int32_t leaf, int32_t count, uint64_t sublevel, bool not_counted, int32_t decoration) {
     game_eject_pikmin(leader, transform, type, leaf, count, sublevel, not_counted, decoration);
     const uint64_t owner = reinterpret_cast<uint64_t>(leader), head = w.framework + t::game_framework::pikmin_list;
-    const auto* at = static_cast<const float*>(transform);
+    float at[3];
+    memcpy(at, static_cast<const uint8_t*>(transform) + uint64_t(t::engine_transform::translation), sizeof at);
     for (int32_t i = 0; i < count; ++i) {
-        const uint64_t made = actor(u"CheckAdded", w.pikmin_class, u"Pikmin", fake::get<int32_t>(owner + t::game_actor::team), ~uint64_t(0), component(at[4], at[5], at[6], 0));
+        const uint64_t made = actor(u"CheckAdded", w.pikmin_class, u"Pikmin", fake::get<int32_t>(owner + t::game_actor::team), ~uint64_t(0), component(at[0], at[1], at[2], 0));
         fake::put(made, table_a());
         const uint64_t part = fake::object(u"CheckAddedPikmin", w.component_class, 0x40), node = fake::memory(t::actor_node::size);
         fake::put(made + t::game_actor::pikmin, part);
