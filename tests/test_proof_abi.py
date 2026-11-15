@@ -14,6 +14,7 @@ class ProofABI(unittest.TestCase):
             with self.subTest(service=name):
                 self.assertIn(name,lock['tables'])
                 self.assertEqual(lock['tables'][name][:len(members)],members)
+        self.assertIn('memory',lock['services'][len(before):])
         old_mod=released['tables']['mod']
         self.assertEqual(lock['tables']['mod'][len(old_mod)],'game_build')
         self.assertEqual(lock['tables']['input'][8:10],['hold_state','release_state'])

@@ -175,6 +175,10 @@ uint64_t default_object(uint64_t type);
 // Memory from the engine's own allocator, and giving it back. Null while the
 // engine has no allocator yet, or has no memory to give.
 void* engine_memory(uint64_t bytes);
+// The same at an address that is a multiple of `alignment`, a power of two, or the allocator's own for 0.
+void* engine_memory_aligned(uint64_t bytes, uint32_t alignment);
+// Whether the engine's allocator can be reached yet.
+bool engine_memory_available();
 void release_engine_memory(void* block);
 
 // Memory for a function's arguments and results, set up as the engine expects.

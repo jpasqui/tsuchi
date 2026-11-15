@@ -243,7 +243,7 @@ class SchemaRules(unittest.TestCase):
 
     def test_the_schema_loads(self):
         schema = load(ROOT / 'schema')
-        self.assertEqual([s.name for s in schema.services], ['actor', 'animation', 'asset', 'audio', 'battle', 'behavior', 'camera', 'captain', 'carry', 'character', 'collision', 'combat', 'component', 'content', 'creature', 'datatable', 'dialog', 'effects', 'entity', 'file', 'game', 'gimmicks', 'hook', 'hud', 'input', 'mod', 'net', 'packages', 'pikmin', 'player', 'reflection', 'save', 'session', 'settings', 'squad', 'storage', 'story', 'text', 'time', 'ui', 'voice', 'world'])
+        self.assertEqual([s.name for s in schema.services], ['actor', 'animation', 'asset', 'audio', 'battle', 'behavior', 'camera', 'captain', 'carry', 'character', 'collision', 'combat', 'component', 'content', 'creature', 'datatable', 'dialog', 'effects', 'entity', 'file', 'game', 'gimmicks', 'hook', 'hud', 'input', 'memory', 'mod', 'net', 'packages', 'pikmin', 'player', 'reflection', 'save', 'session', 'settings', 'squad', 'storage', 'story', 'text', 'time', 'ui', 'voice', 'world'])
 
     def test_engine_and_game_actor_contracts_are_distinct(self):
         schema = load(ROOT / 'schema')
@@ -897,6 +897,16 @@ class Generated(unittest.TestCase):
              *sorted(BASE.glob('*.cpp')), *sorted((GEN / 'framework').glob('*.cpp')),
              ROOT / 'tests' / 'base' / 'reflect_test.cpp', '-o', program])
         run([program])
+
+    def test_memory_blocks_and_checked_access(self):
+        """The memory service: blocks, their owners and limits, lasting blocks, and checked reads and writes."""
+        fixture = self.fixture()
+        program = BUILD / f'memory_test{EXE}'
+        run([shutil.which('clang++'), *CXX, '-I', GEN / 'include', '-I', fixture / 'framework', '-I', GEN / 'framework',
+             '-I', BASE, '-I', CORE, '-I', ROOT / 'tests' / 'base', CORE / 'registry.cpp', CORE / 'ids.cpp', CORE / 'reflection.cpp', CORE / 'json.cpp', CORE / 'sha256.cpp', CORE / 'text.cpp', CORE / 'texts.cpp',
+             *sorted(BASE.glob('*.cpp')), *sorted((GEN / 'framework').glob('*.cpp')),
+             ROOT / 'tests' / 'base' / 'memory_test.cpp', '-o', program])
+        self.assertIn('memory passed', run([program]).stdout)
 
     def containers_program(self):
         fixture = self.fixture()

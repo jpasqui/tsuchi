@@ -72,6 +72,8 @@ mod_start:
 core:
   files:
     - base/files.cpp
+    - base/memory_backend.cpp
+    - base/memory_backend.h
     - base/files.h
     - base/game.h
     - base/mods.cpp
