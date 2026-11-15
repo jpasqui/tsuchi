@@ -1324,6 +1324,25 @@ structs:
   avatar_table:
     fields:
       squad: 2336
+  character_part:
+    fields:
+      controller: absent
+      move: absent
+  game_controller:
+    fields:
+      unpaused_frames: absent
+      lock_mask: absent
+      lock_timer: absent
+      press_ages: absent
+      press_age_count: absent
+  press_age:
+    size: absent
+    fields:
+      seconds: absent
+  game_controller_table:
+    fields:
+      locked: absent
+      pressed: absent
   whistle_part:
     fields:
       radius: 564
@@ -2229,6 +2248,10 @@ slots:
     table: 122417184
     offset: 2600
     stock: 53480288
+  controller_held: absent
+  controller_pressed: absent
+  controller_released: absent
+  controller_update: absent
 tables:
   actor_tables:
   - 122245408
@@ -2344,6 +2367,78 @@ tables:
   - 124706800
   - 124923184
   - 125037256
+  character_sites:
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  character_site_words:
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  character_site_registers:
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
+  - absent
 slot_groups:
   actor_register:
     offset: 1744

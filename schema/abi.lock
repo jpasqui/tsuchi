@@ -42,7 +42,8 @@
   "time",
   "ui",
   "world",
-  "packages"
+  "packages",
+  "character"
  ],
  "tables": {
   "actor": [
@@ -341,7 +342,9 @@
    "pressed",
    "hold_hidden",
    "release_hidden",
-   "hidden"
+   "hidden",
+   "hold_state",
+   "release_state"
   ],
   "mod": [
    "id",
@@ -594,6 +597,22 @@
    "remove",
    "on_progress",
    "on_finished"
+  ],
+  "character": [
+   "hold_input",
+   "press_input",
+   "release_input",
+   "input_held",
+   "hold_move",
+   "release_move",
+   "move",
+   "hold_action",
+   "press_action",
+   "release_action",
+   "action_held",
+   "hold_binding",
+   "release_binding",
+   "binding"
   ]
  }
 }

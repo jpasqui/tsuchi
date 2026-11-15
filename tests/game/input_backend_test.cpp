@@ -44,7 +44,7 @@ static uint8_t* globals = nullptr;
 static uint64_t& slot(uint64_t address) { return *reinterpret_cast<uint64_t*>(globals + (address - globals_from)); }
 static uint32_t routed_pad = 0, raw_buttons = 0, pending = 0, foreign_calls = 0;
 static int32_t routes[4] = {-1, -1, -1, -1};
-static bool sampling = false, world_ready = true;
+static bool sampling = false, world_ready = true, raw_connected = true;
 static uint64_t (*after_input)(uint32_t, uint64_t, bool);
 using Poll = void (*)(void*, const void*);
 static std::map<uint64_t, Poll> polls;
@@ -60,6 +60,12 @@ static void tick() {
 }
 static uint64_t probe() { return thread; }
 static void foreign(void*, const void*);
+// The system's style reader, and what it says of every controller.
+static uint32_t raw_style = 0;
+static uint32_t foreign_style(const void*) { return raw_style; }
+// Room after the globals for that reader's import slot, and for the game's stub that calls through it.
+constexpr uint64_t extra_room = 64;
+const uint64_t style_slot_at = globals_to, style_stub_at = globals_to + 16;
 
 // The system's keyboard: a library that offers it, or not, and what it says.
 static uint8_t library_code[0x100];
@@ -150,13 +156,13 @@ static void foreign(void* out, const void*) {
     std::memset(out, 0, t::npad_state::size);
     const uint64_t a = reinterpret_cast<uint64_t>(out);
     put(a + t::npad_state::buttons, uint64_t(raw_buttons));
-    put(a + t::input_state::connected, uint32_t(1));
+    put(a + t::input_state::connected, uint32_t(raw_connected));
     const int32_t axes[] = {-32767, 123, 456, 32767};
     std::memcpy(reinterpret_cast<void*>(a + t::input_state::sticks), axes, sizeof axes);
 }
 
 int main() {
-    std::vector<uint8_t> memory(globals_to - globals_from);
+    std::vector<uint8_t> memory(globals_to - globals_from + extra_room);
     globals = memory.data();
     ranges.push_back({reinterpret_cast<uint64_t>(globals), memory.size()});
     for (uint64_t address : {t::data::input_full_key.address, t::data::input_handheld.address, t::data::input_joy_dual.address})
@@ -404,5 +410,92 @@ int main() {
     CHECK(i.hold_hidden(b, 0, 1) == TSUCHI_NOT_READY);
     CHECK(i.pressed(b, 0, &buttons) == TSUCHI_NOT_READY);
     CHECK(i.hidden(b, 0, &buttons) == TSUCHI_NOT_READY);
+    // Complete state reaches every system reader and the API, including a virtual connected controller.
+    CHECK(i.hold_state(b, 0, 0, 0, 0, 0, 0, 2) == TSUCHI_NOT_READY);
+    world_ready = true;
+    TSUCHI_Mod* virtual_mod = mod_create("input.virtual");
+    TSUCHI_Mod* other = mod_create("input.other");
+    raw_connected = false; raw_buttons = 2;
+    tick();
+    CHECK(i.pad(virtual_mod, 0, &pad) == TSUCHI_OK && !pad.connected);
+    CHECK(i.hold_state(virtual_mod, 0, 4, 12000, -23000, 400, -500, 2) == TSUCHI_OK);
+    CHECK(i.pad(virtual_mod, 0, &pad) == TSUCHI_OK && pad.connected && pad.held == 4 &&
+          pad.left_x == 12000 && pad.left_y == -23000 && pad.right_x == 400 && pad.right_y == -500);
+    CHECK(i.hold_pressed(other, 0, 1, 1) == TSUCHI_BUSY);
+    CHECK(i.hold_hidden(other, 0, 1) == TSUCHI_BUSY);
+    CHECK(i.hold_state(other, 0, 0, 0, 0, 0, 0, 1) == TSUCHI_BUSY);
+    CHECK(i.hold_hidden(virtual_mod, 0, 4) == TSUCHI_OK);
+    for (const auto& poll : polls) {
+        poll.second(state, &routed_pad);
+        const auto at = reinterpret_cast<uint64_t>(state);
+        CHECK(get<uint64_t>(at + t::npad_state::buttons) == 0);
+        CHECK((get<uint32_t>(at + t::input_state::connected) & 1) == 1);
+        CHECK(get<int32_t>(at + t::input_state::sticks) == 12000);
+    }
+    CHECK(i.pad(virtual_mod, 0, &pad) == TSUCHI_OK && pad.held == 4); // hidden only from the game
+    CHECK(i.release_hidden(virtual_mod, 0) == TSUCHI_OK);
+    CHECK(i.hold_pressed(virtual_mod, 0, 8, 2) == TSUCHI_OK);
+    CHECK(i.pad(virtual_mod, 0, &pad) == TSUCHI_OK && pad.held == 12);
+    CHECK(i.release_pressed(virtual_mod, 0) == TSUCHI_OK);
+    CHECK(i.hold_state(virtual_mod, 0, 0, 0, 0, 0, 0, 2) == TSUCHI_OK);
+    CHECK(i.pad(virtual_mod, 0, &pad) == TSUCHI_OK && pad.held == 0 && pad.left_x == 0 && pad.left_y == 0);
+    tick(); tick(); tick();
+    CHECK(i.pad(virtual_mod, 0, &pad) == TSUCHI_OK && !pad.connected && pad.held == 2 && pad.left_x == -32767);
+    CHECK(i.hold_state(virtual_mod, 0, 4, 1, 2, 3, 4, 30) == TSUCHI_OK);
+    routed_pad = 1;
+    CHECK(i.release_state(virtual_mod, 0) == TSUCHI_OK); // release follows the original controller
+    routed_pad = 0;
+    CHECK(i.pad(virtual_mod, 0, &pad) == TSUCHI_OK && pad.held == 2);
+    CHECK(i.hold_state(virtual_mod, 0, 4, 1, 2, 3, 4, 30) == TSUCHI_OK);
+    thread = 2;
+    CHECK(i.release_state(virtual_mod, 0) == TSUCHI_INVALID);
+    CHECK(i.hold_state(virtual_mod, 0, 0, 0, 0, 0, 0, 1) == TSUCHI_INVALID);
+    thread = 1;
+    mod_stop(virtual_mod);
+    CHECK(i.pad(other, 0, &pad) == TSUCHI_OK && !pad.connected && pad.held == 2);
+    CHECK(i.hold_state(other, 4, 0, 0, 0, 0, 0, 1) == TSUCHI_INVALID);
+    CHECK(i.hold_state(other, 0, 0x10000, 0, 0, 0, 0, 1) == TSUCHI_INVALID);
+    CHECK(i.hold_state(other, 0, 0, -32768, 0, 0, 0, 1) == TSUCHI_INVALID);
+    CHECK(i.hold_state(other, 0, 0, 0, 32768, 0, 0, 1) == TSUCHI_INVALID);
+    CHECK(i.hold_state(other, 0, 0, 0, 0, 0, 0, 0) == TSUCHI_INVALID);
+    CHECK(i.hold_state(other, 0, 0, 0, 0, 0, 0, 601) == TSUCHI_INVALID);
+    CHECK(i.release_state(other, 4) == TSUCHI_INVALID);
+
+    // The game reads a controller only if the system gives it a style. The style reader is called through a
+    // stub (adrp x16, page; ldr x17, [x16, #offset]; ...): the slot it loads is found from it and wrapped, and
+    // a controller held whole reads as a Pro Controller while the system has no style for it.
+    CHECK(polls.size() == 3); // no stub is known yet, so only the three state readers are wrapped
+    const uint64_t slot_address = game::main_base() + style_slot_at, stub_address = game::main_base() + style_stub_at;
+    slot(style_slot_at) = reinterpret_cast<uint64_t>(&foreign_style);
+    const int64_t pages = (int64_t(slot_address & ~uint64_t(0xFFF)) - int64_t(stub_address & ~uint64_t(0xFFF))) / 0x1000;
+    const uint32_t field = uint32_t(pages) & 0x1FFFFF;
+    put<uint32_t>(stub_address, 0x90000010u | (field & 3) << 29 | (field >> 2) << 5);
+    put<uint32_t>(stub_address + 4, 0xF9400211u | uint32_t((slot_address & 0xFFF) / 8) << 10);
+    t::fn::npad_style_set = reinterpret_cast<uint32_t (*)(const void*)>(stub_address);
+    tick();
+    CHECK(polls.size() == 4 && polls.count(style_slot_at) == 1);
+    const auto styled = reinterpret_cast<uint32_t (*)(const void*)>(reinterpret_cast<uint64_t>(polls.at(style_slot_at)));
+    const uint32_t first = 0, second = 1, third = 2, beyond = 9;
+    routes[0] = 0, routes[1] = 1;
+    CHECK(styled(&second) == 0); // nobody holds it, and the system has no controller there
+    CHECK(i.hold_state(other, 1, 4, 1, 2, 3, 4, 3) == TSUCHI_OK);
+    CHECK(styled(&second) == t::constant::npad_full_key);
+    CHECK(styled(&first) == 0 && styled(&third) == 0 && styled(&beyond) == 0 && styled(nullptr) == 0);
+    CHECK(i.pad(other, 1, &pad) == TSUCHI_OK && pad.connected && pad.held == 4 && pad.left_x == 1);
+    raw_style = uint32_t(t::constant::npad_handheld); // a controller the system has keeps its own style
+    CHECK(styled(&second) == t::constant::npad_handheld);
+    raw_style = 0;
+    thread = 2;
+    CHECK(styled(&second) == 0); // off the game's thread nothing of the holds is read
+    thread = 1;
+    CHECK(i.release_state(other, 1) == TSUCHI_OK);
+    CHECK(styled(&second) == 0);
+    CHECK(i.hold_state(other, 1, 0, 0, 0, 0, 0, 1) == TSUCHI_OK);
+    CHECK(styled(&second) == t::constant::npad_full_key);
+    tick(); tick();
+    CHECK(styled(&second) == 0); // the hold ran out
+    // A stub of another form names no slot.
+    put<uint32_t>(stub_address + 4, 0xD503201Fu);
+    t::fn::npad_style_set = nullptr;
     std::printf("input: %u checks passed\n", checks);
 }

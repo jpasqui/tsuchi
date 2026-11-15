@@ -105,6 +105,27 @@ controller, they share one hold, and either player can change it or release it.
 If the player moves to another controller, your hold stays on the one you took it
 on, and releasing it through that player still works.
 
+## Complete controller state
+
+Use [`input.hold_state`](/reference/input/#hold_state) to replace the buttons and
+both sticks together. For example, this holds player 2's left stick forward for
+two world steps, with no buttons down:
+
+```lua
+input.hold_state(1, {}, 0, 32767, 0, 0, 2)
+```
+
+The arguments after the buttons are the left stick's X and Y, the right stick's X
+and Y, and the number of steps. Each axis ranges from -32767 to 32767. Zero axes
+and no buttons hold a neutral controller. The state reads connected while held;
+the call doesn't create a player or configure a controller in the emulator.
+
+Refresh a short hold when new remote input arrives. End the hold with
+[`input.release_state`](/reference/input/#release_state) when the connection ends,
+the world changes, or the player loses control. If updates stop, the hold expires
+and the physical controller returns. Complete states, button presses, and hidden
+buttons share one owner per controller, so another mod's hold returns `busy`.
+
 ## Cleanup
 
 A press ends after its number of steps, and you can end it early with

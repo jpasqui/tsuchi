@@ -365,6 +365,7 @@ extern "C" void tsuchi_initialize() {
     if (serves(t::family::squad)) content_squad_start(self);
     if (serves(t::family::carry)) carry_start(self);
     if (serves(t::family::input)) input_start(self);
+    if (serves(t::family::character)) characters_start(self);
     if (serves(t::family::storage)) storage_start();
     if (serves(t::family::sd_card)) log_file_start();
     dev_folders_start();

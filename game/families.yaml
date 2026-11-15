@@ -140,6 +140,9 @@ families:
   carry_count:
     calls: [carry.hold_count, carry.release_count]
     files: [game/carry_count.cpp]
+  character:
+    services: [character]
+    files: [game/character_backend.cpp]
   thrown_hit:
     calls: [combat.thrown_hit]
     files: [game/thrown_hit.cpp]

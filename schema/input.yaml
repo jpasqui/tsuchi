@@ -148,3 +148,40 @@ functions:
       invalid: "The player is outside 0 to 3."
       not_ready: "The player has no controller yet."
     users: [online-coop, camera-tools]
+
+  - name: hold_state
+    doc: |
+      Replaces the player's controller buttons and both sticks for a number of
+      world steps. The controller reads connected while held, even if no
+      controller is connected there, so the game reads it. Zero buttons and
+      axes hold a neutral controller. `pad` reads the replacement, with any
+      `hold_pressed` buttons added. Hidden buttons remain visible to mods.
+      The hold stays on the controller the player used when it was taken, and
+      ends on release, expiry, or mod stop. A call during a step counts that step.
+    owns: true
+    params:
+      - {name: player, type: u32, doc: "The player, from 0 to 3."}
+      - {name: buttons, type: flags<Buttons>, doc: "The buttons down, or none."}
+      - {name: left_x, type: i32, doc: "The left stick's horizontal axis, from -32767 to 32767."}
+      - {name: left_y, type: i32, doc: "The left stick's vertical axis, from -32767 to 32767."}
+      - {name: right_x, type: i32, doc: "The right stick's horizontal axis, from -32767 to 32767."}
+      - {name: right_y, type: i32, doc: "The right stick's vertical axis, from -32767 to 32767."}
+      - {name: steps, type: u32, doc: "The duration, from 1 to 600 world steps."}
+    fails:
+      invalid: "The player, buttons, axes, or duration is invalid."
+      not_ready: "The player has no controller yet."
+      busy: "Another mod holds this controller's input."
+    users: [online-coop, camera-tools]
+
+  - name: release_state
+    doc: |
+      Ends the complete controller hold taken through this player, even if the
+      player now uses another controller. Players sharing a hold can release it
+      through either player.
+    owns: true
+    params:
+      - {name: player, type: u32, doc: "The player, from 0 to 3."}
+    fails:
+      invalid: "The player is outside 0 to 3."
+      not_found: "Your mod has no such hold."
+    users: [online-coop, camera-tools]
