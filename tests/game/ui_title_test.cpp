@@ -80,6 +80,9 @@ bool utf8_to_units(const char* text, char16_t* out, size_t room, size_t& count) 
     return true;
 }
 void drop_shared(uint64_t) {}
+// For load_story: the test's title is there, and the game is never busy.
+bool at_title() { return true; }
+bool busy_with_saves_or_scenes() { return false; }
 } // namespace game
 } // namespace tsuchi
 

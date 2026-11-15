@@ -16,6 +16,13 @@ description: |
   fade in. Use `game` to find out when the world changes.
 
 enums:
+  TripKind:
+    open: false
+    doc: "What kind of trip a request is for."
+    values:
+      - {name: travel, value: 0, doc: "Travel to an area, or to another base in the same area, from the map."}
+      - {name: portal, value: 1, doc: "Going through a portal: a cave entrance, or a hole to a cave's next floor."}
+      - {name: leave_cave, value: 2, doc: "Leaving a cave."}
   Treasure:
     open: true
     doc: "A treasure. The game's own treasures use the name of their row in the game's tables, like `OTADARTS`. A treasure that a mod adds uses the ID from its manifest, like `example.gems:ruby`."
@@ -104,3 +111,17 @@ functions:
       invalid: "`treasure` isn't a valid ID."
       not_ready: "No story is being played in a level, or the game isn't ready."
     users: [treasure-demo, groink]
+
+events:
+  - name: trip_requested
+    doc: |
+      Emitted when the game is asked to take the player somewhere: travel from the
+      map, a portal, or leaving a cave. It comes as the request is made, before the
+      game fades out and starts loading, whether the player, the game, or a mod asked.
+      It is emitted on the next world step.
+    fields:
+      - {name: kind, type: enum<TripKind>, doc: "The kind of trip."}
+      - {name: area, type: enum<World>, doc: "For travel, the area's world, like `Area001_P`. Empty for another base in the same area, a portal, or leaving a cave."}
+      - {name: base, type: i32, doc: "For travel, the base the player arrives at, from `0`, or `-1` for the area's usual one. `-1` otherwise."}
+      - {name: portal, type: handle<actor>, optional: true, doc: "For a portal, the portal."}
+    users: [online-coop, dog-coop]

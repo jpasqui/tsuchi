@@ -223,7 +223,7 @@ void step() {
 
 game_service::Backend service{mode, rule, stage, world, paused, has_control, hold_pause, release_pause, return_to_title, get_random, set_random,
                               reserve_game_preview, game_preview_scene, admit_game_preview, prepare_game_preview, release_game_preview,
-                              nullptr, nullptr, nullptr};
+                              nullptr, nullptr, nullptr, nullptr};
 
 } // namespace
 

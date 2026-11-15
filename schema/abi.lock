@@ -302,7 +302,9 @@
    "hold_player_choice",
    "release_player_choice",
    "answer_player_choice",
-   "on_player_choice"
+   "on_player_choice",
+   "load_story",
+   "on_story_load_requested"
   ],
   "gimmicks": [
    "list",
@@ -509,7 +511,8 @@
    "leave_cave",
    "enter_portal",
    "treasure_count",
-   "give_treasure"
+   "give_treasure",
+   "on_trip_requested"
   ],
   "text": [
    "get",

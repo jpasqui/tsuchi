@@ -19,6 +19,8 @@ data:
   dialog_answer_yes: 0x9400
   dialog_answer_no: 0x9408
   dialog_answer_cancel: 0x9410
+  title_answer_load: 0x9430
+  save_slot_paths: 0x9438
   dialog_answer_return: 0x9418
   dialog_result_table: 0x9420
   dialog_result_header: 0x9428
@@ -110,6 +112,11 @@ constants:
   options_down_key: 1
   options_last_stock: 3
   title_flow_players_wait: 0x24
+  title_flow_menu: 2
+  title_flow_story: 6
+  fade_out_in_front: 3
+  fade_role_title: 1
+  play_mode_one: 4
   dialog_result_message: 0x45
   title_confirm_key: 0x16
   title_back_key: 0x17
@@ -222,6 +229,7 @@ constants:
   request_from_menu: 9
   leave_request_id: 21
   portal_request_id: 13
+  travel_request_id: 15
   dialog_question: 0x9
   dialog_message: 0x2B
   dialog_accept: 6
@@ -487,7 +495,7 @@ structs:
   options_button: {fields: {look: 0x4D8, look_bytes: 0x15}}
   options_presenter: {fields: {input: 0x78, view: 0x80}}
   options_view: {fields: {state: 0x4D8, buttons: 0x4F8, count: 0x500, room: 0x504, selected: 0x508}}
-  title_flow: {fields: {state: 0xD8, answered: 0xE8, answer: 0xEC}}
+  title_flow: {fields: {state: 0xD8, answered: 0xE8, answer: 0xEC, slot: 0xF4}}
   dialog_result: {size: 0x50, fields: {self: 0x18, header: 0x28, message: 0x38, dialog_kind: 0x3C, as_flow: 0x4D}}
   title_presenter: {fields: {cursor: 0x80, view: 0x88, input: 0xA8, state: 0xB0}}
   game_menu_presenter: {fields: {view: 0x90}}
@@ -818,10 +826,10 @@ structs:
     size: 0x40
     fields: {child: 0x8, name: 0x10, stopped: 0x20, status: 0x24, pending: 0x28}
   game_instance:
-    fields: {scene_manager: 0x18, pause_manager: 0x20, config_save: 0x28, story_save: 0x30, controllers: 0x38, saves: 0x28,
+    fields: {scene_manager: 0x18, pause_manager: 0x20, config_save: 0x28, story_save: 0x30, controllers: 0x38, fade: 0x40, saves: 0x28,
              academy_save: absent}
   config_save:
-    fields: {play_mode: 0x4, slot: 0x8}
+    fields: {play_mode: 0x4, slot: 0x8, difficulty: 0x10, difficulty_count: 0x18, difficulty_set: 0x20, difficulty_set_count: 0x28}
   story_save:
     fields: {night: 0xBC,summary: 0x200, onyon_leaves: 0x300, onyon_deco: 0x310, outside_deco: 0x320, switch_unlocked: 0x5, day: 0x48, treasure_records: 0x50, sparklium: 0x58, area_bases: 0x38, saved_portal: 0xA0, return_portal: 0x140, reserved_flow: 0x1E0, reserved_travel_type: 0x1E1}
   portal_move:
@@ -1378,6 +1386,8 @@ functions:
   options_button_icon: {address: 0x9750, returns: void, args: [pointer, i32]}
   options_direction: {address: 0x9700, returns: bool, args: [pointer, bool]}
   options_confirm: {address: 0x9710, returns: bool, args: [pointer]}
+  set_slot_difficulty: {address: 0x9718, returns: void, args: [pointer, u32, i32]}
+  fade_request: {address: 0x9728, returns: void, args: [pointer, u32, u32, bool, f32]}
   face_message_request: {address: 0x9738, returns: void, args: [pointer, pointer, u32, u32]}
   options_gate: {address: 0x9720, returns: bool, args: [pointer]}
   options_list_grow: {address: 0x9730, returns: void, args: [pointer]}

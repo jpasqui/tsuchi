@@ -99,7 +99,7 @@ void audio_start();
 void effects_start(TSUCHI_Mod* self);
 void world_start();
 void anim_start();
-void story_start();
+void story_start(TSUCHI_Mod* const* framework);
 // Wraps the two calls in which the game sets up a dialog, for the framework's own context. The first is entered
 // through `setup_entry`, which hands on the request the game is setting up from: see `tsuchi_dialog_on_setup`.
 void dialogs_start(TSUCHI_Mod* self, void* setup_entry);
