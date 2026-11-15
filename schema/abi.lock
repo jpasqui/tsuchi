@@ -375,7 +375,8 @@
    "read",
    "cancel_request",
    "release_request",
-   "on_completed"
+   "on_completed",
+   "route_address"
   ],
   "pikmin": [
    "list",
@@ -454,7 +455,11 @@
    "on_peer_joined",
    "on_peer_left",
    "on_message",
-   "on_ended"
+   "on_ended",
+   "set_secret",
+   "discover",
+   "public_address",
+   "punch"
   ],
   "settings": [
    "toggle",

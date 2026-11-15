@@ -61,8 +61,13 @@ TSUCHI_Result local(TSUCHI_Mod* mod,TSUCHI_Socket socket,TSUCHI_NetAddress* out)
     uint8_t ip[4]{};uint16_t port=0;if(held->transport->local(held->descriptor,ip,&port)!=0)return TSUCHI_IO;
     *out={packed(ip),port};return TSUCHI_OK;
 }
+TSUCHI_Result route_address(TSUCHI_NetAddress* out){
+    if(!transport||!transport->available()||!transport->route)return TSUCHI_UNSUPPORTED;
+    uint8_t ip[4]{};if(transport->route(ip)!=0)return TSUCHI_NOT_READY;
+    *out={packed(ip),0};return TSUCHI_OK;
+}
 TSUCHI_Result close(TSUCHI_Mod* mod,TSUCHI_Socket socket){SocketKept* held=nullptr;const TSUCHI_Result found=socket_of(mod,socket,held);return found==TSUCHI_OK?sockets.release(mod,0,socket.id):found;}
-const net::Backend service{status,open,send,receive,sender,local,close,network_numeric_address,network_request_get,network_request_info,network_request_read,network_request_cancel,network_request_release};
+const net::Backend service{status,open,send,receive,sender,local,close,network_numeric_address,network_request_get,network_request_info,network_request_read,network_request_cancel,network_request_release,route_address};
 }
 void set_network_transport(const NetBackend* backend){transport=backend;}
 const NetBackend* network_transport(){return transport;}
