@@ -45,6 +45,8 @@ optional:
   - route_frames.cursor_written.saved_widget # presenter_markers.cpp: without them the route is at the placement's return
   - route_frames.cursor_written.saved_component
   - route_frames.cursor_written.saved_return
+  - structs.pikmin_hit.press         # actors.cpp: without them an intercepted hit reports no press and no point
+  - structs.pikmin_hit.point
 
 # `mod_start` lists entries the mods' start waits on through a helper in a family's file, which the scan of core files
 # does not see. With one absent no mod ever starts, whatever the families say, so a build cannot mark one absent.
@@ -116,6 +118,12 @@ families:
   carry:
     services: [carry]
     files: [game/carry_backend.cpp]
+  thrown_hit:
+    calls: [combat.thrown_hit]
+    files: [game/thrown_hit.cpp]
+  life_gauge:
+    calls: [combat.refresh_gauge]
+    files: [game/life_gauge.cpp]
   collision:
     services: [collision]
     files: [game/switched.cpp]

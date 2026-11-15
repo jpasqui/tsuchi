@@ -113,6 +113,8 @@ struct Message {
     float amount;    // damage: how much. knock: the damage that comes with it
     uint32_t attack; // damage: the game's number for the kind of hit
     float vector[3]; // damage: where it came from. knock: the velocity to be thrown with
+    bool press;      // a thrown Pikmin's direct hit: its landing presses the target
+    float point[3];  // a thrown Pikmin's direct hit: where it touched the target
 };
 // Takes every message waiting for the actor, as its own decisions would, and
 // lets each go the game's way afterward. Returns how many there were.

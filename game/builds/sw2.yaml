@@ -232,6 +232,7 @@ constants:
   team_story: 4
   sort_dog: 4
   state_carcass: 16
+  state_target_collection: 512
   dismiss_keep_none: 16
   play_mode_two: 2
   pad_none: 7
@@ -1303,6 +1304,20 @@ structs:
       current: 816
       extra: 820
       max_extra: 824
+      actor: absent
+      gauge_enabled: absent
+      gauge_views: absent
+      gauge_list_1: absent
+      gauge_list_2: absent
+      gauge_list_3: absent
+      gauge_full: absent
+  gauge_actor:
+    fields:
+      part_1: absent
+      part_2: absent
+  gauge_stick:
+    fields:
+      clung: absent
   action:
     fields:
       child: 104
@@ -1327,6 +1342,12 @@ structs:
       attack: 73
       riding_applies: 170
       origin: 184
+  pikmin_hit:
+    fields:
+      point: absent
+      press: absent
+      part: absent
+      freeze_scaled: absent
   knock_message:
     size: 288
     fields:
@@ -1954,6 +1975,7 @@ functions:
   pause_change: 9922944
   return_to_title: 4187328
   set_life: 14096384
+  life_refresh_gauge: absent
   damage_message: 7310976
   knock_message: 11146336
   post_message: 5833888

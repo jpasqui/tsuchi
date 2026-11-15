@@ -194,6 +194,8 @@ void take(void* context, const game::Message& message) {
     taken.amount = message.amount;
     taken.attack = message.attack;
     memcpy(taken.vector, message.vector, sizeof taken.vector);
+    taken.press = message.press;
+    memcpy(taken.point, message.point, sizeof taken.point);
     message_listener(taken);
 }
 

@@ -451,6 +451,11 @@ uint32_t take_messages(uint64_t actor, void (*visit)(void*, const Message&), voi
             out.amount = read_or<float>(message + t::damage_message::amount);
             out.attack = read_or<uint8_t>(message + t::damage_message::attack);
             for (int i = 0; i < 3; ++i) out.vector[i] = read_or<float>(message + t::damage_message::origin + 4 * i);
+            // A thrown Pikmin's direct hit says whether it pressed, and where it touched. A build without them has neither.
+            if (out.attack == 1 && t::present(t::pikmin_hit::press) && t::present(t::pikmin_hit::point)) {
+                out.press = read_or<uint8_t>(message + t::pikmin_hit::press) != 0;
+                for (int i = 0; i < 3; ++i) out.point[i] = read_or<float>(message + t::pikmin_hit::point + 4 * i);
+            }
         } else if (table == base + t::data::knock_message_table && readable(message, t::knock_message::size)) {
             out.kind = 1;
             out.amount = read_or<float>(message + t::knock_message::damage);

@@ -154,7 +154,9 @@
    "on_damaged",
    "on_defeated",
    "on_pikmin_died",
-   "on_intercepted"
+   "on_intercepted",
+   "thrown_hit",
+   "refresh_gauge"
   ],
   "component": [
    "list",

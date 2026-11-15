@@ -190,6 +190,7 @@ constants:
   team_story: 9
   sort_dog: 2
   state_carcass: 0x4
+  state_target_collection: 0x200
   dismiss_keep_none: 0x7
   play_mode_two: 5
   pad_none: 6
@@ -419,6 +420,7 @@ names:
   primitive_class: PrimitiveComponent   # a part that can collide
   avatar_class: AvatarComponent     # the part of a captain that decides for it
   life_class: LifeComponent         # the part that keeps life
+  creature_ai_class: TekiAIComponent
   data_table_class: DataTable
   navmesh_class: RecastNavMesh
   nav_modifier_class: NavModifierComponent    # a part that marks the navmesh under it
@@ -1006,7 +1008,12 @@ structs:
     size: 0x9EC
     fields: {classify_child: 0x9E4, messages: 0x48, actions: 0x50}
   life_component:
-    fields: {max: 0x40, current: 0x48, extra: 0x44, max_extra: 0x4C}
+    fields: {max: 0x40, current: 0x48, extra: 0x44, max_extra: 0x4C, actor: 0x50, gauge_enabled: 0x58, gauge_views: 0x5C,
+             gauge_list_1: 0x70, gauge_list_2: 0x80, gauge_list_3: 0x90, gauge_full: 0xA0}
+  gauge_actor:                      # past the end of the made-up game's 0x110-byte actors: a creature needs room
+    fields: {part_1: 0x110, part_2: 0x118}
+  gauge_stick:
+    fields: {clung: 0x40}
   action:
     fields: {child: 0x18, name: 0x28}
   message_queue_table:
@@ -1016,8 +1023,10 @@ structs:
   message_table:
     fields: {destroy: {at: 0x8, args: [pointer]}}
   damage_message:
-    size: 0x40
+    size: 0x60
     fields: {amount: 0x18, attack: 0x1C, origin: 0x20, riding_applies: 0x2C}
+  pikmin_hit:
+    fields: {point: 0x40, press: 0x4C, part: 0x50, freeze_scaled: 0x58}
   knock_message:
     size: 0x40
     fields: {velocity: 0x18, damage: 0x24}
@@ -1520,6 +1529,7 @@ functions:
   kill_actor: {address: 0x2AC0, returns: void, args: [pointer, pointer]}
   kill_record_destroy: {address: 0x2B00, returns: void, args: [pointer]}
   set_life: {address: 0x2E00, returns: void, args: [pointer, bool, u64, f32]}
+  life_refresh_gauge: {address: 0x4D80, returns: void, args: [pointer, f32]}
   pause_change: {address: 0x2F40, returns: void, args: [pointer, u32, bool]}
   start_whistle: {address: 0x2140, returns: void, args: [pointer, bool]}
   end_whistle: {address: 0x2180, returns: void, args: [pointer]}

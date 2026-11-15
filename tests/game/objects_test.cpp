@@ -127,8 +127,8 @@ uint64_t component(float x, float y, float z, float yaw) {
 }
 
 // An actor at the end of the game's ring of actor.
-uint64_t actor(const std::u16string& name, uint64_t type, const std::u16string& kind, int32_t team, uint64_t placement, uint64_t root) {
-    const uint64_t address = fake::object(name, type, 0x100);
+uint64_t actor(const std::u16string& name, uint64_t type, const std::u16string& kind, int32_t team, uint64_t placement, uint64_t root, size_t bytes = 0x110) {
+    const uint64_t address = fake::object(name, type, bytes);
     fake::put<uint8_t>(address + t::game_actor::tick_requested, 1);
     fake::put(address + t::game_actor::kind, fake::name(kind));
     fake::put(address + t::game_actor::team, team);
@@ -1203,7 +1203,7 @@ void message_taken(const tsuchi::TakenMessage& message) { switches.taken.push_ba
 
 // A message of a kind, as the game makes one: a function table that says what it is, who sent it, and how many queues hold it.
 uint64_t message(uint64_t table_offset, uint64_t sender, int32_t references = 1) {
-    const uint64_t at = fake::memory(0x40), table = fake::main_image() + table_offset;
+    const uint64_t at = fake::memory(0x80), table = fake::main_image() + table_offset;
     fake::put(at, table);
     fake::put(table + t::message_table::destroy, &game_message_destroy);
     if (sender) {
@@ -2919,6 +2919,9 @@ struct Posted {
     bool knock;
     float amount, x, y, z, damage;
     int attack, riding;
+    int press = 0, freeze_scaled = 0;
+    float point[3] = {};
+    uint64_t part = 1;
 };
 std::vector<Posted> posted;
 
@@ -2972,6 +2975,10 @@ bool take_message(void* victim, void* memory) {
         one.amount = fake::get<float>(message + m::amount), one.attack = fake::get<uint8_t>(message + m::attack);
         one.riding = fake::get<uint8_t>(message + m::riding_applies);
         one.x = fake::get<float>(message + m::origin), one.y = fake::get<float>(message + m::origin + 4), one.z = fake::get<float>(message + m::origin + 8);
+        namespace h = t::pikmin_hit;
+        one.press = fake::get<uint8_t>(message + h::press), one.freeze_scaled = fake::get<uint8_t>(message + h::freeze_scaled);
+        for (int i = 0; i < 3; ++i) one.point[i] = fake::get<float>(message + h::point + 4 * i);
+        one.part = fake::get<uint64_t>(message + h::part);
     }
     posted.push_back(one);
     fake::engine_free(nullptr, memory); // taken or not, the game frees it in the end
@@ -3017,10 +3024,13 @@ struct HeardMessage {
     uint64_t actor, sender;
     uint32_t kind, attack;
     float amount, x, y, z;
+    bool press;
+    float point[3];
 };
 std::vector<HeardMessage> heard_messages;
 void on_intercepted(void*, const TSUCHI_CombatIntercepted* event) {
-    heard_messages.push_back({event->actor.id, event->attacker.id, uint32_t(event->kind), event->attack, event->amount, event->vector.x, event->vector.y, event->vector.z});
+    heard_messages.push_back({event->actor.id, event->attacker.id, uint32_t(event->kind), event->attack, event->amount, event->vector.x, event->vector.y, event->vector.z,
+                              event->press, {event->point.x, event->point.y, event->point.z}});
 }
 
 void install_life() {
@@ -3040,6 +3050,102 @@ void install_life() {
     life_class = fake::object(u"LifeComponent", w.root);
     t::fn::set_life = call_set_life, t::fn::damage_message = make_damage_message, t::fn::knock_message = make_knock_message;
     t::fn::post_message = take_message;
+}
+
+// The game's update of a life gauge: which life, how far on, and whether Pikmin clung to the creature then.
+struct GaugeCall { uint64_t life; float seconds; uint8_t clung; };
+std::vector<GaugeCall> gauge_calls;
+uint64_t gauge_takes_away = 0; // an actor the update destroys, as a widget's callback might
+uint64_t gauge_stick = 0;      // the creature's StickComponent the update reads
+void game_refresh_gauge(void* life, float seconds) {
+    gauge_calls.push_back({reinterpret_cast<uint64_t>(life), seconds, gauge_stick ? fake::get<uint8_t>(gauge_stick + t::gauge_stick::clung) : uint8_t(0)});
+    if (gauge_takes_away) fake::destroy(gauge_takes_away), gauge_takes_away = 0;
+}
+
+// A creature whose own update is held gets one update of its gauge, after its parts are checked as the update reads them.
+void gauges(const TSUCHI_CombatService& fight) {
+    namespace l = t::life_component;
+    const uint64_t main = fake::main_image(), groups = fake::get<uint64_t>(main + t::data::creature_group);
+    const auto teki = fake::name(u"Teki");
+    fake::put(main + t::data::creature_group, teki);
+    const uint64_t teki_ai = fake::object(u"TekiAIComponent", w.root);
+    // One creature, made as the game makes one: its root, its AI and its life are its own. The made-up game's object
+    // table is nearly full, so the refusals below use actors already there.
+    const uint64_t root = component(0, 0, 0, 0), beast = actor(u"Gauged", w.actor_class, u"Gauged", 3, 0, root, 0x120);
+    fake::put(beast, table_a()), fake::put(beast + t::game_actor::group, teki), fake::put(root + t::scene_component::owner, beast);
+    const uint64_t brain = fake::object(u"Brain", teki_ai, 0x80), life = fake::object(u"Life", life_class, 0xB0);
+    fake::put(brain + t::scene_component::owner, beast), fake::put(beast + t::game_actor::ai, brain);
+    fake::put(life + t::scene_component::owner, beast), fake::put(life + l::actor, beast), fake::put(beast + t::game_actor::life, life);
+    fake::put(life + l::current, 40.0f), fake::put(life + l::max, 50.0f), fake::put(life + l::gauge_full, 50.0f);
+    fake::put<uint8_t>(life + l::gauge_enabled, 1), fake::put<int32_t>(life + l::gauge_views, 1);
+    t::fn::life_refresh_gauge = game_refresh_gauge;
+    CHECK(fight.refresh_gauge(mod, handle(beast), 0.25f, false) == TSUCHI_OK && gauge_calls.size() == 1 && gauge_calls[0].life == life && gauge_calls[0].seconds == 0.25f);
+    CHECK(fight.refresh_gauge(mod, handle(beast), 0, false) == TSUCHI_OK && fight.refresh_gauge(mod, handle(beast), 1, false) == TSUCHI_OK && gauge_calls.size() == 3);
+    // Shown: its StickComponent says Pikmin cling to it for that update only, and only below full health.
+    const uint64_t stick = component(0, 0, 0, 0);
+    fake::put(stick + t::scene_component::owner, beast), fake::put(beast + t::gauge_actor::part_2, stick), gauge_stick = stick;
+    CHECK(fight.refresh_gauge(mod, handle(beast), 0.1f, true) == TSUCHI_OK && gauge_calls.back().clung == 1 && fake::get<uint8_t>(stick + t::gauge_stick::clung) == 0);
+    CHECK(fight.refresh_gauge(mod, handle(beast), 0.1f, false) == TSUCHI_OK && gauge_calls.back().clung == 0);
+    fake::put(life + l::current, 50.0f);
+    CHECK(fight.refresh_gauge(mod, handle(beast), 0.1f, true) == TSUCHI_OK && gauge_calls.back().clung == 0);
+    fake::put(life + l::current, 40.0f), fake::put<uint8_t>(stick + t::gauge_stick::clung, 1); // Pikmin really cling: left as it is
+    CHECK(fight.refresh_gauge(mod, handle(beast), 0.1f, true) == TSUCHI_OK && fake::get<uint8_t>(stick + t::gauge_stick::clung) == 1);
+    fake::put<uint8_t>(stick + t::gauge_stick::clung, 0), fake::put<uint64_t>(beast + t::gauge_actor::part_2, 0), gauge_stick = 0;
+    gauge_calls.resize(3);
+    // A time it can't move on by, and actors that aren't creatures or have no gauge, are refused without an update.
+    CHECK(fight.refresh_gauge(mod, handle(beast), -0.01f, false) == TSUCHI_INVALID && fight.refresh_gauge(mod, handle(beast), 1.5f, false) == TSUCHI_INVALID);
+    CHECK(fight.refresh_gauge(mod, handle(w.bulborb), 0.1f, false) == TSUCHI_UNSUPPORTED && fight.refresh_gauge(mod, handle(w.rock), 0.1f, false) == TSUCHI_UNSUPPORTED);
+    fake::put(beast + t::game_actor::ai, root); // a part that isn't a creature's AI
+    CHECK(fight.refresh_gauge(mod, handle(beast), 0.1f, false) == TSUCHI_UNSUPPORTED);
+    fake::put(beast + t::game_actor::ai, brain);
+    fake::put<uint8_t>(life + l::gauge_enabled, 0);
+    CHECK(fight.refresh_gauge(mod, handle(beast), 0.1f, false) == TSUCHI_UNSUPPORTED);
+    fake::put<uint8_t>(life + l::gauge_enabled, 1);
+    fake::put<uint32_t>(beast + t::game_actor::state_flags, t::constant::state_target_collection);
+    CHECK(fight.refresh_gauge(mod, handle(beast), 0.1f, false) == TSUCHI_UNSUPPORTED);
+    fake::put<uint32_t>(beast + t::game_actor::state_flags, 0);
+    // Put away, on its way out, or defeated.
+    fake::put<int32_t>(beast + t::game_actor::rest, 1);
+    CHECK(fight.refresh_gauge(mod, handle(beast), 0.1f, false) == TSUCHI_NOT_READY);
+    fake::put<int32_t>(beast + t::game_actor::rest, 0), fake::put<uint8_t>(beast + t::game_actor::removed, 1);
+    CHECK(fight.refresh_gauge(mod, handle(beast), 0.1f, false) == TSUCHI_NOT_READY);
+    fake::put<uint8_t>(beast + t::game_actor::removed, 0), fake::put<uint8_t>(beast + t::game_actor::kill_queued, 1);
+    CHECK(fight.refresh_gauge(mod, handle(beast), 0.1f, false) == TSUCHI_NOT_FOUND);
+    fake::put<uint8_t>(beast + t::game_actor::kill_queued, 0), fake::put(life + l::current, 0.0f);
+    CHECK(fight.refresh_gauge(mod, handle(beast), 0.1f, false) == TSUCHI_NOT_FOUND);
+    fake::put(life + l::current, 40.0f);
+    // Parts the update reads that aren't as it expects: another actor's part, a long list, an unreadable one, no full health.
+    const uint64_t stray = component(0, 0, 0, 0);
+    fake::put(beast + t::gauge_actor::part_2, stray);
+    CHECK(fight.refresh_gauge(mod, handle(beast), 0.1f, false) == TSUCHI_NOT_READY);
+    fake::put(stray + t::scene_component::owner, beast);
+    CHECK(fight.refresh_gauge(mod, handle(beast), 0.1f, false) == TSUCHI_OK && gauge_calls.size() == 4);
+    fake::put<int32_t>(life + l::gauge_list_2 + t::array::count, 9), fake::put<int32_t>(life + l::gauge_list_2 + t::array::max, 9);
+    CHECK(fight.refresh_gauge(mod, handle(beast), 0.1f, false) == TSUCHI_NOT_READY);
+    fake::put<int32_t>(life + l::gauge_list_2 + t::array::count, 2), fake::put<int32_t>(life + l::gauge_list_2 + t::array::max, 2);
+    CHECK(fight.refresh_gauge(mod, handle(beast), 0.1f, false) == TSUCHI_NOT_READY); // two entries and nowhere to read them
+    fake::put(life + l::gauge_list_2 + t::array::data, fake::memory(0x10));
+    CHECK(fight.refresh_gauge(mod, handle(beast), 0.1f, false) == TSUCHI_OK && gauge_calls.size() == 5);
+    fake::put<int32_t>(life + l::gauge_views, 9);
+    CHECK(fight.refresh_gauge(mod, handle(beast), 0.1f, false) == TSUCHI_NOT_READY);
+    fake::put<int32_t>(life + l::gauge_views, 1), fake::put(life + l::gauge_full, 0.0f);
+    CHECK(fight.refresh_gauge(mod, handle(beast), 0.1f, false) == TSUCHI_NOT_READY);
+    fake::put(life + l::gauge_full, 50.0f), fake::put(life + l::actor, w.bulborb);
+    CHECK(fight.refresh_gauge(mod, handle(beast), 0.1f, false) == TSUCHI_NOT_READY);
+    fake::put(life + l::actor, beast);
+    give_life(beast, 10, 10); // a life part too small for what the update reads
+    CHECK(fight.refresh_gauge(mod, handle(beast), 0.1f, false) == TSUCHI_NOT_READY);
+    fake::put(beast + t::game_actor::life, life);
+    CHECK(gauge_calls.size() == 5);
+    // Without the game's update; and a creature that the update itself takes away.
+    t::fn::life_refresh_gauge = nullptr;
+    CHECK(fight.refresh_gauge(mod, handle(beast), 0.1f, false) == TSUCHI_NOT_READY);
+    t::fn::life_refresh_gauge = game_refresh_gauge;
+    const TSUCHI_Actor doomed_handle = handle(beast);
+    gauge_takes_away = beast;
+    CHECK(fight.refresh_gauge(mod, doomed_handle, 0.1f, false) == TSUCHI_NOT_FOUND && gauge_calls.size() == 6 && !gauge_takes_away);
+    CHECK(fight.refresh_gauge(mod, doomed_handle, 0.1f, false) == TSUCHI_NOT_FOUND && gauge_calls.size() == 6);
+    fake::put(main + t::data::creature_group, groups);
 }
 
 void fighting() {
@@ -3190,6 +3296,28 @@ void fighting() {
     CHECK(fight.knockback(mod, handle(knight), &thrown, 0, TSUCHI_Actor{}) == TSUCHI_NOT_READY && posted.size() == 3);
     t::fn::knock_message = make_knock_message;
 
+    // A thrown Pikmin's landing: a direct hit made with the Pikmin as its attacker, at the point it touched, pressing
+    // or not, with no collision part and the frozen-target scaling on, as the game's throw sends one.
+    const TSUCHI_Vec3 touched{11, 22, 33};
+    const uint64_t lander = tabled(table_a(), u"Lander", u"Lander", 0, 0);
+    fake::put(lander + t::game_actor::pikmin, fake::object(u"PikminPart", w.component_class, 0x40));
+    CHECK(fight.thrown_hit(mod, handle(ogre), handle(lander), &touched, true) == TSUCHI_OK && posted.size() == 4);
+    CHECK(posted[3].victim == ogre && posted[3].attacker == lander && posted[3].attack == 1 && posted[3].press == 1 && posted[3].freeze_scaled == 1 &&
+          posted[3].part == 0 && posted[3].point[0] == 11 && posted[3].point[1] == 22 && posted[3].point[2] == 33 && !posted[3].knock);
+    CHECK(fight.thrown_hit(mod, handle(ogre), handle(lander), &touched, false) == TSUCHI_OK && posted.size() == 5 && posted[4].press == 0 && posted[4].attack == 1);
+    // Only a Pikmin lands; neither may be gone; the target needs life; and a target that takes no message now isn't hit.
+    CHECK(fight.thrown_hit(mod, handle(ogre), handle(knight), &touched, true) == TSUCHI_INVALID);
+    CHECK(fight.thrown_hit(mod, handle(ogre), gone, &touched, true) == TSUCHI_NOT_FOUND && fight.thrown_hit(mod, gone, handle(lander), &touched, true) == TSUCHI_NOT_FOUND);
+    CHECK(fight.thrown_hit(mod, handle(w.rock), handle(lander), &touched, true) == TSUCHI_NOT_FOUND && posted.size() == 5);
+    game_takes_messages = false;
+    CHECK(fight.thrown_hit(mod, handle(ogre), handle(lander), &touched, true) == TSUCHI_NOT_READY && posted.size() == 6);
+    game_takes_messages = true;
+    fake::engine().out_of_memory = true;
+    CHECK(fight.thrown_hit(mod, handle(ogre), handle(lander), &touched, true) == TSUCHI_NO_MEMORY && posted.size() == 6);
+    fake::engine().out_of_memory = false;
+    posted.resize(3);
+    gauges(fight);
+
     // A Pikmin's death, as the game counts it: told at the start of the next frame, with what
     // killed it and who is blamed. The game's own answer is passed back untouched.
     const auto game_counts_death = [](uint64_t pikmin, uint64_t killer, int cause) {
@@ -3241,8 +3369,17 @@ void fighting() {
     fake::put(blow + t::damage_message::origin, 1.0f), fake::put(blow + t::damage_message::origin + 8, 3.0f);
     const uint64_t shove = message(t::data::knock_message_table, 0);
     fake::put(shove + t::knock_message::damage, 2.0f), fake::put(shove + t::knock_message::velocity + 4, 80.0f);
-    for (uint64_t each : {blow, shove, message(t::data::whistle_message_table, w.captain), message(0x3500, 0)}) switches.waiting.push_back(each);
+    // A thrown Pikmin's landing tells whether it pressed and where it touched; another kind of hit with the same bytes doesn't.
+    const uint64_t landing = message(t::data::damage_message_table, w.red), other_hit = message(t::data::damage_message_table, w.red);
+    for (uint64_t each : {landing, other_hit}) {
+        fake::put<uint8_t>(each + t::pikmin_hit::press, 1), fake::put(each + t::pikmin_hit::point, 4.0f), fake::put(each + t::pikmin_hit::point + 8, 6.0f);
+    }
+    fake::put<uint8_t>(landing + t::damage_message::attack, 1), fake::put<uint8_t>(other_hit + t::damage_message::attack, 4);
+    for (uint64_t each : {blow, shove, message(t::data::whistle_message_table, w.captain), message(0x3500, 0), landing, other_hit}) switches.waiting.push_back(each);
     tsuchi::frame(0.03f);
+    CHECK(heard_messages.size() == 6 && heard_messages[4].attack == 1 && heard_messages[4].press && heard_messages[4].point[0] == 4 && heard_messages[4].point[2] == 6 &&
+          !heard_messages[5].press && heard_messages[5].point[0] == 0 && !heard_messages[0].press && heard_messages[1].point[1] == 0);
+    heard_messages.resize(4);
     CHECK(heard_messages.size() == 4 && heard_messages[0].actor == to_handle(sentry) && heard_messages[0].sender == to_handle(knight) &&
           heard_messages[0].kind == TSUCHI_MESSAGE_KIND_HIT && heard_messages[0].amount == 12.5f && heard_messages[0].attack == 4 && heard_messages[0].x == 1 &&
           heard_messages[0].z == 3);
