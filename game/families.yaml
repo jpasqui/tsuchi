@@ -179,6 +179,9 @@ families:
   hud:
     services: [hud]
     files: [game/hud_backend.cpp, game/hud_prompts.cpp]
+  voice:
+    services: [voice]
+    files: [game/voice_backend.cpp]
   input:
     services: [input]
     files: [game/input_backend.cpp]

@@ -1386,6 +1386,14 @@ functions:
   options_button_icon: {address: 0x9750, returns: void, args: [pointer, i32]}
   options_direction: {address: 0x9700, returns: bool, args: [pointer, bool]}
   options_confirm: {address: 0x9710, returns: bool, args: [pointer]}
+  os_current_thread: {address: 0x97E0, returns: pointer, args: []}
+  os_thread_priority: {address: 0x97F0, returns: i32, args: [pointer]}
+  os_create_thread: {address: 0x9820, returns: u32, args: [pointer, pointer, pointer, pointer, u64, i32]}
+  os_set_thread_name: {address: 0x9790, returns: void, args: [pointer, const_pointer]}
+  os_start_thread: {address: 0x97A0, returns: void, args: [pointer]}
+  os_sleep_thread: {address: 0x97B0, returns: void, args: [i64]}
+  os_thread_core_mask: {address: 0x97C0, returns: void, args: [pointer, pointer, pointer]}
+  os_set_thread_core_mask: {address: 0x97D0, returns: void, args: [pointer, i32, u64]}
   set_slot_difficulty: {address: 0x9718, returns: void, args: [pointer, u32, i32]}
   fade_request: {address: 0x9728, returns: void, args: [pointer, u32, u32, bool, f32]}
   face_message_request: {address: 0x9738, returns: void, args: [pointer, pointer, u32, u32]}

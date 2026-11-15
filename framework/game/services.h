@@ -8,6 +8,8 @@
 namespace tsuchi {
 
 void net_start();
+// The microphone and other players' voices (voice_backend.cpp).
+void voice_start();
 void session_start();
 void session_set_clock(double (*clock)());
 
