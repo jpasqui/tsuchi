@@ -56,7 +56,7 @@ class AudioParametersTests(unittest.TestCase):
                 path.write_text(source, encoding='utf-8', newline='\n')
         binary = ROOT / 'build' / ('audio_parameters_test.exe' if sys.platform == 'win32' else 'audio_parameters_test')
         sources = ['framework/core/registry.cpp', 'framework/game/audio_parameters.cpp',
-                   'framework/game/audio_backend.cpp', 'build/gen/framework/audio_service.cpp',
+                   'framework/game/audio_backend.cpp', 'framework/game/audio_bus_volume.cpp', 'build/gen/framework/audio_service.cpp',
                    'tests/game/audio_parameters_test.cpp']
         command = [shutil.which('clang++'), '-std=c++17', '-Wall', '-Wextra', '-Werror']
         for folder in [gen / 'include', fixture / 'framework', gen / 'framework',

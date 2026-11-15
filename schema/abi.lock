@@ -84,7 +84,9 @@
    "play_on",
    "parameter",
    "hold_parameter",
-   "release_parameter"
+   "release_parameter",
+   "hold_bus_volume",
+   "release_bus_volume"
   ],
   "battle": [
    "phase",

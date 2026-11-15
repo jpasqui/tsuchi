@@ -21,6 +21,9 @@ data:
   title_input_delegate_table: absent
   title_direction_delegate_table: absent
   academy_schedule: absent
+  wwise_index: 133386456
+  wwise_bus_callback_manager: 133386568
+  wwise_main_lock: 133386704
   wwise_audio_manager: 133386464
   wwise_parameter_manager: 133386520
   ui_select_sound: 133926408
@@ -339,6 +342,20 @@ structs:
     fields:
       key: absent
       row: absent
+  wwise_bus_node:
+    fields: {subscriber: 48}
+  wwise_bus_subscription:
+    fields: {curves: 80, count: 88}
+  wwise_bus_curve:
+    size: 32
+    fields: {id: 0, parameter: 4, points: 8, point_count: 16, scaling: 20}
+  wwise_bus_callbacks:
+    fields: {entries: 0, count: 8, mutex: 32}
+  wwise_bus_callback_entry:
+    size: 16
+    fields: {bus: 0, callback: 8}
+  wwise_volume_callback:
+    fields: {base_volume: 40}
   console_manager_table:
     fields:
       find_variable: 176
@@ -1858,6 +1875,12 @@ functions:
   title_back: absent
   title_list_grow: absent
   ui_vertical_slot_sync: absent
+  wwise_get_bus: 24560288
+  wwise_release_bus: 24958976
+  wwise_bind_bus_curve: 24699808
+  wwise_unbind_bus_curve: 24700400
+  wwise_bus_subscription: 25031552
+  wwise_register_bus_volume_callback: 24466560
   map_add_stream: 10772480
   map_remove_stream: 10761184
   map_duplicate_stream: 9698496

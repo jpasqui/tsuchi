@@ -124,7 +124,7 @@ families:
     files: [game/asset_bundles.cpp, game/assets_backend.cpp]
   audio:
     services: [audio]
-    files: [game/audio_backend.cpp, game/audio_parameters.cpp]
+    files: [game/audio_backend.cpp, game/audio_parameters.cpp, game/audio_bus_volume.cpp, game/audio_bus_binding.h]
   battle:
     services: [battle]
     files: [game/battle_backend.cpp]

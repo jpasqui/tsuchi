@@ -350,7 +350,10 @@ extern "C" void tsuchi_initialize() {
         asm volatile("svc 0x0B" : "+r"(nanoseconds) : : "x1", "x2", "x3", "x4", "x5", "x6", "x7", "memory");
     });
 
-    if (serves(t::family::audio)) audio_parameters_start(self);
+    if (serves(t::family::audio)) {
+        audio_parameters_start(self);
+        audio_bus_volumes_start(self);
+    }
     if (serves(t::family::battle)) battle_start(self);
     if (serves(t::family::actor)) actor_events_start(self);
     if (serves(t::family::ground_contact)) ground_contact_start(self);
