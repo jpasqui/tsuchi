@@ -10,6 +10,7 @@
 # `optional` lists entries the code using them asks t::bound about and goes on without, so a build lacking one loses
 # only that one path and no family.
 optional:
+  - functions.actor_sleep_decision   # suspend.cpp asks t::bound: without it a held actor keeps the sleep it had
   - functions.pikmin_deco_stored
   - functions.pikmin_deco_field
   - structs.spawn_request.decoration
@@ -47,6 +48,18 @@ optional:
   - route_frames.cursor_written.saved_return
   - structs.pikmin_hit.press         # actors.cpp: without them an intercepted hit reports no press and no point
   - structs.pikmin_hit.point
+  - structs.action_marker.actor              # presenter_markers.cpp asks t::present: without them the game's prompts are
+  - structs.ui_widget.visibility             # not watched, and hud.prompts_shown and hold_hidden_prompts are not ready
+  - functions.face_message_request           # hud_backend.cpp asks t::bound and t::present: without them hud.radio is
+  - structs.face_message_manager.labels      # unsupported
+  - structs.face_message_manager.label_buckets
+  - structs.ui_manager.face_messages
+  - structs.carry_numbers.entries            # presenter_effects.cpp asks t::present: without them the carry numbers are
+  - structs.carry_numbers.count              # not moved between steps
+  - structs.carry_number.place
+  - structs.game_framework.carry_numbers
+  - structs.ui_actor_access.captain          # content_squad.cpp asks t::present: without them squad.hold_hud_leader is
+  - structs.ui_manager.actor_access          # unsupported
 
 # `mod_start` lists entries the mods' start waits on through a helper in a family's file, which the scan of core files
 # does not see. With one absent no mod ever starts, whatever the families say, so a build cannot mark one absent.
@@ -118,6 +131,9 @@ families:
   carry:
     services: [carry]
     files: [game/carry_backend.cpp]
+  carry_count:
+    calls: [carry.hold_count, carry.release_count]
+    files: [game/carry_count.cpp]
   thrown_hit:
     calls: [combat.thrown_hit]
     files: [game/thrown_hit.cpp]
@@ -153,7 +169,7 @@ families:
     files: [game/gimmicks_backend.cpp]
   hud:
     services: [hud]
-    files: [game/hud_backend.cpp]
+    files: [game/hud_backend.cpp, game/hud_prompts.cpp]
   input:
     services: [input]
     files: [game/input_backend.cpp]

@@ -396,7 +396,7 @@ TSUCHI_Result release_tab(TSUCHI_Mod* mod, TSUCHI_Screen handle) {
     return TSUCHI_OK;
 }
 ui::Backend backend{create, load, destroy, add_button, add_choice, add_integer, add_text, hold_open, release_open, is_open, choice, set_choice, integer, set_integer, text, set_text, hold_tab, release_tab,
-    nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+    nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
     glyph, set_footer, nullptr, hold_open_over, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
     nullptr, nullptr, nullptr};
 } // namespace

@@ -27,7 +27,9 @@ void effects_forget();
 // What it did, for the log's row.
 struct EffectCounts {
     uint32_t crowd_parts, crowd_instances, crowd_held, renders, renders_known, sprites, meshes;
+    uint32_t counters_moved, counter_sends; // carry counters put between steps, and the sends of their quads
     uint32_t material_values, material_blends, material_restores; // kept, given between steps, given back
+    uint32_t material_snaps; // values that wrapped or went back across a step, shown at once
     uint64_t rendering_us; // the render thread's drawing of scenes
     // The time from the start of each scene's drawing to the next one's, the render thread's own pace.
     uint32_t render_gaps;

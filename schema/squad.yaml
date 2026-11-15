@@ -169,6 +169,56 @@ functions:
       not_found: The type is unknown or its mod has stopped.
     users: [groink, online-coop]
 
+  - name: selected_pikmin_type
+    doc: |
+      Returns the Pikmin type that a leader has selected for throwing, which is
+      also the color of its cursor.
+    params:
+      - {name: leader, type: handle<actor>, doc: The captain or dog.}
+    returns: {type: enum<PikminType>, doc: "The selected type, in the same format that `pikmin.info` returns."}
+    fails:
+      not_found: The leader no longer exists.
+      not_ready: The leader has no formation yet, or no Pikmin to throw.
+    completes: selected
+
+  - name: select_type_of
+    doc: |
+      Selects a Pikmin's type for throwing, the same way that a player switching
+      types does. The Pikmin has to be in the leader's squad. The game keeps the
+      selection until a player or a mod changes it.
+    params:
+      - {name: leader, type: handle<actor>, doc: The captain or dog.}
+      - {name: pikmin, type: handle<actor>, doc: A Pikmin that follows it.}
+    fails:
+      not_found: The leader or the Pikmin no longer exists.
+      invalid: The Pikmin doesn't follow this leader.
+      not_ready: The leader has no formation yet.
+    completes: hold_selection
+
+  - name: hold_hud_leader
+    owns: true
+    doc: |
+      Has the throw-type HUD beside L and R show a leader's squad, in place of
+      the first player's captain. The game builds it from that leader as it does
+      from the captain: its Pikmin, their counts and the type it has selected,
+      changed by the player's own switch. Use it for a dog a player plays in the
+      game's two-player mode, whose HUD is otherwise the captain's. The hold
+      ends when released or your mod stops.
+    params:
+      - {name: leader, type: handle<actor>, doc: The captain or dog.}
+    fails:
+      not_found: The leader no longer exists.
+      busy: Another mod holds the HUD's leader.
+      unsupported: This build of the game has no adapter for the HUD.
+    completes: hold_selection
+
+  - name: release_hud_leader
+    owns: true
+    doc: "Gives the throw-type HUD back to the first player's captain."
+    fails:
+      not_found: Your mod doesn't hold the HUD's leader.
+    completes: hold_selection
+
 events:
   - name: membership_changed
     doc: Emitted when a held member joins, moves to another type or leader, or leaves.

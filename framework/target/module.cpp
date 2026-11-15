@@ -50,6 +50,7 @@ extern "C" unsigned long long tsuchi_libc_ticks(); // script_library.cpp
 #include "ui_title.h"
 #include "ui_keyboard.h"
 #include "player_choice.h"
+#include "hud_prompts.h"
 #include "ui_widgets.h"
 #include "ui_textures.h"
 #include "ui_settings.h"
@@ -375,6 +376,7 @@ extern "C" void tsuchi_initialize() {
     // One entry for each register the request can be in, two instructions each.
     if (serves(t::family::dialog)) dialogs_start(self, reinterpret_cast<void*>(reinterpret_cast<uint64_t>(&tsuchi_dialog_setup_entries) + 8 * t::route_frame::dialog_setup_call::request));
     if (serves(t::family::ui)) ui_widgets_start(self);
+    hud_prompts_start(self); // the hud service's prompts hook for the framework's own mod
     if (serves(t::family::title_menu)) ui_title_start(self);
     if (serves(t::family::title_menu) && serves(t::family::mods_page)) ui_mod_page_start(self);
     if (serves(t::family::keyboard)) ui_keyboard_start();

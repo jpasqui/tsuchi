@@ -444,6 +444,18 @@ void poses() {
     CHECK(moved.actor_calls == 1 && moved.component_calls == 0 && moved.actor == w.red && !moved.sweep && moved.teleport && moved.hit_given);
     CHECK(near(moved.angles[1], 135));
     CHECK(api.pose(mod, handle(w.red), &at) == TSUCHI_OK && near(at.location.z, 30) && near(at.rotation.yaw, 135));
+    // The place the game keeps of its body follows it: an actor whose own update is held kept the place it was held at.
+    const uint64_t red_root = fake::get<uint64_t>(w.red + t::game_actor::root), red_body = fake::get<uint64_t>(w.red + t::game_actor::physics);
+    const uint64_t red_owner = fake::get<uint64_t>(red_root + t::scene_component::owner);
+    fake::put(w.red + t::game_actor::physics, red_root), fake::put(red_root + t::scene_component::owner, w.red);
+    for (int i = 0; i < 3; ++i) fake::put<float>(w.red + t::game_actor::physics_place + 4 * i, -1.0f);
+    const TSUCHI_Vec3 farther{11, 22, 33};
+    CHECK(set_pose(api, mod, handle(w.red), &farther, &facing) == TSUCHI_OK);
+    CHECK(fake::get<float>(w.red + t::game_actor::physics_place) == 11 && fake::get<float>(w.red + t::game_actor::physics_place + 4) == 22 &&
+          fake::get<float>(w.red + t::game_actor::physics_place + 8) == 33);
+    fake::put(w.red + t::game_actor::physics, red_body), fake::put(red_root + t::scene_component::owner, red_owner);
+    CHECK(set_pose(api, mod, handle(w.red), &there, &facing) == TSUCHI_OK);
+    moved.actor_calls -= 2;
 
     // A character's root keeps its own angle, and its body is turned.
     const TSUCHI_Rotation turned{0, 100, 0};
@@ -1261,6 +1273,9 @@ void suspending() {
     tsuchi::frame(0.03f);
     CHECK(api.suspended(mod, handle(brute), &parts) == TSUCHI_OK && parts == 0 && switches.waiting.size() == 1 && switches.taken.empty());
     switches.waiting.clear();
+    // What it has that can be suspended: a part that decides for it and legs of its own.
+    CHECK(api.parts(mod, handle(brute), &parts) == TSUCHI_OK && (parts & (kLogic | kMovement)) == (kLogic | kMovement));
+    CHECK(api.parts(mod, {12345}, &parts) == TSUCHI_NOT_FOUND);
 
     // Its decisions: its own update and the part that decides for it. Its legs carry on.
     CHECK(api.hold_suspended(mod, handle(brute), kLogic) == TSUCHI_OK && switches.log == "actor- brain- " && tsuchi::owned_count(mod) == owned + 1);
@@ -1392,6 +1407,8 @@ void suspending() {
     registers(stone);
     switches.log.clear();
     CHECK(api.hold_suspended(mod, handle(stone), kLogic | kMovement) == TSUCHI_OK && switches.log == "other- ");
+    // Held without a part that decides for it or legs of its own, it still has neither.
+    CHECK(api.parts(mod, handle(stone), &parts) == TSUCHI_OK && !(parts & (kLogic | kMovement)));
     tsuchi::frame(0.03f);
     CHECK(api.release_suspended(mod, handle(stone), kLogic | kMovement) == TSUCHI_OK && switches.log == "other- other+ ");
     w.stone = stone;
@@ -3146,6 +3163,63 @@ void gauges(const TSUCHI_CombatService& fight) {
     CHECK(fight.refresh_gauge(mod, doomed_handle, 0.1f, false) == TSUCHI_NOT_FOUND && gauge_calls.size() == 6 && !gauge_takes_away);
     CHECK(fight.refresh_gauge(mod, doomed_handle, 0.1f, false) == TSUCHI_NOT_FOUND && gauge_calls.size() == 6);
     fake::put(main + t::data::creature_group, groups);
+}
+
+// A carry counter's number held by a mod: written where the game's counter takes its first number, kept there, and
+// given back to the carriers' number when the hold ends.
+// The game's carry component class, made once: the game finds a class by its name.
+uint64_t carry_part_class() {
+    static uint64_t made = 0;
+    if (!made) made = fake::object(u"TestCarryAffordanceComponent", w.root), fake::set_super(made, w.component_class);
+    return made;
+}
+
+void carry_counts() {
+    const TSUCHI_CarryService& carry = *tsuchi::host.carry;
+    const uint64_t carry_class = carry_part_class();
+    const auto carried = [&](const std::u16string& name) {
+        const uint64_t made = tabled(table_a(), name, name, 0, 0), part = fake::object(u"Carry", carry_class, 0x700);
+        fake::put(made + t::carry_actor::component, part), fake::put<int32_t>(part + t::carry_component::shown_count, -1);
+        return made;
+    };
+    const uint64_t pellet = carried(u"CountedPellet"), part = fake::get<uint64_t>(pellet + t::carry_actor::component);
+    const auto shown = [&] { return fake::get<int32_t>(part + t::carry_component::shown_count); };
+    const uint32_t owned = tsuchi::owned_count(mod);
+    CHECK(carry.hold_count(mod, handle(pellet), 3) == TSUCHI_OK && shown() == 3 && tsuchi::owned_count(mod) == owned + 1);
+    CHECK(carry.hold_count(mod, handle(pellet), 0) == TSUCHI_OK && shown() == 0 && tsuchi::owned_count(mod) == owned + 1); // taken again: a new number
+    // The number is put back each frame, should anything change it.
+    fake::put<int32_t>(part + t::carry_component::shown_count, 7);
+    tsuchi::frame(0.03f);
+    CHECK(shown() == 0);
+    // One mod at a time; and what can't be held.
+    TSUCHI_Mod* rival = tsuchi::mod_create("carry.counter");
+    CHECK(carry.hold_count(rival, handle(pellet), 1) == TSUCHI_BUSY && carry.release_count(rival, handle(pellet)) == TSUCHI_NOT_FOUND && shown() == 0);
+    CHECK(carry.hold_count(mod, handle(pellet), -1) == TSUCHI_INVALID && shown() == 0);
+    CHECK(carry.hold_count(mod, handle(w.rock), 1) == TSUCHI_UNSUPPORTED);
+    const uint64_t loose = tabled(table_a(), u"Loose", u"Loose", 0, 0);
+    fake::put(loose + t::carry_actor::component, fake::get<uint64_t>(loose + t::game_actor::root)); // a part, but not a carry part
+    CHECK(carry.hold_count(mod, handle(loose), 1) == TSUCHI_UNSUPPORTED);
+    // Let go: the counter shows the carriers' number again.
+    CHECK(carry.release_count(mod, handle(pellet)) == TSUCHI_OK && shown() == -1 && tsuchi::owned_count(mod) == owned);
+    CHECK(carry.release_count(mod, handle(pellet)) == TSUCHI_NOT_FOUND);
+    // A mod that stops gives it back too; and a hold whose carry part goes ends by itself, leaving nothing to write.
+    CHECK(carry.hold_count(rival, handle(pellet), 5) == TSUCHI_OK && shown() == 5);
+    tsuchi::mod_stop(rival);
+    CHECK(shown() == -1);
+    CHECK(carry.hold_count(mod, handle(pellet), 2) == TSUCHI_OK && shown() == 2);
+    fake::put<uint64_t>(pellet + t::carry_actor::component, 0);
+    tsuchi::frame(0.03f);
+    CHECK(tsuchi::owned_count(mod) == owned && shown() == 2 && carry.release_count(mod, handle(pellet)) == TSUCHI_NOT_FOUND);
+    fake::put(pellet + t::carry_actor::component, part), fake::put<int32_t>(part + t::carry_component::shown_count, -1);
+    // An object that is destroyed ends its hold.
+    const uint64_t crumb = loose;
+    fake::put(crumb + t::carry_actor::component, fake::object(u"Carry", carry_class, 0x700));
+    const TSUCHI_Actor crumb_handle = handle(crumb);
+    CHECK(carry.hold_count(mod, crumb_handle, 4) == TSUCHI_OK && tsuchi::owned_count(mod) == owned + 1);
+    ends_play(crumb, 3);
+    fake::destroy(crumb);
+    tsuchi::frame(0.03f);
+    CHECK(tsuchi::owned_count(mod) == owned && carry.hold_count(mod, crumb_handle, 4) == TSUCHI_NOT_FOUND);
 }
 
 void fighting() {
@@ -10315,6 +10389,7 @@ int main(int argc, char** argv) {
     leaving();
     behaviors();
     fighting();
+    carry_counts();
     running_game();
     playing();
     leading_captains();

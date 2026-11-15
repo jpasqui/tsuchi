@@ -438,17 +438,18 @@ void log_row(uint64_t time) {
     const SceneCounts scene = scene_counts(true);
     line.add(" roots "), line.add(int64_t(scene.roots)), line.add("/"), line.add(int64_t(scene.root_blends)), line.add("/"), line.add(int64_t(scene.root_sends));
     line.add(" bones "), line.add(int64_t(scene.bones)), line.add("/"), line.add(int64_t(scene.bone_blends)), line.add("/"), line.add(int64_t(scene.bone_sends));
-    line.add(" cuts "), line.add(int64_t(scene.cuts)), line.add(" jumps "), line.add(int64_t(scene.jumps));
+    line.add(" cuts "), line.add(int64_t(scene.cuts)), line.add(" jumps "), line.add(int64_t(scene.jumps)), line.add(" snaps "), line.add(int64_t(scene.snaps));
     line.add(" unseen "), line.add(int64_t(scene.unseen)), line.add(" reduced "), line.add(int64_t(scene.reduced));
     line.add(" small "), line.add(int64_t(scene.small)), line.add("/"), line.add(int64_t(scene.small_roots)), line.add("/"),
         line.add(int64_t(scene.still_roots));
     EffectCounts effects = effect_counts(true);
     line.add(" crowds "), line.add(int64_t(effects.crowd_parts)), line.add("/"), line.add(int64_t(effects.crowd_instances)), line.add("/"),
         line.add(int64_t(effects.crowd_held));
+    line.add(" counters "), line.add(int64_t(effects.counters_moved)), line.add("/"), line.add(int64_t(effects.counter_sends));
     line.add(" renders "), line.add(int64_t(effects.renders_known)), line.add("/"), line.add(int64_t(effects.renders));
     line.add(" particles "), line.add(int64_t(effects.sprites)), line.add("/"), line.add(int64_t(effects.meshes));
     line.add(" materials "), line.add(int64_t(effects.material_values)), line.add("/"), line.add(int64_t(effects.material_blends)), line.add("/"),
-        line.add(int64_t(effects.material_restores));
+        line.add(int64_t(effects.material_restores)), line.add("/"), line.add(int64_t(effects.material_snaps));
     const MarkerCounts marks = marker_counts(true);
     line.add(" marks "), line.add(int64_t(marks.marks)), line.add("/"), line.add(int64_t(marks.noted)), line.add("/"),
         line.add(int64_t(marks.moved)), line.add("/"), line.add(int64_t(marks.repeated));

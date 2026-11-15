@@ -33,6 +33,8 @@ TSUCHI_Result suspend_parts(TSUCHI_Mod* mod, uint64_t actor, uint32_t parts);
 TSUCHI_Result resume_parts(TSUCHI_Mod* mod, uint64_t actor, uint32_t parts);
 // Which parts of the actor are suspended, by anyone.
 uint32_t suspended_parts(uint64_t actor);
+// The body parts a suspension stopped and will give back: physics that simulated, parts that blocked.
+uint32_t suspended_body(uint64_t actor);
 
 // A message taken from a suspended actor.
 enum class MessageKind : uint32_t { damage, knock, whistle, other };
