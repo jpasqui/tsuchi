@@ -64,12 +64,13 @@ functions:
       the next world step. The camera takes a moment longer.
     params:
       - {name: player, type: u32, doc: "The player, from `0`."}
-      - {name: character, type: handle<actor>, doc: "The player's captain or dog."}
+      - {name: character, type: handle<actor>, doc: "The player's captain or their dog."}
+      - {name: before_unlock, type: bool, default: false, doc: "If `true`, the switch is made even before the story has unlocked switching, at once and without the camera move. The story's own unlock is left as it was. A hold made after such a switch keeps the player there the same way."}
     fails:
       not_found: "That player doesn't exist, or the actor no longer exists."
       invalid: "The actor isn't the player's captain or their dog."
       busy: "A switch is already in progress."
-      not_ready: "The game won't allow it, as the story hasn't unlocked switching, two people are playing the story, or the captain is riding."
+      not_ready: "The game won't allow it: the story hasn't unlocked switching and `before_unlock` is `false`, two people are playing the story, or the captain is riding."
     users: [dog-coop, online-coop]
 
   - name: hold_character

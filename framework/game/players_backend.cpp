@@ -80,12 +80,12 @@ void look() {
     seen.known = true;
 }
 
-TSUCHI_Result set_controlled(uint32_t player, TSUCHI_Actor actor) {
+TSUCHI_Result set_controlled(uint32_t player, TSUCHI_Actor actor, bool before_unlock) {
     const uint64_t address = actor_of(actor);
     if (!address || !game::player_captain(player)) return TSUCHI_NOT_FOUND;
     if (!is_theirs(player, address)) return TSUCHI_INVALID;
     look(); // the game switches at once, and a listener that began this frame is told of it
-    return game::switch_controlled(player, address, false);
+    return game::switch_controlled(player, address, false, before_unlock);
 }
 
 // ---- A player held on a character --------------------------------------------------------
@@ -113,7 +113,8 @@ bool keep_steered(const Hold& hold, Steered& entry) {
         entry.waited = 0;
         return true;
     }
-    if (++entry.waited % kSwitchBackFrames == 0 && !game::events_running()) game::switch_controlled(player, actor, true);
+    // A hold keeps the player there whether or not the story has unlocked switching: the player was put there.
+    if (++entry.waited % kSwitchBackFrames == 0 && !game::events_running()) game::switch_controlled(player, actor, true, true);
     return true;
 }
 
