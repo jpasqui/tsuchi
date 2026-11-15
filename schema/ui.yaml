@@ -53,6 +53,15 @@ enums:
     - {name: l, value: 4, doc: The L button.}
     - {name: r, value: 5, doc: The R button.}
     - {name: zr, value: 6, doc: The ZR button.}
+    - {name: zl, value: 7, doc: The ZL button.}
+    - {name: plus, value: 8, doc: The Plus button.}
+    - {name: minus, value: 9, doc: The Minus button.}
+    - {name: left_stick, value: 10, doc: Pressing the left stick.}
+    - {name: right_stick, value: 11, doc: Pressing the right stick.}
+    - {name: up, value: 12, doc: The D-pad Up button.}
+    - {name: down, value: 13, doc: The D-pad Down button.}
+    - {name: left, value: 14, doc: The D-pad Left button.}
+    - {name: right, value: 15, doc: The D-pad Right button.}
   Menu:
     open: false
     doc: A menu of the game's own that takes mod entries.
@@ -783,6 +792,38 @@ functions:
   fails:
     not_found: "Your mod does not hold the menus' input."
   completes: hold_menu_input
+- name: hold_icon_texture
+  doc: |
+    Replaces a named PictureFont icon's artwork with a Texture2D, such as a decoded controller
+    prompt. Pass the game's InTextIconData asset and its exact icon key, such as A_Button.
+    The original dimensions, tint and markup remain. The native brush cache is invalidated
+    without changing localized text. This owns only that icon's resource; another mod
+    holding it returns busy. The asset, original art and replacement stay loaded until release
+    or mod stop. A foreign resource write is left intact on restoration.
+  owns: true
+  params:
+  - {name: icon_data, type: handle<object>, doc: The loaded InTextIconData asset.}
+  - {name: key, type: text, doc: The existing icon key.}
+  - {name: texture, type: handle<object>, doc: "A Texture2D, including one from decode_texture."}
+  fails:
+    invalid: An object has the wrong class or the key is empty or too long.
+    not_found: The object or named icon is absent.
+    unsupported: The reflected brush layout is unfamiliar.
+    not_ready: Called off the game thread or ownership ended during acquisition.
+    busy: Another mod owns the icon, duplicate keys exist, or a foreign write changed it.
+    no_memory: An object could not be kept loaded.
+  users: [mod-settings-screens, custom-mod-menus]
+- name: release_icon_texture
+  doc: Restores your named icon resource if it still contains your replacement, and invalidates its brush cache.
+  owns: true
+  params:
+  - {name: icon_data, type: handle<object>, doc: The InTextIconData asset.}
+  - {name: key, type: text, doc: The icon key passed to hold_icon_texture.}
+  fails:
+    invalid: The key is empty or too long.
+    not_found: Your mod has no such icon hold.
+  completes: hold_icon_texture
+
 events:
 - name: activated
   doc: Emitted when the player selects a button. Only the screen's owning mod receives this event.

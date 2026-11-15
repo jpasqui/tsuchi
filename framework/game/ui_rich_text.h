@@ -5,7 +5,7 @@
 #include <string.h>
 namespace tsuchi {
 constexpr size_t kUiTextBytes = 640;
-constexpr uint32_t kUiGlyphCount = 7;
+constexpr uint32_t kUiGlyphCount = 16;
 inline const char* ui_glyph_token(uint32_t button) {
     static const char* const tokens[] = {
         "[PictureFont:IconData key=\"A_Button\" scale=\"0.76\"/]",
@@ -14,7 +14,16 @@ inline const char* ui_glyph_token(uint32_t button) {
         "[PictureFont:IconData key=\"Y_Button\" scale=\"0.76\"/]",
         "[PictureFont:IconData key=\"L_Button\" scale=\"0.76\"/]",
         "[PictureFont:IconData key=\"R_Button\" scale=\"0.76\"/]",
-        "[PictureFont:IconData key=\"ZR_Button\" scale=\"0.76\"/]"
+        "[PictureFont:IconData key=\"ZR_Button\" scale=\"0.76\"/]",
+        "[PictureFont:IconData key=\"ZL_Button\" scale=\"0.76\"/]",
+        "[PictureFont:IconData key=\"Plus_Button\" scale=\"0.76\"/]",
+        "[PictureFont:IconData key=\"Minus_Button\" scale=\"0.76\"/]",
+        "[PictureFont:IconData key=\"Press_L_Stick\" scale=\"0.76\"/]",
+        "[PictureFont:IconData key=\"Press_R_Stick\" scale=\"0.76\"/]",
+        "[PictureFont:IconData key=\"Up_Button\" scale=\"0.76\"/]",
+        "[PictureFont:IconData key=\"Down_Button\" scale=\"0.76\"/]",
+        "[PictureFont:IconData key=\"Left_Button\" scale=\"0.76\"/]",
+        "[PictureFont:IconData key=\"Right_Button\" scale=\"0.76\"/]"
     };
     return button < kUiGlyphCount ? tokens[button] : nullptr;
 }

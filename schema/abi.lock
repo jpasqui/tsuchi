@@ -584,7 +584,9 @@
    "hold_menu_input",
    "release_menu_input",
    "hold_mark",
-   "release_mark"
+   "release_mark",
+   "hold_icon_texture",
+   "release_icon_texture"
   ],
   "world": [
    "ground",

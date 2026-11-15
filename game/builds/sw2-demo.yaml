@@ -297,6 +297,9 @@ constants:
   effect_spawn_blocked: 2097664
   ui_keyboard_characters: 31
 structs:
+  slate_brush:
+    size: 0x88
+    fields: {resource: 0x48, resource_handle: 0x70}
   options_button: {fields: {look: absent, look_bytes: absent}}
   options_presenter: {fields: {input: absent, view: absent}}
   game_menu_presenter: {fields: {view: absent}}

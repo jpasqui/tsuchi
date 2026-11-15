@@ -1324,6 +1324,9 @@ structs:
     fields: {process_event: {at: 0x228, args: [pointer, pointer, pointer]}}
   struct_vtable:
     fields: {initialize: {at: 0x2B8, args: [pointer, pointer, i32]}, destroy: {at: 0x2C0, args: [pointer, pointer, i32]}}
+  slate_brush:                      # reflected SlateBrush; native renderer caches a shared resource handle
+    size: 0x88
+    fields: {resource: 0x48, resource_handle: 0x70}
   allocator_vtable:
     fields: {malloc: {at: 0x18, returns: pointer, args: [pointer, u64, u32]}, free: {at: 0x38, args: [pointer, pointer]}}
   name_entry:
