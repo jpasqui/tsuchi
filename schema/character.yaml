@@ -25,9 +25,9 @@ description: |
   and keep working.
 
   The action calls and `hold_move` change the game's code at the places
-  where it reads an action's input. They need Tsuchi's code access, which a
-  standard build of Tsuchi doesn't have. Without it they fail with
-  `not_ready`.
+  where it reads an action's input. These calls use Tsuchi's native code-access
+  backend, included in standard builds. If code access isn't available at
+  runtime, or the game's hook sites aren't mapped, they fail with `not_ready`.
 
   Every function takes a captain or a dog. To get a player's, use
   `player.captain` or `player.dog`.
