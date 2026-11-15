@@ -336,9 +336,12 @@ TSUCHI_Result set_integer(TSUCHI_Mod* mod, TSUCHI_Screen handle, const char* id,
 TSUCHI_Result set_text(TSUCHI_Mod* mod, TSUCHI_Screen handle, const char* id, const char* value) {
     UiScreen* screen = nullptr; const auto result = own_screen(mod, handle, screen);
     if (result != TSUCHI_OK) return result;
-    auto* control = find_control(screen, id, UiKind::text); if (!control) return TSUCHI_NOT_FOUND;
+    auto* control = find_control(screen, id, UiKind::text);
+    if (!control) control = find_control(screen, id, UiKind::button);
+    if (!control) return TSUCHI_NOT_FOUND;
     if (!glyph_text(value, true)) return TSUCHI_INVALID;
     if (!control->text.set(value)) return TSUCHI_NO_MEMORY;
+    if (control->kind == UiKind::button) screen->resettable = true;
     ++screen->revision; return TSUCHI_OK;
 }
 // The file form calls the same builders as the code form, then publishes the

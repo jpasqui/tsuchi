@@ -350,7 +350,7 @@ functions:
     doc: The stored UTF-8 value, including any glyph tokens.
   owns: true
 - name: set_text
-  doc: Replaces a read-only row value without emitting an event.
+  doc: Replaces a read-only row value or a button's displayed value without emitting an event.
   params:
   - name: screen
     type: handle<screen>

@@ -259,7 +259,7 @@ bool copy_shape(const UiScreen& screen, List<Row>& rows) {
         row.kind = control.kind; row.choice = control.selected;
         row.integer = control.integer; row.minimum = control.minimum; row.maximum = control.maximum; row.step = control.step;
         char number[21]; integer_text(control.integer, number);
-        const char* value = control.number.enabled ? control.text.get() : control.kind == UiKind::integer ? number : control.kind == UiKind::text ? control.text.get() : control.kind == UiKind::button ? "Select" : "";
+        const char* value = control.number.enabled ? control.text.get() : control.kind == UiKind::integer ? number : control.kind == UiKind::text ? control.text.get() : control.kind == UiKind::button ? (control.text.get()[0] ? control.text.get() : "Select") : "";
         if (!row.caption.set(control.label.get()) || !row.value_text.set(value)) { row.caption.clear(); row.value_text.clear(); return false; }
         bool okay = true;
         for (const char* text = control.labels.first(); text && okay; text = control.labels.after(text)) okay = row.labels.add(text);
@@ -419,7 +419,7 @@ bool sync_row(View& view, Row& row, const UiControl& control) {
     const uint64_t widget = live(row.widget), selector = live(row.selector);
     if (!widget || !selector) return false;
     char number[21]; integer_text(control.integer, number);
-    const char* value = control.number.enabled ? control.text.get() : control.kind == UiKind::integer ? number : control.kind == UiKind::text ? control.text.get() : "Select";
+    const char* value = control.number.enabled ? control.text.get() : control.kind == UiKind::integer ? number : control.kind == UiKind::text ? control.text.get() : control.kind == UiKind::button && !control.text.get()[0] ? "Select" : control.text.get();
     const uint32_t selected = control.kind == UiKind::choice ? control.selected : control.kind == UiKind::integer ? 1 : 0;
     const int64_t integer = control.integer, minimum = control.minimum, maximum = control.maximum, step = control.step;
     const UiKind kind = control.kind;
@@ -434,13 +434,14 @@ bool sync_row(View& view, Row& row, const UiControl& control) {
         okay = combined.reserve(a + b + 3);
         if (okay) { memcpy(combined.data, caption.get(), a); memcpy(combined.data + a, ": ", 2); memcpy(combined.data + a + 2, current.get(), b + 1); caption.clear(); caption = combined; }
     }
-    const bool changed = !row.rendered || row.choice != selected || (kind == UiKind::integer && strcmp(row.value_text.get(), current.get()));
+    const bool changed = !row.rendered || row.choice != selected || ((kind == UiKind::integer || kind == UiKind::button) && strcmp(row.value_text.get(), current.get()));
     if (okay && (!row.rendered || strcmp(row.caption.get(), caption.get()))) {
         row.rendered = false;
         if (kind == UiKind::text) row.message_fit = false;
         okay = label(view, row.label, caption.get());
     }
     if (okay && current_view() && kind == UiKind::integer && strcmp(row.value_text.get(), current.get())) okay = replace(view, selector, 1, current.get());
+    if (okay && current_view() && kind == UiKind::button && strcmp(row.value_text.get(), current.get())) okay = replace(view, selector, 0, current.get());
     if (okay && current_view() && changed) {
         row.rendered = false;
         okay = game::write<uint32_t>(selector + t::ui_mod_list_selector::choice, selected) &&

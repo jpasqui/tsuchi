@@ -728,6 +728,15 @@ int main() {
     assert(labels[field(active_row(0), t::ui_mod_list_row::title)] == u"Difficulty");
     assert(labels[field(active_selector(0), t::ui_mod_list_selector::value)] == u"Hard");
     assert(labels[field(active_selector(1), t::ui_mod_list_selector::value)] == u"-9223372036854775808");
+    assert(labels[field(active_selector(3), t::ui_mod_list_selector::value)] == u"Ready");
+    assert(screen.controls[3].text.set("A")); ++screen.revision;
+    assert(renderer->update(active_view, screen));
+    assert(labels[field(active_selector(3), t::ui_mod_list_selector::value)] == u"A");
+    assert(visibility[field(active_selector(3), t::ui_mod_list_selector::left)] == t::constant::widget_hidden);
+    assert(visibility[field(active_selector(3), t::ui_mod_list_selector::right)] == t::constant::widget_hidden);
+    assert(screen.controls[3].text.set("B")); ++screen.revision;
+    assert(renderer->update(active_view, screen));
+    assert(labels[field(active_selector(3), t::ui_mod_list_selector::value)] == u"B");
     assert(visibility[field(active_selector(1), t::ui_mod_list_selector::left)] == t::constant::widget_hidden);
     assert(visibility[field(active_selector(1), t::ui_mod_list_selector::right)] == t::constant::widget_shown);
     assert(!fake::get<uint8_t>(active_row(2) + t::ui_mod_list_row::enabled));

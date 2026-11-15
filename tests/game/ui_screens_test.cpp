@@ -247,6 +247,11 @@ void glyph_and_footer_tests() {
     assert(!std::strcmp(model->controls[0].label.get(), label.c_str()));
     assert(!std::strcmp(model->controls[1].labels.first(), label.c_str()));
     assert(!std::strcmp(model->controls[3].text.get(), message.c_str()));
+    assert(ui.set_text(owner, screen, "go", "A") == TSUCHI_OK);
+    assert(!std::strcmp(model->controls[0].text.get(), "A"));
+    assert(ui.set_text(other, screen, "go", "B") == TSUCHI_DENIED);
+    assert(ui.set_text(owner, screen, "go", "B") == TSUCHI_OK);
+    assert(!std::strcmp(model->controls[0].text.get(), "B"));
     const void* view = ui_active_view(); const unsigned before_opens = opens, before_closes = closes;
     const uint32_t selected = model->selected, initial_revision = model->revision;
     std::string footer = std::string(tokens[0]) + u8" Choisir " + tokens[1] + " Back";
