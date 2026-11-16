@@ -365,6 +365,6 @@ functions:
       invalid: "`handlers` has neither function, or this is called inside a hook."
       not_found: "No function with that path is loaded."
       not_ready: "The function's entry can't be read or written."
-      unsupported: "The running build of the game doesn't have what engine function hooks need."
+      unsupported: "The running build of the game doesn't have what engine function hooks need, or the function is one of the engine's that takes a value of any type, such as the array, map, and set functions."
       capacity: "Every one of the 256 engine function hooks or hooked functions is in use."
     completes: wrap_site

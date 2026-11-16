@@ -153,7 +153,18 @@ These calls skip your handlers:
 - A Blueprint function that another Blueprint function calls.
 
 Some C++ functions take a value of any type, such as the array functions. They
-read the type from the Blueprint's script code as it runs. Don't hook those.
+read the type from the Blueprint's script code as it runs, and a hook would hand
+them arguments of the wrong size. `engine_function` returns `unsupported` for
+the engine's own:
+
+- every function of `KismetArrayLibrary`, `BlueprintMapLibrary`, and
+  `BlueprintSetLibrary`;
+- `KismetSystemLibrary:SetStructurePropertyByName` and
+  `KismetSystemLibrary:SetCollisionProfileNameProperty`;
+- `DataTableFunctionLibrary:GetDataTableRowFromName`.
+
+Tsuchi can't tell such a function from any other, so a plugin's or the game's
+own function of this kind isn't refused. Don't hook those.
 
 A Blueprint event without arguments runs as an entry point into its class's event
 graph. Tsuchi hooks the event graph for that event and runs your handlers for its

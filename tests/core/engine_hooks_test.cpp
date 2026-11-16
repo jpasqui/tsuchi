@@ -8,6 +8,7 @@
 #include <sstream>
 #include <string>
 #include <thread>
+#include <utility>
 
 #include "callable_thunks.h"
 #include "engine_hooks.h"
@@ -283,6 +284,13 @@ void build_engine() {
     build_world();
     install_natives();
     package = fake::engine_object(u"/Script/Test", w.root);
+    // Two of the engine's own libraries: one whose every function takes a value of any type, and one with a single such function.
+    const uint64_t engine = fake::engine_object(u"/Script/Engine", w.root);
+    const uint64_t arrays = fake::engine_object(u"KismetArrayLibrary", w.root), system = fake::engine_object(u"KismetSystemLibrary", w.root);
+    fake::put<uint64_t>(arrays + t::object::outer, engine);
+    fake::put<uint64_t>(system + t::object::outer, engine);
+    for (const auto& made : {std::pair<uint64_t, const char16_t*>{arrays, u"Array_Add"}, {system, u"SetStructurePropertyByName"}, {system, u"PrintString"}})
+        fake::put<uint64_t>(fake::function(made.first, w.function_class, made.second, 0, 4, [](uint64_t, uint64_t) {}) + t::function::func, reinterpret_cast<uint64_t>(&heal_native));
     fake::put<uint64_t>(w.actor + t::object::outer, package);
     fake::put<uint64_t>(w.creature + t::object::outer, package);
     fake::put<uint64_t>(w.heal + t::function::func, reinterpret_cast<uint64_t>(&heal_native));

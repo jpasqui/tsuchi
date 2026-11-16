@@ -58,6 +58,34 @@ bool same_ignoring_case(const char* a, const char* b) {
     }
 }
 
+// A C++ function that takes a value of any type reads that type from the calling Blueprint's script code as it
+// runs: the engine marks such a function CustomThunk, and nothing in the loaded function says so. Its reflected
+// arguments are placeholders, so a hook's thunk, which lays the arguments out by them, would write past them. The
+// engine's own are refused by path: three libraries whole, and three single functions.
+constexpr const char* kTypedByCaller[] = {
+    "/Script/Engine.KismetArrayLibrary:",
+    "/Script/Engine.BlueprintMapLibrary:",
+    "/Script/Engine.BlueprintSetLibrary:",
+    "/Script/Engine.KismetSystemLibrary:SetStructurePropertyByName",
+    "/Script/Engine.KismetSystemLibrary:SetCollisionProfileNameProperty",
+    "/Script/Engine.DataTableFunctionLibrary:GetDataTableRowFromName",
+};
+bool typed_by_caller(const char* path) {
+    for (const char* entry : kTypedByCaller) {
+        const char* a = path;
+        const char* b = entry;
+        for (; *b; ++a, ++b) {
+            char x = *a, y = *b;
+            if (x >= 'A' && x <= 'Z') x = char(x + 32);
+            if (y >= 'A' && y <= 'Z') y = char(y + 32);
+            if (x != y) break;
+        }
+        // A library's entry ends at the colon and covers every function after it; a function's has to end with the path.
+        if (!*b && (b[-1] == ':' || !*a)) return true;
+    }
+    return false;
+}
+
 uint64_t flags_of(uint64_t property) { return game::read_or<uint64_t>(property + t::property::flags); }
 bool is_argument(uint64_t property) { return flags_of(property) & t::constant::property_param; }
 bool is_result(uint64_t property) { return (flags_of(property) & t::constant::property_return) != 0; }
@@ -503,6 +531,7 @@ TSUCHI_Result engine_hook(TSUCHI_Mod* mod, const char* path, const EngineClient&
     reclaim();
     const uint64_t function = find_function_path(path);
     if (!function) return TSUCHI_NOT_FOUND;
+    if (typed_by_caller(path)) return TSUCHI_UNSUPPORTED;
     uint64_t target = function;
     int64_t entry = -1;
     if (const uint64_t graph = game::read_or<uint64_t>(function + t::function::event_graph)) {

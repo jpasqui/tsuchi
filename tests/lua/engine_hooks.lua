@@ -8,6 +8,13 @@ assert(none == nil and why == 'not_found', why)
 none, why = hook.engine_function('/Script/Test.Actor:Heal', {})
 assert(none == nil and why == 'invalid', why)
 assert(not pcall(hook.engine_function, '/Script/Test.Actor:Heal', {before = 3}))
+-- The engine's functions that take a value of any type are refused, by library or by name, whatever the case.
+none, why = hook.engine_function('/Script/Engine.KismetArrayLibrary:Array_Add', {before = function() end})
+assert(none == nil and why == 'unsupported', why)
+none, why = hook.engine_function('/script/engine.kismetsystemlibrary:setstructurepropertybyname', {after = function() end})
+assert(none == nil and why == 'unsupported', why)
+local plain = assert(hook.engine_function('/Script/Engine.KismetSystemLibrary:PrintString', {before = function() end}))
+assert(hook.remove(plain))
 
 -- `before` changes an argument, `after` replaces the result.
 local seen = {}

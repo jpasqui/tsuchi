@@ -9,6 +9,9 @@ function refused(fn, name) {
 refused(() => hook.engine_function('/Script/Test.Actor:Nope', {before() {}}), 'not_found');
 refused(() => hook.engine_function('/Script/Test.Actor:Heal', {}), 'invalid');
 refused(() => hook.engine_function('/Script/Test.Actor:Heal', {after: 3}), 'invalid');
+// The engine's functions that take a value of any type are refused.
+refused(() => hook.engine_function('/Script/Engine.KismetArrayLibrary:Array_Add', {before() {}}), 'unsupported');
+refused(() => hook.engine_function('/Script/Engine.KismetSystemLibrary:SetStructurePropertyByName', {before() {}}), 'unsupported');
 
 // `before` changes an argument, `after` replaces the result.
 const seen = {};
