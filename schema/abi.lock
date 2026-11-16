@@ -45,7 +45,8 @@
   "packages",
   "voice",
   "memory",
-  "character"
+  "character",
+  "howlout"
  ],
  "tables": {
   "actor": [
@@ -650,6 +651,14 @@
    "binding",
    "hold_action_state",
    "release_action_state"
+  ],
+  "howlout": [
+   "load_sounds",
+   "add",
+   "remove",
+   "set_threshold",
+   "threshold",
+   "on_heard"
   ]
  }
 }
