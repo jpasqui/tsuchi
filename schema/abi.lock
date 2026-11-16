@@ -42,7 +42,8 @@
   "time",
   "ui",
   "world",
-  "packages"
+  "packages",
+  "howlout"
  ],
  "tables": {
   "actor": [
@@ -557,6 +558,14 @@
    "remove",
    "on_progress",
    "on_finished"
+  ],
+  "howlout": [
+   "load_sounds",
+   "add",
+   "remove",
+   "set_threshold",
+   "threshold",
+   "on_heard"
   ]
  }
 }

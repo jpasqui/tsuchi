@@ -95,6 +95,8 @@ void map_ai_start(TSUCHI_Mod* self);
 struct AiCounts;
 AiCounts map_ai_counts();
 void hud_start();
+// The watchers on the game's recognizer are the framework's own, so it is given the framework's mod.
+void howlout_start(TSUCHI_Mod* framework);
 void audio_start();
 void effects_start(TSUCHI_Mod* self);
 void world_start();

@@ -374,6 +374,7 @@ extern "C" void tsuchi_initialize() {
     if (serves(t::family::console_variables)) console_variables_start();
     // One entry for each register the request can be in, two instructions each.
     if (serves(t::family::dialog)) dialogs_start(self, reinterpret_cast<void*>(reinterpret_cast<uint64_t>(&tsuchi_dialog_setup_entries) + 8 * t::route_frame::dialog_setup_call::request));
+    howlout_start(self);
     if (serves(t::family::ui)) ui_widgets_start(self);
     if (serves(t::family::title_menu)) ui_title_start(self);
     if (serves(t::family::title_menu) && serves(t::family::mods_page)) ui_mod_page_start(self);

@@ -1,0 +1,90 @@
+service: howlout
+layer: game
+acts_on: game
+lifetime: process
+brief: "Adds phrases of your own to the game's Howl-Outs and reports when the player says one."
+description: |
+  A Howl-Out is a phrase the game listens for through the microphone. The game
+  has eleven of its own. This service adds yours beside them and tells your mod
+  when the player says one. The game's own Howl-Outs keep working as they are.
+
+  You write a phrase as its sounds in ARPAbet, so "hello" is `HH AH0 L OW1`.
+  The sounds are recognized with a sound rows file for the game's language,
+  which your mod gives the service once. The service listens only while the
+  game does, so nothing is heard while Voice Input is off in the game's
+  settings. Only the Switch 2 Edition has Howl-Outs.
+
+functions:
+  - name: load_sounds
+    owns: true
+    doc: |
+      Gives the service the sound rows file for the game's language. Call it
+      before `add`. The service keeps one file at a time, so every mod with
+      phrases has to give the same one.
+    params:
+      - {name: data, type: bytes, doc: "The sound rows file. You can release it after the call returns."}
+    fails:
+      unsupported: "This build of the game has no Howl-Outs."
+      invalid: "The data is not a sound rows file."
+      busy: "Another mod's phrases use a different sound rows file."
+      no_memory: "The game is out of memory."
+    users: [voice-commands]
+
+  - name: add
+    owns: true
+    doc: |
+      Adds a phrase. The game listens for it from the next time it listens at
+      all, until you remove the phrase or your mod stops. A phrase you add
+      before the game has set up its own Howl-Outs waits until it has.
+    params:
+      - {name: sounds, type: text, doc: "The phrase's sounds in ARPAbet, separated by spaces, like `HH AH0 L OW1`. A phrase has at most 42 sounds."}
+      - {name: threshold, type: u32, doc: "How easily the phrase is heard, from 0 to 1000. A higher number is easier, and 300 suits most phrases."}
+    returns: {type: handle<howlout>, doc: "The phrase."}
+    fails:
+      unsupported: "This build of the game has no Howl-Outs."
+      not_found: "Your mod has not loaded a sound rows file."
+      invalid: "A sound is unknown, the phrase is empty or too long, the threshold is above 1000, or the sound rows are for another language."
+      capacity: "50 phrases are added already."
+      no_memory: "The game is out of memory."
+    users: [voice-commands]
+
+  - name: remove
+    owns: true
+    doc: "Removes one of your phrases. A phrase that was removed already stays removed."
+    params:
+      - {name: howlout, type: handle<howlout>, doc: "The phrase to remove."}
+    fails:
+      not_found: "The phrase was removed already."
+      denied: "Another mod owns the phrase."
+    completes: add
+
+  - name: set_threshold
+    owns: true
+    doc: "Changes how easily one of your phrases is heard."
+    params:
+      - {name: howlout, type: handle<howlout>, doc: "The phrase to change."}
+      - {name: threshold, type: u32, doc: "The new threshold, from 0 to 1000. With 0 the phrase is never heard."}
+    fails:
+      not_found: "The phrase was removed already."
+      denied: "Another mod owns the phrase."
+      invalid: "The threshold is above 1000."
+    completes: add
+
+  - name: threshold
+    doc: "Returns how easily a phrase is heard."
+    params:
+      - {name: howlout, type: handle<howlout>, doc: "The phrase to read."}
+    returns: {type: u32, doc: "The phrase's threshold, from 0 to 1000."}
+    fails:
+      not_found: "The phrase was removed already."
+    completes: add
+
+events:
+  - name: heard
+    doc: |
+      Emitted when the player says a phrase that a mod added. Your handler is
+      called at the start of the next frame. Every listener receives every
+      phrase, so use the handle to check which one it is.
+    fields:
+      - {name: howlout, type: handle<howlout>, doc: "The phrase that was heard."}
+    users: [voice-commands]
