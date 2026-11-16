@@ -1236,6 +1236,21 @@ structs:
              ride_asked: 0x1495}      # set when a ride is asked for; the game leaves it set
   avatar_table:                     # entries in the function table of that part
     fields: {squad: {at: 0x918, returns: u64, args: [pointer]}}            # (the part) -> the squad it throws from: its own, or its dog's while it rides
+  character_part:                   # the steered part of a captain or a dog, game_actor.player (Orima_Update 0x158BE20)
+    fields: {controller: 0x758,       # its controller object, which turns buttons into logical inputs
+             move: 0x744}             # this frame's move direction across the world, three floats (written at 0x158C778)
+  game_controller:                  # a gameplay controller object (constructor 0x2055900, size 0xB8)
+    fields: {unpaused_frames: 0x80,   # an i32; a press reads as up while it is below 2 (0x20445EC)
+             lock_mask: 0x88,         # a u64, one bit for each input number modulo 64 (0x2043380)
+             lock_timer: 0x90,        # a float; masked inputs read as up while it is above 0 (0x204327C)
+             press_ages: 0x98,        # an array of press_age, one for each input number from 0 (0x2044510)
+             press_age_count: 0xA0}   # an i32, its length
+  press_age:                        # how long ago an input was last pressed; Oatchi's bite and jump read it (0x13C5DE4)
+    size: 0x10
+    fields: {seconds: 0x4}
+  game_controller_table:            # entries in the function table of a gameplay controller, 0x89D2208
+    fields: {locked: {at: 0xD8, returns: bool, args: [pointer]},                  # (controller) -> every input reads as up
+             pressed: {at: 0x60, returns: bool, args: [pointer, i32, pointer, pointer]}}  # (controller, input, null, null)
   whistle_part:
     fields: {radius: 0x234, center: 0x240,
              count: 0x360}            # how many whistles it has begun
@@ -1921,6 +1936,26 @@ tables:
                        0x8AD6958, 0x8AD7B30, 0x8AD9330, 0x8ADC2A0, 0x8ADC900, 0x8ADD4C0, 0x8AE1BE8, 0x8AE36C8,
                        0x8AE30D8, 0x8A60830, 0x89EA408, 0x8A0F2F0, 0x8A1E8A8, 0x8A25F10, 0x8A264F0, 0x8A64F60,
                        0x8A8A570, 0x8AC1750, 0x8AFC758, 0x8B0FF20]
+  # Where a captain's or a dog's action reads its logical input, in the order of character_backend.cpp's sites: the
+  # instruction, the game's instruction there, and the register that holds the character's steered part, or 31 when
+  # x0 holds its controller at the call, or 32 plus the register that holds the controller.
+  #   0 whistle pressed (blr, Orima_WhistleInput 0x15A9FC0)   1 whistle held after a ride (blr)
+  #   2 captain throw pressed (blr, 0xDF8760)                 3 captain throw held (br, IsThrowHeld 0x15A0670)
+  #   4 dismiss (blr, 0xDF4070)                                5 type switch one way (tbnz after bl 0x2044990, 0x157F810)
+  #   6 type switch the other way (blr, 0x157F810)            7 ride pressed (blr, Control Execute 0xE040F0)
+  #   8, 9 ride released 13 and 19 (blr)                      10 dog throw of riders (blr, 0x13BBB80)
+  #   11 dog throw pressed (br, 0x1402C20)                    12 dog throw held (br, 0x1402D10)
+  #   13 bite (blr, 0x13C5AE0)                                14 bite's press age (ldr s0, [x8, #0x124])
+  #   15 jump, buffered (blr, 0x13C6330)                      16 jump's press age (ldr s0, [x8, #0x144])
+  #   17 jump (blr)                                           18, 19 rush charge pressed and held (blr, 0x13BBB80)
+  #   20 interact (blr, 0x13C8670)                            21, 22 after the move direction is written (0x158BE20)
+  character_sites: [0x15AA0B0, 0x15AA108, 0xDF87AC, 0x15A0680, 0xDF40DC, 0x157F9A8, 0x157F9C4, 0xE06CC4, 0xE05C90,
+                    0xE05CA8, 0x13BC6A8, 0x1402C98, 0x1402D20, 0x13C5DD8, 0x13C5DE4, 0x13C6488, 0x13C6494, 0x13C650C,
+                    0x13BC8F4, 0x13BCBC0, 0x13C8A24, 0x158C780, 0x1591808]
+  character_site_words: [0xD63F0100, 0xD63F0100, 0xD63F0100, 0xD61F0040, 0xD63F0100, 0x37000BA0, 0xD63F0100, 0xD63F0100,
+                         0xD63F0100, 0xD63F0100, 0xD63F0100, 0xD61F0080, 0xD61F0040, 0xD63F0100, 0xBD412500, 0xD63F0100,
+                         0xBD414500, 0xD63F0100, 0xD63F0100, 0xD63F0100, 0xD63F0100, 0xB50037F4, 0xF9417D16]
+  character_site_registers: [19, 19, 19, 31, 19, 19, 19, 23, 23, 23, 31, 31, 31, 31, 53, 31, 53, 31, 31, 31, 31, 19, 19]
 
 # One entry in each of a list of tables, with the functions the game puts there.
 slot_groups:
@@ -2001,6 +2036,13 @@ slots:
   battle_roulette: {table: 0x89BBB30, offset: 0x50, stock: 0x1E26470, returns: u32, args: [pointer, pointer]}
   squad_grab_avatar: {table: 0x88A59D8, offset: 0xA20, stock: 0x15A21F0, returns: u64, args: [pointer, u64]}
   squad_grab_orima: {table: 0x88ADC78, offset: 0xA20, stock: 0x15A21F0, returns: u64, args: [pointer, u64]}
+  # A gameplay controller's logical inputs, in its function table 0x89D2208: (controller, input) -> held; (controller,
+  # input, repeat, count) -> pressed this frame; (controller, input) -> released this frame; (controller, seconds) once a
+  # frame from the controller manager (0x20576F8), which also ages the press-age table through the pressed entry.
+  controller_held: {table: 0x89D2208, offset: 0x38, stock: 0x2043250, returns: bool, args: [pointer, i32]}
+  controller_pressed: {table: 0x89D2208, offset: 0x60, stock: 0x20445C0, returns: bool, args: [pointer, i32, pointer, pointer]}
+  controller_released: {table: 0x89D2208, offset: 0x68, stock: 0x2043810, returns: bool, args: [pointer, i32]}
+  controller_update: {table: 0x89D2208, offset: 0x90, stock: 0x2042B70, args: [pointer, f32]}
 # What a native route's handler finds where, by route: register numbers, and offsets from the stack pointer
 # where the route's stack is read. Another compiler can put these elsewhere, so each is per build.
 # A number in a route's frame is a register, unless it is listed here as an offset from the stack.

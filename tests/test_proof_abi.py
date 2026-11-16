@@ -16,5 +16,6 @@ class ProofABI(unittest.TestCase):
                 self.assertEqual(lock['tables'][name][:len(members)],members)
         old_mod=released['tables']['mod']
         self.assertEqual(lock['tables']['mod'][len(old_mod)],'game_build')
+        self.assertEqual(lock['tables']['input'][8:10],['hold_state','release_state'])
 
 if __name__=='__main__': unittest.main()

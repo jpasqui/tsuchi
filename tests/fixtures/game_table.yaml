@@ -860,6 +860,15 @@ structs:
     fields: {whistle: 0x90, whistling: 0x98, ride_reach: 0x9C, ride_asked: 0xA0}
   avatar_table:
     fields: {squad: {at: 0x30, returns: u64, args: [pointer]}}
+  character_part:
+    fields: {controller: 0x758, move: 0x744}
+  game_controller:
+    fields: {unpaused_frames: 0x80, lock_mask: 0x88, lock_timer: 0x90, press_ages: 0x98, press_age_count: 0xA0}
+  press_age:
+    size: 0x10
+    fields: {seconds: 0x4}
+  game_controller_table:
+    fields: {locked: {at: 0xD8, returns: bool, args: [pointer]}, pressed: {at: 0x60, returns: bool, args: [pointer, i32, pointer, pointer]}}
   whistle_part:
     fields: {radius: 0x84, center: 0x88, count: 0x94}
   cursor:
@@ -1877,6 +1886,12 @@ tables:
   free_areas: [5, 7, 8, 9]
   collision_record_flags: [0x4, 0x5, 0x9]
   ai_part_tables: [0x1B00, 0x1B40, 0x1B80]
+  # The character service's sites: offsets, the words there, and the registers that name the character.
+  character_sites: [0xE800, 0xE804, 0xE808, 0xE80C, 0xE810, 0xE814, 0xE818, 0xE81C, 0xE820, 0xE824, 0xE828, 0xE82C, 0xE830, 0xE834, 0xE838, 0xE83C, 0xE840, 0xE844, 0xE848, 0xE84C, 0xE850, 0xE854, 0xE858]
+  character_site_words: [0xD63F0100, 0xD63F0100, 0xD63F0100, 0xD61F0040, 0xD63F0100, 0x37000BA0, 0xD63F0100, 0xD63F0100,
+                         0xD63F0100, 0xD63F0100, 0xD63F0100, 0xD61F0080, 0xD61F0040, 0xD63F0100, 0xBD412500, 0xD63F0100,
+                         0xBD414500, 0xD63F0100, 0xD63F0100, 0xD63F0100, 0xD63F0100, 0xB50037F4, 0xF9417D16]
+  character_site_registers: [19, 19, 19, 31, 19, 19, 19, 23, 23, 23, 31, 31, 31, 31, 53, 31, 53, 31, 31, 31, 31, 19, 19]
   widget_tick_tables: [0x4200, 0x4240]
 
 slot_groups:
@@ -1920,6 +1935,10 @@ slots:
   redraw_viewports: {table: 0x4300, offset: 0x10, stock: 0x4340, args: [pointer, bool]}
   view_point: {table: 0x4300, offset: 0x18, stock: 0x4380, args: [pointer, pointer, i32]}
   npad_read: {table: 0x4300, offset: 0x20, stock: 0x43C0, args: [pointer]}
+  controller_held: {table: 0xE900, offset: 0x38, stock: 0xEA00, returns: bool, args: [pointer, i32]}
+  controller_pressed: {table: 0xE900, offset: 0x60, stock: 0xEA10, returns: bool, args: [pointer, i32, pointer, pointer]}
+  controller_released: {table: 0xE900, offset: 0x68, stock: 0xEA20, returns: bool, args: [pointer, i32]}
+  controller_update: {table: 0xE900, offset: 0x90, stock: 0xEA30, args: [pointer, f32]}
   scene_update: {table: 0x4300, offset: 0x28, stock: 0x4400, args: [pointer, pointer]}
   scene_remove: {table: 0x4300, offset: 0x30, stock: 0x4440, args: [pointer, pointer]}
   mesh_update: {table: 0x4300, offset: 0x38, stock: 0x4480, args: [pointer, i32, pointer, pointer, pointer, u32]}

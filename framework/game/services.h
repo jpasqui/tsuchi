@@ -170,6 +170,8 @@ void carry_start(TSUCHI_Mod* self);
 
 // The input service: controllers read once per world step, buttons pressed and hidden, and the keyboard.
 void input_start(TSUCHI_Mod* self);
+// The character service: a captain's or a dog's logical inputs, movement and actions, held by mods.
+void characters_start(TSUCHI_Mod* self);
 // Every button the system says is held, on every controller read at this step, in the system's bit order. 0 before
 // the first step.
 uint64_t input_keys_held();
