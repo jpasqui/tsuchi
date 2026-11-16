@@ -39,6 +39,7 @@
 namespace tsuchi_js { void register_script_mods(); }
 extern "C" unsigned long long tsuchi_libc_ticks(); // script_library.cpp
 #include "services.h"
+#include "memory_backend.h"
 #include "network_transport.h"
 #include "https_jobs.h"
 #include "hidden.h"
@@ -48,9 +49,18 @@ extern "C" unsigned long long tsuchi_libc_ticks(); // script_library.cpp
 #include "mod_choices_game.h"
 #include "ui_screens.h"
 #include "ui_native.h"
+#include "ui_title.h"
+#include "ui_keyboard.h"
+#include "player_choice.h"
+#include "hud_prompts.h"
 #include "ui_widgets.h"
+#include "ui_textures.h"
+#include "ui_icons.h"
 #include "ui_settings.h"
 #include "ui_mod_list.h"
+#include "ui_mod_page.h"
+#include "packages.h"
+#include "https_platform.h"
 #include "ui_mod_list_native.h"
 #include "suspend.h"
 #include "switched.h"
@@ -259,6 +269,7 @@ extern "C" void tsuchi_initialize() {
     tables_start();
     text_start();
     hud_start();
+    if (serves(t::family::voice)) voice_start();
     audio_start();
     world_start();
     anim_start();
@@ -268,6 +279,7 @@ extern "C" void tsuchi_initialize() {
     session_set_clock([] { return double(tsuchi_libc_ticks()) / 1000000.0; });
     session_start();
     mods_start();
+    if (serves(t::family::packages)) { packages_set_clock(https_platform::unix_seconds); packages_start(); }
     if (serves(t::family::mod_choices)) mod_choices_start();
     ui_start();
     declared_start();
@@ -279,12 +291,14 @@ extern "C" void tsuchi_initialize() {
     content_service_start();
     if (serves(t::family::shaders)) shaders_start();
     else add_manifest_key_off("shaders", t::families[t::family::shaders]);
+    if (serves(t::family::academy)) academy_start();
+    else add_manifest_key_off("academy_schedule", t::families[t::family::academy]);
     tsuchi_lua::register_script_mods();
     tsuchi_js::register_script_mods();
     tsuchi_libc_ticks(); // scripts' clocks count from here
     cost_clock = [] { return uint64_t(tsuchi_libc_ticks()); }; // what the framework's own steps cost
     if (serves(t::family::compiled_mods)) register_compiled_mods();
-    if (serves(t::family::story)) story_start();
+    if (serves(t::family::story)) story_start(&self);
 
     // Publish the status first, so a tool can read why start-up stopped.
     auto* words = reinterpret_cast<uint64_t*>(status.game_base + t::data::status_words);
@@ -341,8 +355,12 @@ extern "C" void tsuchi_initialize() {
         asm volatile("svc 0x0B" : "+r"(nanoseconds) : : "x1", "x2", "x3", "x4", "x5", "x6", "x7", "memory");
     });
 
-    if (serves(t::family::audio)) audio_parameters_start(self);
+    if (serves(t::family::audio)) {
+        audio_parameters_start(self);
+        audio_bus_volumes_start(self);
+    }
     if (serves(t::family::battle)) battle_start(self);
+    if (serves(t::family::academy)) academy_hooks_start(self);
     if (serves(t::family::actor)) actor_events_start(self);
     if (serves(t::family::ground_contact)) ground_contact_start(self);
     if (serves(t::family::effects)) effects_start(self);
@@ -356,7 +374,9 @@ extern "C" void tsuchi_initialize() {
     if (serves(t::family::squad)) content_squad_start(self);
     if (serves(t::family::carry)) carry_start(self);
     if (serves(t::family::input)) input_start(self);
+    if (serves(t::family::character)) characters_start(self);
     if (serves(t::family::storage)) storage_start();
+    memory_start();
     if (serves(t::family::sd_card)) log_file_start();
     dev_folders_start();
     settings_start();
@@ -366,7 +386,15 @@ extern "C" void tsuchi_initialize() {
     if (serves(t::family::console_variables)) console_variables_start();
     // One entry for each register the request can be in, two instructions each.
     if (serves(t::family::dialog)) dialogs_start(self, reinterpret_cast<void*>(reinterpret_cast<uint64_t>(&tsuchi_dialog_setup_entries) + 8 * t::route_frame::dialog_setup_call::request));
+    howlout_start(self);
     if (serves(t::family::ui)) ui_widgets_start(self);
+    hud_prompts_start(self); // the hud service's prompts hook for the framework's own mod
+    if (serves(t::family::title_menu)) ui_title_start(self);
+    if (serves(t::family::title_menu) && serves(t::family::mods_page)) ui_mod_page_start(self);
+    if (serves(t::family::keyboard)) ui_keyboard_start();
+    if (serves(t::family::player_choice)) player_choice_start(self);
+    if (serves(t::family::textures)) ui_textures_start();
+    if (serves(t::family::icon_textures)) ui_icons_start(self);
     if (serves(t::family::ui) && ui_native_start(self)) {
         ui_settings_start(self);
         ui_mod_list_start(self);

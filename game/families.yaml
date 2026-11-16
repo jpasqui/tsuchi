@@ -16,6 +16,10 @@ optional:
   - structs.script_frame
   - structs.out_parm
   - data.script_natives              # without it a Blueprint's call of a hooked C++ function skips the handlers
+  - tables.character_remap_sites   # isolated action states check every extra read; older action calls keep their sites
+  - tables.character_remap_words
+  - tables.character_remap_registers
+  - functions.actor_sleep_decision   # suspend.cpp asks t::bound: without it a held actor keeps the sleep it had
   - functions.pikmin_deco_stored
   - functions.pikmin_deco_field
   - structs.spawn_request.decoration
@@ -31,7 +35,21 @@ optional:
   - code_sites.placement_build       # without either, maps refuses a mod's placement_changes (maps.cpp asks
   - code_sites.placement_restore     # placement_changes_ready); the demo dropped build's world and inlined restore
   - code_sites.dialog_buttons_call   # dialogs_backend.cpp then puts a question's text on after set-up, as a message's
+  - data.dialog_result_table          # dialogs_backend.cpp: without these, dialog.close is unsupported
+  - data.dialog_result_header
+  - structs.dialog_result
+  - structs.dialog_widget.kind
+  - structs.ui_manager.open_dialog
   - structs.game_actor.physics_place # send_to_work then aims every target at its root
+  - structs.game_instance.title_extra # ui_title.cpp asks t::present: without it the hidden entry's index is the field's own number
+  - functions.life_refresh_gauge     # life_gauge.cpp asks t::bound: a build that inlines it is served through life_update,
+  - functions.life_update            # and a build with neither has no combat.refresh_gauge
+  - structs.life_component.linked
+  - structs.life_component.mitigation
+  - structs.life_component.frozen
+  - structs.life_component.cold_clock
+  - structs.life_component.cold_limit
+  - structs.life_component.shocked
   - functions.world_follow_request_move  # the self-check build's world-follow check then fails as unavailable at its start
   - structs.world_follow_ai.fsm
   - structs.world_follow_mover.root
@@ -46,6 +64,20 @@ optional:
   - route_frames.cursor_written.saved_widget # presenter_markers.cpp: without them the route is at the placement's return
   - route_frames.cursor_written.saved_component
   - route_frames.cursor_written.saved_return
+  - structs.pikmin_hit.press         # actors.cpp: without them an intercepted hit reports no press and no point
+  - structs.pikmin_hit.point
+  - structs.action_marker.actor              # presenter_markers.cpp asks t::present: without them the game's prompts are
+  - structs.ui_widget.visibility             # not watched, and hud.prompts_shown and hold_hidden_prompts are not ready
+  - functions.face_message_request           # hud_backend.cpp asks t::bound and t::present: without them hud.radio is
+  - structs.face_message_manager.labels      # unsupported
+  - structs.face_message_manager.label_buckets
+  - structs.ui_manager.face_messages
+  - structs.carry_numbers.entries            # presenter_effects.cpp asks t::present: without them the carry numbers are
+  - structs.carry_numbers.count              # not moved between steps
+  - structs.carry_number.place
+  - structs.game_framework.carry_numbers
+  - structs.ui_actor_access.captain          # content_squad.cpp asks t::present: without them squad.hold_hud_leader is
+  - structs.ui_manager.actor_access          # unsupported
 
 # `mod_start` lists entries the mods' start waits on through a helper in a family's file, which the scan of core files
 # does not see. With one absent no mod ever starts, whatever the families say, so a build cannot mark one absent.
@@ -58,6 +90,8 @@ mod_start:
 core:
   files:
     - base/files.cpp
+    - base/memory_backend.cpp
+    - base/memory_backend.h
     - base/files.h
     - base/game.h
     - base/mods.cpp
@@ -100,12 +134,18 @@ families:
   animation:
     services: [animation]
     files: [game/clips.cpp]
+  motions:
+    # Only the motion calls: a build without the game's own blueprint layout keeps the clip calls.
+    calls: [animation.state_machines, animation.motion, animation.hold_motion, animation.release_motion,
+            animation.move_motion, animation.hold_move_motion, animation.release_move_motion, animation.speed,
+            animation.hold_speed, animation.release_speed]
+    files: [game/blueprint_motions.cpp]
   asset:
     services: [asset]
     files: [game/asset_bundles.cpp, game/assets_backend.cpp]
   audio:
     services: [audio]
-    files: [game/audio_backend.cpp, game/audio_parameters.cpp]
+    files: [game/audio_backend.cpp, game/audio_parameters.cpp, game/audio_bus_volume.cpp, game/audio_bus_binding.h]
   battle:
     services: [battle]
     files: [game/battle_backend.cpp]
@@ -118,6 +158,18 @@ families:
   carry:
     services: [carry]
     files: [game/carry_backend.cpp]
+  carry_count:
+    calls: [carry.hold_count, carry.release_count]
+    files: [game/carry_count.cpp]
+  character:
+    services: [character]
+    files: [game/character_backend.cpp]
+  thrown_hit:
+    calls: [combat.thrown_hit]
+    files: [game/thrown_hit.cpp]
+  life_gauge:
+    calls: [combat.refresh_gauge]
+    files: [game/life_gauge.cpp]
   collision:
     services: [collision]
     files: [game/switched.cpp]
@@ -147,10 +199,16 @@ families:
     files: [game/gimmicks_backend.cpp]
   hud:
     services: [hud]
-    files: [game/hud_backend.cpp]
+    files: [game/hud_backend.cpp, game/hud_prompts.cpp]
+  voice:
+    services: [voice]
+    files: [game/voice_backend.cpp]
   input:
     services: [input]
     files: [game/input_backend.cpp]
+  icon_textures:
+    calls: [ui.hold_icon_texture, ui.release_icon_texture, ui.hold_control_hint, ui.release_control_hint, ui.refresh_control_hints]
+    files: [game/ui_icons.cpp, game/ui_control_hints.cpp]
   net:
     services: [net]
     files: [game/network_native.cpp, target/https_platform.cpp]
@@ -176,6 +234,21 @@ families:
   ui:
     services: [ui]
     files: [game/ui_feedback.cpp, game/ui_label_layout.h, game/ui_mod_list.cpp, game/ui_mod_list_native.cpp, game/ui_native.cpp, game/ui_native_classes.h, game/ui_widgets.cpp]
+  player_choice:
+    calls: [game.hold_player_choice, game.release_player_choice, game.answer_player_choice]
+    files: [game/player_choice.cpp]
+  title_menu:
+    calls: [ui.hold_menu_entry, ui.release_menu_entry, ui.hold_open_over, ui.hold_menu_lock, ui.release_menu_lock, ui.hold_menu_note, ui.release_menu_note]
+    files: [game/ui_title.cpp, game/ui_title_host.cpp, game/ui_title_options.cpp]
+  keyboard:
+    calls: [ui.ask_text]
+    files: [game/ui_keyboard.cpp]
+  mods_page:
+    calls: [ui.open_mods]
+    files: [game/ui_mod_page.cpp]
+  textures:
+    calls: [ui.create_texture, ui.release_texture, ui.decode_texture]
+    files: [game/ui_textures.cpp]
   world:
     services: [world]
     files: [game/world_backend.cpp]
@@ -205,7 +278,13 @@ families:
     files: [game/presentation_backend.cpp, game/presenter.cpp, game/presenter_effects.cpp, game/presenter_markers.cpp, game/presenter_scene.cpp]
   sd_card:
     files: [game/log_file.cpp, game/sd_card.cpp]
+  packages:
+    services: [packages]
+    files: [game/packages.cpp]
   shaders:
     files: [game/shader_archive_manifest.h, game/shader_materials.cpp]
   self_check:
     files: [target/selfcheck.cpp, target/world_follow_check.cpp]
+  academy:
+    services: [academy]
+    files: [game/academy.cpp, game/academy_backend.cpp, game/academy_boards.cpp, game/academy_events.cpp, game/academy_local.cpp, game/academy_online.cpp, game/academy_delivery.cpp, game/academy_unlock.cpp]

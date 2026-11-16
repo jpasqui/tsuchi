@@ -41,7 +41,13 @@
   "text",
   "time",
   "ui",
-  "world"
+  "world",
+  "packages",
+  "voice",
+  "memory",
+  "character",
+  "howlout",
+  "academy"
  ],
  "tables": {
   "actor": [
@@ -55,7 +61,19 @@
    "set_clip_rate",
    "seek_clip",
    "clip",
-   "release_clip"
+   "release_clip",
+   "state_machines",
+   "motion",
+   "hold_motion",
+   "release_motion",
+   "move_motion",
+   "hold_move_motion",
+   "release_move_motion",
+   "speed",
+   "hold_speed",
+   "release_speed",
+   "on_motion_changed",
+   "on_move_motion_changed"
   ],
   "asset": [
    "load",
@@ -70,7 +88,9 @@
    "play_on",
    "parameter",
    "hold_parameter",
-   "release_parameter"
+   "release_parameter",
+   "hold_bus_volume",
+   "release_bus_volume"
   ],
   "battle": [
    "phase",
@@ -137,7 +157,9 @@
    "info",
    "carriers",
    "carried_by",
-   "on_delivered"
+   "on_delivered",
+   "hold_count",
+   "release_count"
   ],
   "collision": [
    "hold_off",
@@ -153,7 +175,9 @@
    "on_damaged",
    "on_defeated",
    "on_pikmin_died",
-   "on_intercepted"
+   "on_intercepted",
+   "thrown_hit",
+   "refresh_gauge"
   ],
   "component": [
    "list",
@@ -208,7 +232,10 @@
   "dialog": [
    "confirm",
    "message",
-   "on_answered"
+   "on_answered",
+   "ask",
+   "set_text",
+   "close"
   ],
   "effects": [
    "list",
@@ -237,7 +264,17 @@
    "destroy",
    "grounded",
    "on_spawned",
-   "on_destroyed"
+   "on_destroyed",
+   "hold_track",
+   "release_track",
+   "feed_tracks",
+   "show_tracks",
+   "track",
+   "forget_track",
+   "parts",
+   "read_poses",
+   "hold_awake",
+   "release_awake"
   ],
   "file": [
    "read",
@@ -267,7 +304,13 @@
    "on_world_loaded",
    "on_world_unloaded",
    "on_pause_changed",
-   "on_control_changed"
+   "on_control_changed",
+   "hold_player_choice",
+   "release_player_choice",
+   "answer_player_choice",
+   "on_player_choice",
+   "load_story",
+   "on_story_load_requested"
   ],
   "gimmicks": [
    "list",
@@ -289,10 +332,15 @@
    "wrap_function",
    "wrap_inline",
    "patch_instruction",
-   "check_code"
+   "check_code",
+   "wrap_call"
   ],
   "hud": [
-   "banner"
+   "banner",
+   "radio",
+   "prompts_shown",
+   "hold_hidden_prompts",
+   "release_hidden_prompts"
   ],
   "input": [
    "pad",
@@ -302,7 +350,9 @@
    "pressed",
    "hold_hidden",
    "release_hidden",
-   "hidden"
+   "hidden",
+   "hold_state",
+   "release_state"
   ],
   "mod": [
    "id",
@@ -314,7 +364,8 @@
    "restart",
    "state",
    "problem",
-   "on_restarted"
+   "on_restarted",
+   "game_build"
   ],
   "net": [
    "status",
@@ -330,13 +381,16 @@
    "read",
    "cancel_request",
    "release_request",
-   "on_completed"
+   "on_completed",
+   "route_address",
+   "request"
   ],
   "pikmin": [
    "list",
    "info",
    "add",
-   "work_on"
+   "work_on",
+   "type_count"
   ],
   "player": [
    "count",
@@ -375,7 +429,10 @@
    "end_call",
    "console_variable",
    "hold_console_variable",
-   "release_console_variable"
+   "release_console_variable",
+   "hold_field",
+   "update_field",
+   "release_field"
   ],
   "save": [
    "slot",
@@ -405,7 +462,11 @@
    "on_peer_joined",
    "on_peer_left",
    "on_message",
-   "on_ended"
+   "on_ended",
+   "set_secret",
+   "discover",
+   "public_address",
+   "punch"
   ],
   "settings": [
    "toggle",
@@ -419,7 +480,12 @@
    "set_text",
    "set_has",
    "reset",
-   "on_changed"
+   "on_changed",
+   "controllers",
+   "set_integer_range",
+   "hold",
+   "update_hold",
+   "release_hold"
   ],
   "squad": [
    "leader",
@@ -435,7 +501,11 @@
    "hold_selection",
    "release_selection",
    "type_name",
-   "on_membership_changed"
+   "on_membership_changed",
+   "selected_pikmin_type",
+   "select_type_of",
+   "hold_hud_leader",
+   "release_hud_leader"
   ],
   "storage": [
    "write",
@@ -453,7 +523,8 @@
    "leave_cave",
    "enter_portal",
    "treasure_count",
-   "give_treasure"
+   "give_treasure",
+   "on_trip_requested"
   ],
   "text": [
    "get",
@@ -508,11 +579,112 @@
    "on_choice_changed",
    "on_integer_changed",
    "on_reset_requested",
-   "on_button_event"
+   "on_button_event",
+   "hold_open_over",
+   "hold_menu_entry",
+   "release_menu_entry",
+   "hold_menu_lock",
+   "release_menu_lock",
+   "hold_menu_note",
+   "release_menu_note",
+   "ask_text",
+   "on_entry_chosen",
+   "on_text_entered",
+   "open_mods",
+   "create_texture",
+   "release_texture",
+   "decode_texture",
+   "hold_menu_input",
+   "release_menu_input",
+   "hold_mark",
+   "release_mark",
+   "hold_icon_texture",
+   "release_icon_texture",
+   "hold_control_hint",
+   "release_control_hint",
+   "refresh_control_hints"
   ],
   "world": [
    "ground",
    "path"
+  ],
+  "packages": [
+   "install",
+   "status",
+   "cancel",
+   "count",
+   "at",
+   "remove",
+   "on_progress",
+   "on_finished"
+  ],
+  "voice": [
+   "start_capture",
+   "stop_capture",
+   "read_packet",
+   "level",
+   "play_packet",
+   "set_volume",
+   "stop_stream"
+  ],
+  "memory": [
+   "main",
+   "allocate",
+   "address",
+   "free",
+   "read",
+   "write",
+   "read_name"
+  ],
+  "character": [
+   "hold_input",
+   "press_input",
+   "release_input",
+   "input_held",
+   "hold_move",
+   "release_move",
+   "move",
+   "hold_action",
+   "press_action",
+   "release_action",
+   "action_held",
+   "hold_binding",
+   "release_binding",
+   "binding",
+   "hold_action_state",
+   "release_action_state"
+  ],
+  "howlout": [
+   "load_sounds",
+   "add",
+   "remove",
+   "set_threshold",
+   "threshold",
+   "on_heard"
+  ],
+  "academy": [
+   "hold_board",
+   "release_board",
+   "board_state",
+   "state",
+   "period",
+   "window",
+   "period_at",
+   "exam_result",
+   "training_result",
+   "hold_schedule",
+   "release_schedule",
+   "hold_unlocked_periods",
+   "open_board",
+   "hold_score_submissions",
+   "release_score_submissions",
+   "complete_score_submission",
+   "on_score_submission_requested",
+   "on_opened",
+   "on_period_delivered",
+   "on_period_unlocked",
+   "on_exam_finished",
+   "on_exam_started"
   ]
  }
 }

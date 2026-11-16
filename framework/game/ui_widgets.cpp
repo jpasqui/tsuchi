@@ -11,6 +11,7 @@
 #include "names.h"
 #include "object_retention.h"
 #include "objects.h"
+#include "presenter_markers.h"
 #include "reflect.h"
 #include "shared.h"
 #include <string.h>
@@ -30,6 +31,7 @@ struct Root {
     TSUCHI_Mod* mod;
     uint64_t context, world, widget, tree, key;
     List<uint64_t> pins, made;
+    List<uint64_t> nested;   // other UserWidgets of the same mod that were put in this one's panels
     List<Observation> observations;
     uint32_t calls;
     bool retired, viewport, removing, adding_viewport;
@@ -73,7 +75,7 @@ game::CallGuard guard(Root& root) { return {allowed, &root}; }
 void finish(Root* root) {
     if (--root->calls || !root->retired) return;
     cleanup(*root);
-    root->pins.clear(); root->made.clear(); root->observations.clear(); release(root);
+    root->pins.clear(); root->made.clear(); root->nested.clear(); root->observations.clear(); release(root);
 }
 struct Use {
     Root* root;
@@ -106,6 +108,8 @@ void detach_attached(uint64_t handle) {
 void cleanup(Root& root) {
     // All native calls using this state have returned before the final reference
     // releases its objects. Native Construct/Destruct may collect garbage.
+    // The mod's other UserWidgets in this one's panels come out first: they are their own roots, and stay.
+    for (uint32_t i = root.nested.count; i--;) detach_attached(root.nested[i]);
     detach_attached(root.widget);
     for (uint32_t i = root.made.count; i--;) detach_attached(root.made[i]);
     for (uint32_t i = root.pins.count; i--;) release_game_object(root.pins[i]);
@@ -147,15 +151,25 @@ void restore(const Hold&, Root*& root, HoldEnd) {
     retire(*root); finish(root); root = nullptr;
 }
 Holds<Root*, Want, create, keep, restore> roots{"ui.widget", HoldOn::object, false};
-bool belongs(const Root& root, uint64_t object) {
+Root* owner_of(uint64_t object) {
     for (uint32_t n = 0; object && n < 128; ++n) {
-        // A nested UserWidget owns a private tree. Its outer chain eventually
-        // reaches ours, but that does not make its internal widgets ours.
-        if (game::is_a(object, tree_class)) return object == resolve(root.tree);
+        // The nearest independently created UserWidget owns its entire authored
+        // subtree. Never cross that boundary to claim another mod's children.
+        const uint64_t handle = game::to_handle(object);
+        for (uint32_t i = 0; i < roots.count(); ++i) {
+            Root* root = roots.kept_at(i);
+            if (root && root->widget == handle) return root;
+        }
+        if (game::is_a(object, tree_class)) {
+            const uint64_t user = game::outer_of(object);
+            if (!game::is_a(user, user_class) ||
+                game::read_or<uint64_t>(user + t::ui_user_widget::tree) != object) return nullptr;
+        }
         object = game::outer_of(object);
     }
-    return false;
+    return nullptr;
 }
+bool belongs(const Root& root, uint64_t object) { return owner_of(object) == &root; }
 TSUCHI_Result locate(TSUCHI_Mod* mod, uint64_t handle, Root*& found, bool root_only = false) {
     found = nullptr;
     if (!available() || !mod || !mod_usable(mod)) return TSUCHI_INVALID;
@@ -248,10 +262,54 @@ void deliver() {
     }
     sending.clear();
 }
+// A widget hung from an actor (hold_mark). The hold is on the actor, by the slot: it ends with the actor, and the
+// presenter's markers place the slot on every picture (presenter_markers.h).
+game::ClassRef canvas_slot_class{t::name::ui_mod_list_slot_class};
+struct MarkKept { uint64_t slot; };
+struct MarkWanted { uint64_t slot, actor, controller; float offset[3], align[2]; };
+TSUCHI_Result apply_mark(const Hold&, MarkKept& kept, const MarkWanted& wanted, bool) {
+    if (!t::bound(t::fn::ui_slot_anchors) || !t::bound(t::fn::ui_slot_alignment)) return TSUCHI_NOT_READY;
+    if (!markers_hang(wanted.slot, wanted.actor, wanted.controller, wanted.offset)) return TSUCHI_CAPACITY;
+    // The place given is from the canvas's top left corner, at the widget's alignment.
+    t::fn::ui_slot_anchors(reinterpret_cast<void*>(wanted.slot), 0, 0, 0, 0);
+    t::fn::ui_slot_alignment(reinterpret_cast<void*>(wanted.slot), wanted.align[0], wanted.align[1]);
+    kept.slot = wanted.slot;
+    return TSUCHI_OK;
+}
+TSUCHI_Result mark_slot(TSUCHI_Mod* mod, uint64_t handle, uint64_t& slot);
+// The presenter still has it, and the widget is still the mod's, in the same canvas slot.
+bool keep_mark(const Hold& hold, MarkKept& kept) {
+    uint64_t slot = 0;
+    return markers_hung(kept.slot) && mark_slot(hold.mod, hold.what, slot) == TSUCHI_OK && slot == kept.slot;
+}
+void restore_mark(const Hold&, MarkKept& kept, HoldEnd) { markers_unhang(kept.slot); }
+Holds<MarkKept, MarkWanted, apply_mark, keep_mark, restore_mark> mark_holds{"ui.mark", HoldOn::object, true};
+bool finite_number(float value) { return value - value == 0; }
+// The canvas slot that a widget of the mod's sits in, or that slot itself.
+TSUCHI_Result mark_slot(TSUCHI_Mod* mod, uint64_t handle, uint64_t& slot) {
+    slot = 0;
+    if (!available() || !mod || !mod_usable(mod)) return TSUCHI_INVALID;
+    const uint64_t object = resolve(handle);
+    if (!object) return TSUCHI_NOT_FOUND;
+    uint64_t widget = object;
+    if (game::is_a(object, canvas_slot_class)) widget = game::read_or<uint64_t>(object + t::ui_panel_slot::content);
+    Root* root = nullptr;
+    const TSUCHI_Result owned = widget ? locate(mod, game::to_handle(widget), root) : TSUCHI_NOT_FOUND;
+    if (owned != TSUCHI_OK) return owned;
+    slot = widget == object ? game::read_or<uint64_t>(widget + t::ui_mod_list_tab::slot) : object;
+    if (!slot || !game::is_a(slot, canvas_slot_class) || game::read_or<uint64_t>(slot + t::ui_panel_slot::content) != widget) return TSUCHI_INVALID;
+    return TSUCHI_OK;
+}
+// The mod's hold on the slot, whichever actor it is on: its place in the table, or -1.
+int32_t mark_hold_of(uint64_t slot) {
+    for (uint32_t i = 0; i < mark_holds.count(); ++i)
+        if (mark_holds.hold_at(i).what == game::to_handle(slot)) return int32_t(i);
+    return -1;
+}
 } // namespace
 
 void ui_widgets_start(TSUCHI_Mod* owner) {
-    framework = owner; roots.start();
+    framework = owner; roots.start(); mark_holds.start();
     if (!steps_registered) steps_registered = each_frame(deliver);
     auto& backend = ui_screen_backend();
     backend.create_widget = ui_create_widget;
@@ -263,6 +321,8 @@ void ui_widgets_start(TSUCHI_Mod* owner) {
     backend.add_child = ui_add_child;
     backend.hold_widget = ui_hold_widget;
     backend.release_widget = ui_release_widget;
+    backend.hold_mark = ui_hold_mark;
+    backend.release_mark = ui_release_mark;
     backend.hold_button_events = ui_hold_button_events;
     backend.release_button_events = ui_release_button_events;
     ui::set_backend(&backend);
@@ -323,10 +383,13 @@ TSUCHI_Result ui_construct_widget(TSUCHI_Mod* mod, TSUCHI_Object widget, TSUCHI_
 }
 TSUCHI_Result ui_find_widget(TSUCHI_Mod* mod, TSUCHI_Object widget, const char* name, TSUCHI_Object* out) {
     if (!out || !name || !*name) return TSUCHI_INVALID;
-    Root* root = nullptr; const auto result = locate(mod, widget.id, root, true);
+    Root* root = nullptr; const auto result = locate(mod, widget.id, root);
     if (result != TSUCHI_OK) return result;
     Use use(root); List<uint64_t> pending;
-    const uint64_t tree = resolve(root->tree);
+    const uint64_t user = resolve(widget.id);
+    if (!game::is_a(user, user_class)) return TSUCHI_INVALID;
+    const uint64_t tree = game::read_or<uint64_t>(user + t::ui_user_widget::tree);
+    if (!game::is_a(tree, tree_class) || game::outer_of(tree) != user) return TSUCHI_NOT_READY;
     const uint64_t first = tree ? game::read_or<uint64_t>(tree + t::ui_widget_tree::root) : 0;
     if (!tree) return TSUCHI_NOT_READY;
     if (first && (!game::live(first) || !pending.add(first))) return TSUCHI_NO_MEMORY;
@@ -338,12 +401,13 @@ TSUCHI_Result ui_find_widget(TSUCHI_Mod* mod, TSUCHI_Object widget, const char* 
     }
     pending.clear();
     if (!active(*root)) return TSUCHI_NOT_READY;
+    if (found && !belongs(*root, resolve(found))) return TSUCHI_DENIED;
     if (found && !pin(*root, found)) return TSUCHI_NO_MEMORY;
     *out = {found}; return TSUCHI_OK;
 }
 TSUCHI_Result ui_set_widget_text(TSUCHI_Mod* mod, TSUCHI_Object widget, const char* text) {
     char16_t units[kUiTextBytes + 1]; size_t count = 0;
-    if (!ui_glyph_text_syntax(text, true) || !game::utf8_to_units(text, units, kUiTextBytes, count))
+    if (!ui_glyph_text_syntax(text, true, true) || !game::utf8_to_units(text, units, kUiTextBytes, count))
         return TSUCHI_INVALID;
     units[count] = 0;
     Root* root = nullptr; const auto result = locate(mod, widget.id, root);
@@ -396,17 +460,30 @@ TSUCHI_Result ui_add_child(TSUCHI_Mod* mod, TSUCHI_Object panel, TSUCHI_Object c
     if (result != TSUCHI_OK) return result;
     Use use(root); Root* other = nullptr; result = locate(mod, child.id, other);
     if (result != TSUCHI_OK) return result;
-    if (other != root) return TSUCHI_DENIED;
-    if (child.id == root->widget) return TSUCHI_INVALID;
-    const uint64_t parent = resolve(panel.id), object = resolve(child.id), tree = resolve(root->tree);
+    // A widget of this tree, or another UserWidget the mod created, whole: never a part of that one's tree.
+    const bool nested = other != root;
+    if (nested && child.id != other->widget) return TSUCHI_DENIED;
+    if (!nested && child.id == root->widget) return TSUCHI_INVALID;
+    if (nested && (other->viewport || other->adding_viewport || other->removing ||
+        (t::bound(t::fn::ui_widget_in_viewport) && t::fn::ui_widget_in_viewport(reinterpret_cast<void*>(resolve(child.id)))))) return TSUCHI_BUSY;
+    if (nested && !root->nested.reserve(root->nested.count + 1)) return TSUCHI_NO_MEMORY;
+    const uint64_t parent = resolve(panel.id), object = resolve(child.id);
     if (!game::is_a(parent, panel_class) || parent == object) return TSUCHI_INVALID;
+    const uint64_t child_tree = game::outer_of(object);
     if (game::read_or<uint64_t>(object + t::ui_mod_list_tab::slot) ||
-        (tree && game::read_or<uint64_t>(tree + t::ui_widget_tree::root) == object)) return TSUCHI_BUSY;
+        (game::is_a(child_tree, tree_class) && game::read_or<uint64_t>(child_tree + t::ui_widget_tree::root) == object)) return TSUCHI_BUSY;
     uint64_t ancestor = parent;
     for (uint32_t n = 0; ancestor && n < 128; ++n) {
         if (ancestor == object) return TSUCHI_INVALID;
         const uint64_t slot = game::read_or<uint64_t>(ancestor + t::ui_mod_list_tab::slot);
-        ancestor = slot ? game::read_or<uint64_t>(slot + t::ui_mod_list_tab::parent) : 0;
+        if (slot) ancestor = game::read_or<uint64_t>(slot + t::ui_mod_list_tab::parent);
+        else {
+            // The top of a tree: on to the UserWidget whose tree it is, which may sit in a panel itself.
+            uint64_t outer = game::outer_of(ancestor);
+            for (uint32_t hops = 0; outer && !game::is_a(outer, tree_class) && hops < 8; ++hops) outer = game::outer_of(outer);
+            const uint64_t user = outer && game::is_a(outer, tree_class) ? game::outer_of(outer) : 0;
+            ancestor = user && user != ancestor && game::is_a(user, user_class) ? user : 0;
+        }
         if (n == 127 && ancestor) return TSUCHI_INVALID;
     }
     if (!t::bound(t::fn::ui_add_child)) return TSUCHI_NOT_READY;
@@ -419,6 +496,11 @@ TSUCHI_Result ui_add_child(TSUCHI_Mod* mod, TSUCHI_Object panel, TSUCHI_Object c
         detach(child.id); return TSUCHI_NOT_READY;
     }
     if (!pin(*root, handle)) { detach(child.id); return TSUCHI_NO_MEMORY; }
+    if (nested) {
+        bool listed = false;
+        for (uint32_t i = 0; i < root->nested.count; ++i) listed = listed || root->nested[i] == child.id;
+        if (!listed) root->nested.add(child.id);
+    }
     *out = {handle}; return TSUCHI_OK;
 }
 TSUCHI_Result ui_hold_widget(TSUCHI_Mod* mod, TSUCHI_Object widget, int32_t z_order) {
@@ -456,6 +538,41 @@ TSUCHI_Result ui_release_widget(TSUCHI_Mod* mod, TSUCHI_Object widget) {
         root->viewport = true; return TSUCHI_NOT_READY;
     }
     return TSUCHI_OK;
+}
+TSUCHI_Result ui_hold_mark(TSUCHI_Mod* mod, TSUCHI_Object widget, TSUCHI_Actor actor, uint32_t player, const TSUCHI_Vec3* offset,
+                           float align_x, float align_y) {
+    if (!offset || player >= uint32_t(t::constant::player_slots) || !finite_number(offset->x) || !finite_number(offset->y) ||
+        !finite_number(offset->z) || !finite_number(align_x) || !finite_number(align_y))
+        return TSUCHI_INVALID;
+    uint64_t slot = 0;
+    const TSUCHI_Result found = mark_slot(mod, widget.id, slot);
+    if (found != TSUCHI_OK) return found;
+    const uint64_t target = resolve(actor.id);
+    if (!target) return TSUCHI_NOT_FOUND;
+    const uint64_t world = game::global<uint64_t>(t::data::game_framework);
+    const uint64_t controller = world && t::bound(t::fn::camera_controller)
+        ? reinterpret_cast<uint64_t>(t::fn::camera_controller(reinterpret_cast<void*>(world), int32_t(player))) : 0;
+    if (!controller) return TSUCHI_NOT_READY;
+    const uint64_t slot_handle = game::to_handle(slot), actor_handle = game::to_handle(target);
+    // Hung from another actor already: that hold ends, and this one is taken.
+    const int32_t held = mark_hold_of(slot);
+    if (held >= 0) {
+        const Hold before = mark_holds.hold_at(uint32_t(held));
+        if (before.mod != mod) return TSUCHI_DENIED;
+        if (before.object != actor_handle) mark_holds.release(mod, before.object, slot_handle);
+    }
+    const MarkWanted wanted{slot, target, controller, {offset->x, offset->y, offset->z}, {align_x, align_y}};
+    return mark_holds.take(mod, actor_handle, slot_handle, wanted);
+}
+TSUCHI_Result ui_release_mark(TSUCHI_Mod* mod, TSUCHI_Object widget) {
+    uint64_t slot = 0;
+    const TSUCHI_Result found = mark_slot(mod, widget.id, slot);
+    if (found != TSUCHI_OK) return found;
+    const int32_t held = mark_hold_of(slot);
+    if (held < 0) return TSUCHI_NOT_FOUND;
+    const Hold hold = mark_holds.hold_at(uint32_t(held));
+    if (hold.mod != mod) return TSUCHI_DENIED;
+    return mark_holds.release(mod, hold.object, hold.what);
 }
 TSUCHI_Result ui_hold_button_events(TSUCHI_Mod* mod, TSUCHI_Object widget) {
     Root* root = nullptr; const auto result = locate(mod, widget.id, root);

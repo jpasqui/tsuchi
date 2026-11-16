@@ -1372,7 +1372,7 @@ void herd_step() {
     case 4: // what came of that; then the player steers the dog
         if (waited < 10) break;
         status.herd_dog_idle_led = band.leader(self, c.herd_one, &leader) == TSUCHI_OK && leader.id == c.dog.id;
-        host.player->set_character(self, 0, c.dog);
+        host.player->set_character(self, 0, c.dog, false);
         herd_next(8);
         break;
     case 8: { // the dog leads now: a Pikmin told to join it
@@ -1391,7 +1391,7 @@ void herd_step() {
             if (host.behavior->action(self, c.herd_one, doing_now, sizeof doing_now, &needed) == TSUCHI_OK) copy_text(status.herd_dog_doing, sizeof status.herd_dog_doing, doing_now);
         }
         herd_pass(9, status.herd_dog_join == TSUCHI_OK && status.herd_dog_led && band.members(self, c.dog, listed, 1024, &count) == TSUCHI_OK && count >= 1);
-        host.player->set_character(self, 0, c.captain);
+        host.player->set_character(self, 0, c.captain, false);
         herd_next(10);
         break;
     case 10: { // one of the new ones is killed, drowned, by nobody

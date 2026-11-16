@@ -11,7 +11,7 @@ build_id: 060F827BD2B38703E9EA11E3210D89BC   # of the game's code, as patch file
 # containers of the engine and numbers the framework itself owns belong here, never a gameplay layout.
 fixed:
   constants: [native_jump_offset, dynamic_hook_slots, player_slots]
-  structs: [array, text_value, enum_name, frozen_name]
+  structs: [array, text_value, enum_name, frozen_name, sparse_array]
 
 # The constants that are addresses, the only ones a build can lack. The others are flags, counts, and sizes,
 # which the framework reads as numbers of every build.
@@ -33,6 +33,54 @@ data:
   # inline at 0x398F8D0..0x398F8EC, through this table, and so does the generated code of a C++ function that reads an
   # argument (0xBB2B04..0xBB2B28; about 10,000 such reads in the code).
   script_natives: 0x9853D28
+  academy_points_session_gate: absent
+  academy_points_provider_gate: absent
+  academy_points_blocked_gate: absent
+  academy_time_session_gate: absent
+  academy_time_provider_gate: absent
+  academy_time_blocked_gate: absent
+  academy_board_apply: absent
+  academy_local_launch_callback_table: absent
+  academy_local_launch_callback_invoke: absent
+  academy_local_retry_callback_table: absent
+  academy_local_retry_callback_invoke: absent
+  academy_score_ready_table: absent
+  academy_score_ready_invoke: absent
+  academy_local_course_details: absent
+  academy_local_course_refresh: absent
+  academy_local_preflight: absent
+  academy_local_provider_gate: absent
+  academy_local_admission_gate: absent
+  academy_local_schedule_refresh: absent
+  academy_local_callback_table: absent
+  academy_local_callback_invoke: absent
+  academy_board_request: absent    # Switch 2 Edition: the schedule manager's request for one course's board, which a board asks with
+  academy_exam_finish_site: absent
+  academy_exam_points_start_site: absent
+  academy_exam_time_start_site: absent
+  academy_menu_update_entry: absent
+  academy_upload_table: absent
+  academy_score_request: absent
+  academy_score_task_update: absent
+  academy_score_response_table: absent
+  academy_score_response_invoke: absent
+  academy_delivery_update: absent
+  academy_delivery_entry: absent
+  options_direction_delegate_table: 0x8AA2518   # the function table of the Options menu's Up and Down handler
+  options_input_delegate_table: 0x8AA2588       # and of its Confirm and Back handlers
+  dialog_answer_yes: 0x93514C0                 # the names the game's dialogs answer with: the first button
+  dialog_answer_no: 0x93514C8                  # the second
+  dialog_answer_cancel: 0x93514D0              # the third
+  title_answer_load: 0x9347C28                 # the name the title's save list answers with for a slot to load
+  save_slot_paths: 0x934F160                   # the title's path for each save slot, an engine string (16 bytes) each
+  dialog_answer_return: 0x93514E0              # Back
+  dialog_result_table: 0x89C07B8               # the function table of the message that ends a dialog
+  dialog_result_header: 0x7F19FE8              # the 8 bytes that message carries, as the game makes it
+  title_direction_delegate_table: 0x8AA75D8      # and of its Up and Down handler
+  title_input_delegate_table: 0x8AA7648          # the function table of the title presenter's Confirm and Back handlers
+  wwise_index: 153997536
+  wwise_bus_callback_manager: 153997648
+  wwise_main_lock: 153997784
   wwise_audio_manager: 0x92DD0E8
   wwise_parameter_manager: 0x92DD120
   ui_select_sound: 0x9335ae0 # native common UI focus FName, initialized as Select
@@ -119,8 +167,49 @@ data:
   battle_end_table: 0x89C0470
   gimmick_warp_stage_function: 0x14AB0D0
   content_icon_size: 0x935E568
+  academy_schedule: absent          # Switch 2 Edition: pointer to the Dandori Academy's schedule manager (what it parsed of DDKStages and DDKHeldInfo)
 constants:
   script_end_parms: 0x16           # EX_EndFunctionParms, the opcode after a call's arguments
+  academy_points_session_instruction: 0x54000ae1
+  academy_points_provider_instruction: 0x54000a81
+  academy_points_blocked_instruction: 0x37000a4a
+  academy_time_session_instruction: 0x54000181
+  academy_time_provider_instruction: 0x54000121
+  academy_time_blocked_instruction: 0x370000ea
+  academy_local_provider_instruction: 0
+  academy_local_admission_instruction: 0
+  academy_local_idle_phase: 3                   # the course screen's phase while it shows a course's details; the game calls its refresh from it
+  academy_local_refresh_success: 1
+  academy_hook_pac: 0xd503237f
+  academy_board_answered: 1                     # the state of a board request that has its entries
+  academy_status_open: 0
+  academy_status_between_exams: 1
+  academy_status_ended: 2
+  academy_status_upcoming: 3
+  academy_status_unavailable: 4
+  academy_points_rule: 4
+  academy_time_rule: 5
+  academy_exam_start_instruction: 0xfd4013e8
+  academy_exam_finish_instruction: 0xb9402269
+  academy_blocked_result: 0x30141
+  academy_blocked_detail: 0xffffffff
+  options_entry_icon: 0                         # the icon a mod entry of the Options menu shows: Play Co-op's
+  options_row_pitch: 117                        # the height of one entry of that menu, with its spacing
+  options_up_key: 0                             # the Options menu's input map: Up and Down
+  options_down_key: 1
+  options_last_stock: 3                         # its last stock entry, where the game wraps Down to the first
+  title_flow_players_wait: 0x24                # the title flow's state while the Number of Players question is up
+  title_flow_menu: 2                           # the title flow's state while its menu takes input
+  title_flow_story: 6                          # and while it waits for the save list's answer: then it loads the slot
+  fade_out_in_front: 3                         # a fade request's direction: to black, with the loading screen above every other widget
+  fade_role_title: 1                           # and the sound role the title's save list gives that request
+  play_mode_one: 1                             # one player
+  dialog_result_message: 0x45                  # the kind of message that ends a dialog
+  title_confirm_key: 0x16                        # the title presenter's input map: Confirm
+  title_back_key: 0x17                           # and Back
+  title_menu_state: 5                            # title presenter state: the menu takes input
+  game_menu_presenter: 0x5B                      # the number the game's screens keep the pause menu's presenter under
+  game_menu_settings_page: 2                     # that menu's Settings page, as the title's Options menu names its pages
   stream_block_load: 0x80
   stream_source_cdo: 0x10
   physics_dynamic_kind: 6
@@ -216,6 +305,7 @@ constants:
   pause_blocks_travel: 0x7FFF0C0B   # the pause kinds under any of which the story takes no request for travel
   request_from_menu: 4              # where a request says it comes from, as the game's own menus say
   leave_request_id: 16
+  travel_request_id: 0xF               # what a travel request (from the map, or the game's own) says it is
   portal_request_id: 0xB
   dialog_question: 0x15             # the game's dialog with a button to accept and one to cancel
   dialog_message: 0x5E              # its dialog with one button
@@ -249,6 +339,7 @@ constants:
   team_story: 4                     # the team of the captain in the story, where there are no sides
   sort_dog: 4                       # the bit of an actor's sort that says it is a dog
   state_carcass: 0x10               # the bit of an actor's state that says it is a carcass
+  state_target_collection: 0x200    # the bit of an actor's state for a collection of targets, whose entries the life gauge's update calls into
   dismiss_keep_none: 0x10           # in an order to dismiss: no type stays with the leader
   play_mode_two: 2                  # two players, the second throwing pebbles: no switching to Oatchi
   pad_none: 7                       # the controller number that stands for none: the eighth, which is never connected
@@ -278,6 +369,10 @@ constants:
   mutex_ready: 1                    # a system lock's `state` once it is set up
   shader_map_registered: 0x1        # the bit of a shader map's `flags` that says the engine finds it by its hash
   listed_pikmin_types: 8            # the types of Pikmin the list of areas shows beside an area: this many, counted from the first
+  widget_visible: 0                 # a widget is drawn and takes input
+  texture_format_bgra8: 2           # EPixelFormat PF_B8G8R8A8: four bytes a pixel, blue first
+  texture_not_offline_processed: 0x10  # the bit of UTexture2D's flags byte for bNotOfflineProcessed
+  bulk_data_read_write: 2           # EBulkDataLockFlags LOCK_READ_WRITE, how bulk_data_lock is asked for a mip's pixels
   widget_collapsed: 1               # how a widget is shown when it is not drawn and takes no room,
   widget_hidden: 2                  # and when it is not drawn and keeps its room
   collision_records_most: 128       # how many collision parts the game's own rebuild of an actor's tree has room for,
@@ -312,6 +407,31 @@ constants:
 # What the game calls things of its own, where the framework has to spell one: classes, and the stages the game
 # goes through.
 names:
+  options_button_icon_child: IM_Icon             # a menu button's icon
+  options_panel_child: PA_Dialog_Bg              # the Options menu's dark panel, sized for its own entries
+  options_view_class: WBP_ui_Option_Title_C     # the title's Options menu (Plus on the title screen)
+  host_page_article: PA_Content                 # the Information page's parts Tsuchi's host hides
+  host_page_scroll: N_Cvs_Scroll
+  host_page_scrollbar: PA_ScrollBar
+  host_page_pager: N_Hrz_Pager_000
+  host_page_canvas: N_Cvs_eshop                 # and the canvas its rows go on
+  host_page_header: PA_Header
+  host_header_text: F_Text
+  host_page_footer: PA_Footer
+  host_button_text: F_Text                      # a title button's text and new mark
+  host_button_new: PA_New
+  host_button_selected: Focus                    # a title button's selected look, and the animations between the two
+  host_button_focus: Normal2Focus
+  host_button_unfocus: Focus2Normal
+  host_line_text: F_Info_Text_000               # an Information text block's text
+  title_view_class: WBP_ui_Title_C                # the title screen's widget, which holds its menu
+  game_menu_presenter_class: GameMenuPresenter    # the presenter of the pause menu, which also shows its pages over the title
+  title_buttons_child: N_Vrt_Button              # the box of the title menu's buttons
+  title_canvas_child: N_Cvs_Title                # the title widget's canvas, where a mod's note goes
+  title_input_class: PlayerInputPresenter        # the title presenter's map of input handlers
+  title_buttons_box_class: VerticalBox
+  title_button_normal: Normal                    # a title button's look when it is not selected
+  title_button_slot_class: VerticalBoxSlot
   content_texture_class: Texture2D
   save_class: CarrotSaveGame        # every save object's class derives from it
   navigation_system_class: NavigationSystemV1
@@ -378,6 +498,7 @@ names:
   material_class: MaterialInterface
   skeletal_class: SkeletalMeshComponent
   clip_class: AnimationAsset
+  motion_blueprint_class: CarrotAnimInstance  # the game's own animation blueprints, which play motions by name
   map_rule_class: CarrotGameRule
   level_class: Level
   streaming_class: LevelStreamingDynamic
@@ -400,6 +521,7 @@ names:
   primitive_class: PrimitiveComponent   # a part that can collide
   avatar_class: AvatarComponent     # the part of a captain that decides for it
   life_class: LifeComponent         # the part that keeps life
+  creature_ai_class: TekiAIComponent  # the part that decides for a creature
   data_table_class: DataTable
   navmesh_class: RecastNavMesh
   nav_modifier_class: CarrotNavModifierComponent  # a part that marks the navmesh under it
@@ -434,6 +556,10 @@ names:
   gimmick_warp_class: WarpCarryAIComponent
 # Assets of the game's own that the framework loads, by their paths.
 assets:
+  options_button_class: /Game/Carrot4/UI/Common/Button/WBP_ui_PA_Button_Menu.WBP_ui_PA_Button_Menu_C  # an entry of the title's Options menu
+  host_page_class: /Game/Carrot4/UI/OutGame/Information/WBP_ui_Information.WBP_ui_Information_C   # Tsuchi's host: the frame
+  host_line_class: /Game/Carrot4/UI/OutGame/Information/Parts/WBP_ui_Info_PA_Text.WBP_ui_Info_PA_Text_C  # its lines of text
+  title_button_class: /Game/Carrot4/UI/OutGame/Title/Parts/WBP_ui_PA_Title_Button.WBP_ui_PA_Title_Button_C  # one entry of the title menu
   ui_mod_list_tab_class: /Game/Carrot4/UI/InGame/Tablet/Parts/WBP_ui_Tablet_PA_Tab_Item.WBP_ui_Tablet_PA_Tab_Item_C
   pikmin_property_table: /Game/Carrot4/Core/GActor/DT_PikminProperty.DT_PikminProperty
   pikmin_color_enum: /Script/Carrot4.EPikminColor
@@ -467,6 +593,52 @@ rows:
                   AreaSelect_Common_Complete_00]
 
 structs:
+  academy_local_presenter:
+    fields: {widget: absent, phase: absent, busy: absent}
+  academy_local_callback:
+    fields: {target: absent, presenter: absent}
+  academy_local_callback_table:
+    fields: {invoke: {at: absent, returns: void, args: [pointer, pointer]}}
+  academy_local_ready_callback_table:
+    fields: {invoke: {at: absent, returns: void, args: [pointer]}}
+  academy_local_reply:
+    size: absent
+    fields: {state: absent, owned_data: absent}
+  options_button: {fields: {look: 0x4D8, look_bytes: 0x15}}   # a menu button's ButtonSize, text place and PresetType (MenuButtonWidget)
+  options_presenter: {fields: {input: 0x78, view: 0x80}}   # the title's Options menu presenter: its input map and its widget
+  options_view: {fields: {state: 0x4D8, buttons: 0x4F8, count: 0x500, room: 0x504, selected: 0x508}}  # its widget
+  title_flow: {fields: {state: 0xD8, answered: 0xE8, answer: 0xEC, slot: 0xF4}}   # the title's state machine: its state, and the dialog's answer
+  dialog_result: {size: 0x50, fields: {self: 0x18, header: 0x28, message: 0x38, dialog_kind: 0x3C, as_flow: 0x4D}}
+  # The title presenter: the selected entry, its widget, its input map and its state (0 to 3 the opening and
+  # Press Start, 4 the menu coming in, 5 the menu, 9 and 10 a choice being carried out).
+  title_presenter: {fields: {cursor: 0x80, view: 0x88, input: 0xA8, state: 0xB0}}
+  # The pause menu's presenter: its widget. The title's Options menu opens Controls and the guide through it.
+  game_menu_presenter: {fields: {view: 0x90}}
+  presenter_table:                  # entries in a presenter's function table
+    fields: {reset: {at: 0x310, args: [pointer, u32]}}   # (presenter, 0): closes it and clears what an earlier page left
+  # The title widget: the line under the menu, its list of buttons, the button count without a hidden last
+  # entry (bit 0 of hide), and which entry is hidden (hidden, or hidden_other when hidden_select is set).
+  title_view: {fields: {description: 0x560, buttons: 0x568, count: 0x570, room: 0x574, hidden_select: 0x5AB, hide: 0x5AC, hidden: 0x5B0, hidden_other: 0x5B4}}
+  # A title button: the name its choice goes by, its text and its new-content mark.
+  title_button: {fields: {id: 0x300, label: 0x528, mark: 0x540}}
+  # The title presenter's input map: four entries of 32 bytes, each a key at +0 and a handler instance at +8
+  # whose function sits at +32 and its presenter's weak index and serial at +24 and +28.
+  title_input: {fields: {data: 0xC8, count: 0xD0, capacity: 0xD4}}
+  title_handler: {fields: {key: 0, instance: 8, kind: 0x10, presenter_index: 24, presenter_serial: 28, function: 32, zero: 40}}
+  wwise_bus_node:
+    fields: {subscriber: 48}
+  wwise_bus_subscription:
+    fields: {curves: 80, count: 88}
+  wwise_bus_curve:
+    size: 32
+    fields: {id: 0, parameter: 4, points: 8, point_count: 16, scaling: 20}
+  wwise_bus_callbacks:
+    fields: {entries: 0, count: 8, mutex: 32}
+  wwise_bus_callback_entry:
+    size: 16
+    fields: {bus: 0, callback: 8}
+  wwise_volume_callback:
+    fields: {base_volume: 40}
   console_manager_table:
     fields: {find_variable: {at: 0xb0, returns: pointer, args: [pointer, const_pointer, bool]}}
   console_variable_table:
@@ -482,7 +654,8 @@ structs:
       set: {at: 0x88, args: [pointer, const_pointer, u32]}
       value: {at: 0xa0, returns: f32, args: [pointer]}
   ui_widget:
-    fields: {render_x: 0x90, render_y: 0x94, render_scale_x: 0x98, render_scale_y: 0x9C, render_pivot_x: 0xAC, render_pivot_y: 0xB0, clipping: 0xC2, cached_slate: 0xD8, remove_from_parent: {at: 0x298, args: [pointer]}}
+    fields: {render_x: 0x90, render_y: 0x94, render_scale_x: 0x98, render_scale_y: 0x9C, render_pivot_x: 0xAC, render_pivot_y: 0xB0, clipping: 0xC2, cached_slate: 0xD8, remove_from_parent: {at: 0x298, args: [pointer]},
+             visibility: 0xC3}         # a byte: 0 visible, 1 collapsed, 2 hidden, 3 and 4 visible but not hit (UWidget.Visibility)
   ui_user_widget:
     fields: {tree: 0x1E8}
   ui_widget_tree:
@@ -621,6 +794,9 @@ structs:
   ui_panel_slot:
     fields:
       content: 48
+      size_rule: 0x38   # a VerticalBoxSlot's size rule, 8 bytes
+      padding: 0x40     # a VerticalBoxSlot's padding: left, top, right and bottom floats
+      alignment: 0x58   # a VerticalBoxSlot's horizontal and vertical alignment bytes
   pikmin_counter:
     size: 0x9B18                    # native allocation at 021541AC
     fields: {bank: 0x998C,            # the bank the game counts into: 0 or 1
@@ -721,9 +897,23 @@ structs:
              shape: 0x130, mode: 0x175,   # one byte each
              player: 0x1E0}           # whose answer counts; below 0 for anyone's
   dialog_widget:
-    fields: {text: 0x588}             # a weak reference to the block its text is shown in
+    fields: {text: 0x588,             # a weak reference to the block its text is shown in
+             kind: 0x5F4}             # which of the game's dialogs it shows
   ui_manager:
-    fields: {announcer: 0x2F0}        # what shows the game's announcements
+    fields: {announcer: 0x2F0,        # what shows the game's announcements
+             actor_access: 0x3B0,     # UIActorAccessMgr: the characters the screens are about
+             open_dialog: 0x980,      # the dialog on the screen
+             face_messages: 0xBB0,     # FaceMessageMgr: the crew's radio messages, by the names of its table's rows
+             academy_courses: absent, academy_training_courses: absent,  # Switch 2 Edition: a sparse_array of academy_course_entry, the Academy's copy of
+                                       # each exam period's row of its course table, made once as the game starts
+             academy_data: absent}     # pointer to the Academy's data asset
+  academy_data:                     # the Academy's data asset: its tables and limits
+    fields: {test_courses: absent, training_courses: absent} # soft pointers to the course tables
+  face_message_manager:             # FaceMessageMgr
+    fields: {labels: 0x30,            # its labels, each with what it knows of one: elements (label, info, next in chain)
+             label_buckets: 0x68}     # and their hash: inline bucket, then the heap's buckets at +8 and their count at +0x10
+  ui_actor_access:
+    fields: {captain: 0x30}           # Orima, the reflected captain the throw-type HUD binds each update (0x2557270)
   announcer:
     fields: {banner: 0x2C0}           # the banner's widget, once the game has made it
   banner_widget:
@@ -731,6 +921,11 @@ structs:
   announce_widget:
     fields: {wait_time: 0x514,        # seconds the banner stays
              state: 0x540}            # see the announce_ constants
+  # UTexture2D: its PlatformData, the byte holding bNotOfflineProcessed, and UpdateResource in its function table.
+  texture_2d: {fields: {platform_data: 0x190, flags: 0x85, update_resource: {at: 0x2E0, args: [pointer]}}}
+  # FTexturePlatformData: size, pixel format, and the array of FTexture2DMipMap pointers.
+  texture_platform_data: {fields: {width: 0x0, height: 0x4, format: 0xC, mips: 0x18, mip_count: 0x20}}
+  texture_mip: {fields: {bulk_data: 0x10}}   # FTexture2DMipMap: its FByteBulkData
   widget_table:                     # entries in a widget's function table
     fields: {set_visibility: {at: 0x288, args: [pointer, u32]}}   # (widget, how)
   sound_system:
@@ -818,6 +1013,102 @@ structs:
   array:
     size: 0x10
     fields: {data: 0x0, count: 0x8, max: 0xC}
+  sparse_array:                     # the engine's sparse array, which its maps and sets keep their entries in
+    size: 0x38
+    fields: {data: 0x0, count: 0x8,  # the entries, the free ones among them
+             bits: 0x10,            # a bit for each entry, set when it holds one: here for the first 128
+             more_bits: 0x20,       # or, when not null, the bits are there instead
+             bit_count: 0x28}
+  academy_schedule:                 # the Academy's schedule manager (Switch 2 Edition), as its download parser fills it
+    fields: {interface: absent, boards: absent, status: absent,         # the download's result: 1 when the schedule loaded
+             record: absent,         # the parsed schedule, which the game's period functions read
+             valid: absent,          # 1 while the parsed schedule holds
+             set: absent,            # array of i32: DDKStages.Set, the exam periods in the order they come out
+             latest: absent,         # an academy_period: DDKHeldInfo.Latest
+             prev: absent,           # an academy_period: DDKHeldInfo.Prev
+             first_period: absent,   # u8: 1 when there is no Prev
+             refresh_pending: absent,  # u8: set, a tab change throws the schedule away
+             uses_schedule: absent,  # u8: the exam list takes its periods from the schedule, not the save
+             tab_checked: absent}    # u8: the player has looked at the Exams tab since the last delivery
+  academy_period:                   # one period of DDKHeldInfo
+    fields: {stage: absent,          # i32: how many periods of the Set are out, from 1
+             delivery: absent,       # i64 FDateTime ticks: DeliveryDate
+             starts: absent,         # array of i64 ticks: TestDates' Start
+             ends: absent,           # array of i64 ticks: TestDates' End
+             ticket: absent,         # i32: Redo Passes handed out
+             ticket_limit: absent,   # u8: UseTicketLimit
+             closed: absent}         # u8: Close
+  academy_save:                     # the Academy's save, as the game keeps it while it runs
+    fields: {held_ids: absent,       # array of i32: the exam periods delivered to the player
+             opened_ids: absent,     # array of i32: periods the player has opened
+             redo_passes: absent, reserve_passes: absent,
+             dandori_points: absent, dandori_rank: absent, card_rank: absent,
+             exam_results: absent, training_results: absent, # maps keyed by the course's LevelName
+             disable_test_guide: absent,  # u8: the player turned the Exams guide off
+             update_delivery: absent,     # u8: a delivery waits to be announced
+             delivery_text: absent,       # engine string: when the delivered periods came out, %Y-%m-%dT%H:%M:%S.%sZ
+             service_end: absent}         # u8: the save is past the end of the service
+  academy_exam_row:
+    fields: {courses: absent}
+  academy_training_row:
+    fields: {course: absent}
+  academy_course:
+    size: absent
+    fields: {level: absent}
+  academy_exam_entry:                # map entry: FName key, DDKTestCaveInfo, hash links
+    size: absent
+    fields: {key: absent, value: absent}
+  academy_training_entry:            # map entry: FName key, DDKTrainingCaveInfo, hash links
+    size: absent
+    fields: {key: absent, value: absent}
+  academy_exam_result:
+    size: absent
+    fields: {practice_score: absent, score: absent, local_score: absent,
+             practice_time: absent, time: absent, local_time: absent,
+             practice_count: absent, count: absent, medal: absent, viewed_medal: absent,
+             local_medal: absent, practice_medal: absent, practice_clear: absent, clear: absent,
+             stamp_rank: absent, stamp_x: absent, stamp_y: absent, stamp_rotation: absent}
+  academy_training_result:
+    size: absent
+    fields: {count: absent, score: absent, medal: absent, clear: absent}
+  academy_sticker_data:
+    fields: {mask_count: absent, color_count: absent}
+  academy_member:                    # one entry of a board, as the game keeps a downloaded one: two engine strings, then numbers
+    size: absent
+    fields: {nickname: absent, id: absent, score: absent, kings: absent, type: absent, color: absent}
+  academy_board_list:                # the manager's element for one course: the course's key, its array of members, its hash link
+    size: absent
+    fields: {key: absent, members: absent, next: absent}
+  academy_board_reply:               # what the board request tells its callback
+    size: absent
+    fields: {state: absent,          # u32: academy_board_answered when the entries are in the manager
+             answered: absent}       # u8: 1 in the reply the game makes from entries it already has
+  academy_chart:
+    fields: {face_enabled: absent}
+  academy_context:
+    fields: {course: absent,
+             board_key: absent, submission_mode: absent}      # i32: the selected course's key among the manager's boards
+  academy_end_report:
+    fields: {score: absent, elapsed: absent, cleared: absent}
+  academy_menu_state:
+    fields: {parent: absent}
+  academy_menu_presenter:
+    fields: {widget: absent}
+  academy_score_task:
+    fields: {phase: absent}
+  academy_upload_job:
+    fields: {result: absent}
+  academy_upload_job_table:
+    fields: {run: absent}
+  academy_upload_result_table:
+    fields: {failed: {at: absent, returns: void, args: [pointer, u32, u32]}}
+  academy_training_course_entry:
+    size: absent
+    fields: {key: absent, row: absent}
+  academy_course_entry:              # one entry of the Academy's copy of its course table
+    size: absent
+    fields: {key: absent,            # the row's name
+             row: absent}            # a copy of the row, of the table's row type
   game_context:
     fields: {night_start: 0xFC, snapshot_owner: 0, rule: 0xD0,              # the number of the rule being played: 1 the story, 6 and 8 battles
              players: 0x408,          # what the game keeps of its players, here within the context itself
@@ -835,9 +1126,12 @@ structs:
              pending: 0xB0}                # a stage waiting to become its child
   game_instance:
     fields: {scene_manager: 0x1B0, config_save: 0x1F0, story_save: 0x1F8, controllers: 0x2E8, pause_manager: 0x538,
-             saves: 0x1F0}               # CarrotSaveGames: one object pointer for each of the save_kinds, config first
+             fade: 0x450,                # the fade manager that outlasts a level: its fade to black is the loading screen
+             saves: 0x1F0,               # CarrotSaveGames: one object pointer for each of the save_kinds, config first
+             academy_save: absent,       # Switch 2 Edition: pointer to the Dandori Academy's save (CarrotSaveGames.DDK)
+             title_extra: absent}        # Switch 2 Edition: u8, 1 while the title menu lists one more entry of the game's own; the game adds it to title_view's hidden and hidden_other
   config_save:
-    fields: {play_mode: 0x80, slot: 0x98}         # see the play_mode_ constants
+    fields: {play_mode: 0x80, slot: 0x98, difficulty: 0x2D8, difficulty_count: 0x2E0, difficulty_set: 0x2E8, difficulty_set_count: 0x2F0}  # see the play_mode_ constants; one byte for each slot in the two difficulty arrays
   story_save:
     fields: {night: 0xBC, summary: 0xB8, onyon_leaves: 0x290, onyon_deco: 0x2A0, outside_deco: 0x2B0, switch_unlocked: 0x268, day: 0xB8, treasure_records: 0x678, sparklium: 0xA78,  # nonzero once the story lets the player switch to Oatchi
              area_bases: 0xAB0, saved_portal: 0xB20, return_portal: 0xBA8, reserved_flow: 0xC30, reserved_travel_type: 0xC31}       # an array with one entry for each area's number
@@ -933,6 +1227,11 @@ structs:
     fields: {drawer: 0xA8}
   instance_drawer:                  # the game's one drawer of instances, which clears and adds them all each step
     fields: {components: 0x228, count: 0x230}
+  carry_numbers:                    # the component that draws the carry counters: one set of quads in the world
+    fields: {entries: 0xC0,           # its counters, 0x18 bytes each, the counter first
+             count: 0xC8}
+  carry_number:                     # one counter, in the part of what is carried that counts its carriers
+    fields: {place: 0xC}              # the point in the world its number is drawn at, put there each step
   instanced_mesh:                   # one of its parts: an instanced static mesh
     fields: {instances: 0x570,        # each a 64-byte matrix
              count: 0x578,
@@ -947,6 +1246,8 @@ structs:
     fields: {anchor: 0x6B0,           # the world point it hangs from
              shown: 0x69C,            # nonzero while it is shown; it is placed only then
              position: 0x230}
+  action_marker:                    # an action prompt over an actor, such as Ride over Oatchi (CarrotActionMarkerWidget)
+    fields: {actor: 0x9C8}            # MarkerActor, the actor it points at (an object property)
   material_instance_values:         # a material instance's own parameter values, which its setters keep
     fields: {scalars: 0xE0, vectors: 0xF0}
   material_scalar_value:            # one of them: the parameter's info, its value at material_parameter.value
@@ -982,12 +1283,26 @@ structs:
              events: 0x4C0,           # what runs the level's scripted events
              actor_list: 0xEF8,       # the first link of the ring of actors in play
              pikmin_list: 0xF28,      # and of the ring of Pikmin, the dying among them
-             pikmin_counters: 0xED0}  # the game's counts of its Pikmin by type, leaf, state and player
+             pikmin_counters: 0xED0,  # the game's counts of its Pikmin by type, leaf, state and player
+             carry_numbers: 0x4F0}    # the component that draws every carry counter (UInstancedCarryNumMgrComponent)
   actor_node:                       # one link of that ring; each actor carries its own
     size: 0x18
     fields: {next: 0x8, actor: 0x10}
   engine_actor:
     fields: {root: 0x130, play_state: 0x5C}
+  skeletal_mesh:                    # a skeletal mesh part
+    fields: {blueprint: 0x720}        # the animation blueprint that runs on it now (AnimScriptInstance)
+  motion_blueprint:                 # one of the game's own animation blueprints (CarrotAnimInstance)
+    fields: {speed: 0x2B8,            # what it blends walking and running by
+             motions: 0x3F0,          # its state machines by name, in slots laid out as a row_list, each a motion_entry
+             move_motion: 0x440}      # the name of its move motion, at the start of a record like a motion_entry's
+  motion_entry:                     # one slot: a state machine's name and the motion it plays
+    size: 0xA0
+    fields: {state_machine: 0x0, motion: 0x8}
+  motion_blueprint_table:           # entries in its function table, each overridden by some kinds of blueprint
+    fields: {set_motion: {at: 0x350, args: [pointer, u64, u64]},  # (blueprint, motion name, state machine name)
+             set_move_motion: {at: 0x358, args: [pointer, u64]},  # (blueprint, move motion name)
+             set_speed: {at: 0x360, args: [pointer, f32]}}        # (blueprint, speed); some kinds ease toward it
   ordinary_actor_vtable:
     fields:
       end_play: {at: 0x348, args: [u64, u8]}
@@ -1025,6 +1340,7 @@ structs:
              support_contact: 0x1820, # accepted upward support in the current native contact update
              air_steps: 0x1CB8,       # steps since a contact reset; some wall contacts reset this too
              contact_step: 0x1CBC,    # TickPre sets this; collision processing consumes it before resetting contacts
+             body: 0x2F0,             # its skeletal mesh, animated by one of the game's own blueprints
              placement: 0x27C8}
   spawn_request:                    # what the game's spawner is given
     size: 0xE8
@@ -1098,6 +1414,21 @@ structs:
              ride_asked: 0x1495}      # set when a ride is asked for; the game leaves it set
   avatar_table:                     # entries in the function table of that part
     fields: {squad: {at: 0x918, returns: u64, args: [pointer]}}            # (the part) -> the squad it throws from: its own, or its dog's while it rides
+  character_part:                   # the steered part of a captain or a dog, game_actor.player (Orima_Update 0x158BE20)
+    fields: {controller: 0x758,       # its controller object, which turns buttons into logical inputs
+             move: 0x744}             # this frame's move direction across the world, three floats (written at 0x158C778)
+  game_controller:                  # a gameplay controller object (constructor 0x2055900, size 0xB8)
+    fields: {unpaused_frames: 0x80,   # an i32; a press reads as up while it is below 2 (0x20445EC)
+             lock_mask: 0x88,         # a u64, one bit for each input number modulo 64 (0x2043380)
+             lock_timer: 0x90,        # a float; masked inputs read as up while it is above 0 (0x204327C)
+             press_ages: 0x98,        # an array of press_age, one for each input number from 0 (0x2044510)
+             press_age_count: 0xA0}   # an i32, its length
+  press_age:                        # how long ago an input was last pressed; Oatchi's bite and jump read it (0x13C5DE4)
+    size: 0x10
+    fields: {seconds: 0x4}
+  game_controller_table:            # entries in the function table of a gameplay controller, 0x89D2208
+    fields: {locked: {at: 0xD8, returns: bool, args: [pointer]},                  # (controller) -> every input reads as up
+             pressed: {at: 0x60, returns: bool, args: [pointer, i32, pointer, pointer]}}  # (controller, input, null, null)
   whistle_part:
     fields: {radius: 0x234, center: 0x240,
              count: 0x360}            # how many whistles it has begun
@@ -1105,7 +1436,26 @@ structs:
     fields: {offset: 0x280,           # where it is from the captain, across the ground; the game works out the point from this
              position: 0x2A4}         # the point it is on
   life_component:
-    fields: {max: 0x32C, current: 0x330, extra: 0x334, max_extra: 0x338}
+    fields: {max: 0x32C, current: 0x330, extra: 0x334, max_extra: 0x338,
+             actor: 0x208,            # its creature, which the gauge's update reads
+             gauge_enabled: 0x2D0,    # EnableLifeGauge: the gauge's update does nothing without it
+             gauge_views: 0x2AC,      # how many views the gauge is placed for
+             gauge_list_1: 0x248,     # three lists the gauge's update walks: pointers in the first, bytes in the others
+             gauge_list_2: 0x288,
+             gauge_list_3: 0x298,
+             gauge_full: 0x53C,       # the full health the gauge measures against; the last field the update reads
+             # What the life part's own update (life_update) acts on besides the gauge. A build that inlines the gauge's
+             # update is served through that update, with these held still for the call.
+             linked: 0x2C8,           # another life part, when set: the update ends by running itself for that part
+             mitigation: 0x3A0,       # u8, the first byte of DamageMitigation: set, the update steps the mitigation
+             frozen: 0x400,           # u8 in FreezeCondition: set while the creature is frozen, and the update counts the time
+             cold_clock: 0x414,       # f32: seconds since the creature's cold last grew, counted while it has any
+             cold_limit: 0x418,       # f32: above 0, the cold is dropped once cold_clock passes it
+             shocked: 0x440}          # u8 in ThunderStopCondition: set while the creature is shocked still
+  gauge_actor:                      # what of a creature the life gauge's update (0x1ADEDA0) reads besides its root and physics parts
+    fields: {part_1: 0x3A0, part_2: 0x4B0}  # two more of its own parts, when set; part_2 is its StickComponent
+  gauge_stick:                      # the creature's StickComponent (gauge_actor part_2), as the gauge's update reads it
+    fields: {clung: 0x2A1}          # set while Pikmin cling to it: the update then shows the gauge below full health
   action:                           # one thing an actor is doing; what it is doing within that is its child
     fields: {child: 0x68, name: 0x80}
   message_queue_table:
@@ -1123,6 +1473,12 @@ structs:
     fields: {amount: 0x40, attack: 0x49,
              riding_applies: 0xAA,    # a captain riding Oatchi loses life only with this set
              origin: 0xB8}            # where the hit came from: a victim is pushed away from here
+  pikmin_hit:                       # a damage message's fields for a thrown Pikmin's direct hit (attack 1), as the throw's
+                                    # contact handler (0x1735D50) fills them at 0x1736608; ComputeDamage reads them at 0x1AE407C
+    fields: {point: 0x4C,             # where the Pikmin touched the target, three floats
+             press: 0x78,             # 1 for a landing that presses: MaxLife / the target life's LethalDose.PressHit (+0x36C)
+             part: 0x80,              # the collision part it touched; 0 as the message's constructor leaves it
+             freeze_scaled: 0xB0}     # 1: a frozen target takes the hit scaled by its FreezeDamageRatio
   knock_message:
     size: 0x120
     fields: {velocity: 0x78, damage: 0xF0}
@@ -1137,6 +1493,9 @@ structs:
     fields: {process_event: {at: 0x228, args: [pointer, pointer, pointer]}}
   struct_vtable:
     fields: {initialize: {at: 0x2B8, args: [pointer, pointer, i32]}, destroy: {at: 0x2C0, args: [pointer, pointer, i32]}}
+  slate_brush:                      # reflected SlateBrush; native renderer caches a shared resource handle
+    size: 0x88
+    fields: {resource: 0x48, resource_handle: 0x70}
   allocator_vtable:
     fields: {malloc: {at: 0x18, returns: pointer, args: [pointer, u64, u32]}, free: {at: 0x38, args: [pointer, pointer]}}
   name_entry:
@@ -1169,8 +1528,8 @@ structs:
              actors: 0x4C8,           # an array of the actors it made
              flags: 0x4D8}            # see generator_added
   engine_transform:                 # a turn as x, y, z, w, a place, and a scale, each of floats, as the engine keeps one
-    size: 0x30
-    fields: {rotation: 0x0, translation: 0x10, scale: 0x20}
+    size: 0x30                      # the scale follows the place with no gap: a generator of scale 0.3 reads 0.3 at 0x1C, 0x20, 0x24
+    fields: {rotation: 0x0, translation: 0x10, scale: 0x1C}
   ai_values:                        # what an AI part writes its values into and reads them from: two arrays of bytes
     size: 0x20
     fields: {set: 0x0,                # what the level's maker set for it
@@ -1219,7 +1578,8 @@ structs:
   carry_actor:
     fields: {component: 0x310}
   carry_component:
-    fields: {weight: 0x560, maximum: 0x564, carriers: 0x600, info: 0x620}
+    fields: {weight: 0x560, maximum: 0x564, carriers: 0x600, info: 0x620,
+             shown_count: 0xC24}      # the count its counter shows in place of the carriers' (0xD4BA10), or -1 for theirs
   carry_info:
     fields: {destination: 0xE0, arrival_destination: 0xF0}
   carry_stick:
@@ -1346,16 +1706,60 @@ structs:
 
   # carry: original Attach 0x1A71074..0x1A710E4 and DrainAttachmentList3B8.
 functions:
+  options_button_icon: {address: 0x24170A0, returns: void, args: [pointer, i32]}  # a menu button's icon, which also places its label
+  options_direction: {address: 0x28E2E40, returns: bool, args: [pointer, bool]}  # the Options menu's Up and Down (presenter, down)
+  options_confirm: {address: 0x28E2E90, returns: bool, args: [pointer]}          # and its Confirm
+  set_slot_difficulty: {address: 0x20B9330, returns: void, args: [pointer, u32, i32]}  # (config, difficulty, slot): also marks the slot as having one, so it isn't asked
+  face_message_request: {address: 0x2778100, returns: void, args: [pointer, pointer, u32, u32]}  # (FaceMessageMgr, a row's name, 0, 0): a missing or turned-off row is dropped; both of the game's callers pass 0, 0
+  fade_request: {address: 0x1D45BF0, returns: void, args: [pointer, u32, u32, bool, f32]}  # (fade manager, direction, sound role, with the story's numbers, seconds): the title's save list asks (3, 1, false, 0.3) as the player picks Load
+  options_gate: {address: 0x2D38910, returns: bool, args: [pointer]}             # whether its widget takes input now
+  options_list_grow: {address: 0x2489150, returns: void, args: [pointer]}        # grows its button list to fit its count
+  options_button_highlight: {address: 0x2416C30, returns: void, args: [pointer, bool, bool]}  # a menu button selected or not
+  ui_set_render_opacity: {address: 0x4C6CFD0, returns: void, args: [pointer, f32]}  # a widget's opacity, 0 to 1
+  title_direction: {address: 0x29573C0, returns: bool, args: [pointer, i32]}  # the title presenter's Up and Down handler
+  title_confirm: {address: 0x2957420, returns: bool, args: [pointer]}       # the title presenter's Confirm handler
+  title_back: {address: 0x29574B0, returns: bool, args: [pointer]}          # and its Back handler
+  title_list_grow: {address: 0x2D8BA80, returns: void, args: [pointer]}     # grows the title widget's button list to fit its count
+  ui_presenter_find: {address: 0x1DD5E20, returns: pointer, args: [pointer, u32]}  # (the game's screens, number) -> that presenter
+  presenter_begin: {address: 0x286E180, returns: void, args: [pointer, bool]}      # starts a presenter: the pause menu's finds its widget here
+  game_menu_open_page: {address: 0x28CA540, returns: void, args: [pointer, pointer, u32]}  # (presenter, what to call once it closed, page): a page of the pause menu on its own
+  ui_vertical_slot_sync: {address: 0x4C69000, returns: void, args: [pointer]}  # applies a VerticalBoxSlot's padding
+  wwise_get_bus: {address: 95216, returns: u64, args: [u64, u32, u32]}
+  wwise_release_bus: {address: 472896, returns: i32, args: [u64]}
+  wwise_bind_bus_curve: {address: 232384, returns: u32, args: [u64, u32, u32, u32, u32, u32, u32, pointer, u32, bool]}
+  wwise_unbind_bus_curve: {address: 232928, returns: void, args: [u64, u32, u32]}
+  wwise_bus_subscription: {address: 544896, returns: u64, args: [u64, u64, u32]}
+  wwise_register_bus_volume_callback: {address: 16336, returns: u32, args: [u32, pointer]}
   map_add_stream: {address: 0x05BAB910, args: [pointer, pointer]}
   map_remove_stream: {address: 0x05BABDB0, returns: bool, args: [pointer, pointer]}
   map_duplicate_stream: {address: 0x039BDA20, returns: pointer, args: [const_pointer, pointer, u64, u32, pointer, i32, u32]}
   map_set_package: {address: 0x055C6FE0, args: [pointer, u64]}
   ui_arrow_left: {address: 0x02274CB0, args: [pointer]}
   ui_arrow_right: {address: 0x02274D70, args: [pointer]}
+  # Switch 2 Edition: the exam periods open now by the schedule (an array of i32), and when the
+  # period in effect came out (FDateTime ticks; the second argument is 0). Both read the network clock.
+  # How the game stores a board it downloaded: a new element of the manager's set of boards, a copy of the members
+  # into it, and its place in the set by the course's key, where it takes over from the board that course had.
+  academy_board_slot: {address: absent, returns: engine_slot, args: [pointer]}
+  academy_board_copy: {address: absent, returns: void, args: [pointer, const_pointer, u32]}
+  academy_board_link: {address: absent, returns: void, args: [pointer, u32, pointer, i32]}
+  academy_menu_update_stock: {address: absent, returns: void, args: [pointer, f32]}
+  academy_local_launch_ready: {address: absent, returns: void, args: [pointer, u64]}
+  academy_local_retry_ready: {address: absent, returns: void, args: [pointer]}
+  academy_is_exam: {address: absent, returns: bool, args: [pointer]}
+  academy_upload_stock: {address: absent, returns: void, args: [pointer]}
+  academy_status: {address: absent, returns: i32, args: [pointer]}
+  academy_open_periods: {address: absent, returns: engine_array, args: [const_pointer]}
+  academy_period_start: {address: absent, returns: i64, args: [const_pointer, u32]}
   ui_post_sound: {address: 0x18d02f0, returns: u64, args: [pointer, const_pointer, u32, u32, bool, bool]}
   ui_context_world: {address: 0x05B14720, returns: pointer, args: [pointer, pointer, u32]}
   ui_widget_in_viewport: {address: 0x4c97e00, returns: bool, args: [pointer]}
   ui_widget_viewport: {address: 0x04C94C80, args: [pointer, i32, bool]}
+  texture_create_transient: {address: 0x5AB0820, returns: pointer, args: [i32, i32, u32, u64]}  # UTexture2D::CreateTransient(width, height, format, name)
+  bulk_data_size: {address: 0x381F120, returns: u64, args: [pointer]}     # FBulkDataBase::GetBulkDataSize
+  bulk_data_lock: {address: 0x3821230, returns: pointer, args: [pointer, u32]}  # FBulkDataBase::Lock(bulk, flags): 2 reads and writes
+  bulk_data_unlock: {address: 0x3821420, args: [pointer]}                 # FBulkDataBase::Unlock
+  texture_from_image: {address: 0x5524420, returns: pointer, args: [pointer]}  # FImageUtils::ImportBufferAsTexture2D(the file's bytes as an array) -> a transient texture, or null
   ui_scroll_offset: {address: 0x04C581B0, args: [f32, pointer]}
   ui_scroll_reveal: {address: 0x04C581F0, args: [f32, pointer, pointer, bool, u32]}
   ui_size_box_width: {address: 0x04C59100, args: [f32, pointer]}
@@ -1614,6 +2018,10 @@ functions:
   return_to_title: {address: 0x1EB75A0, returns: void, args: [bool]}                     # true: open the title screen. Nothing is saved
   # the part that keeps life, jump the gauge to it, who did it (an object's number and serial), the new life
   set_life: {address: 0x1AE5FC0, returns: void, args: [pointer, bool, u64, f32]}
+  life_refresh_gauge: {address: 0x1ADEDA0, returns: void, args: [pointer, f32]}     # (life, seconds): only the gauge's update, which the creature's own update calls
+  # (life, seconds): the life part's own update and life_refresh_gauge's only caller. It steps the creature's cold,
+  # shock and damage mitigation, runs the gauge's update, then runs itself for a linked life part.
+  life_update: {address: 0x1ADDAE0, returns: void, args: [pointer, f32]}
   damage_message: {address: 0x1B4B370, returns: void, args: [pointer, pointer]}          # makes one in the memory given: (memory, attacker or null)
   knock_message: {address: 0x1B4B6E0, returns: void, args: [pointer, pointer]}           # the same for a knock
   post_message: {address: 0x1B8B8D0, returns: bool, args: [pointer, pointer]}            # (actor, message): the actor's queue takes it, or it is freed
@@ -1626,6 +2034,9 @@ functions:
   npad_joy_dual_state: {address: 0x62EF200, args: [pointer, const_pointer]}
   # A part: it is put on its world's list of what the end of the frame sends; its pose is to be sent, and it is put there.
   mark_end_of_frame: {address: 0x5259D50, args: [pointer]}
+  # An actor: whether it sleeps (no player sees it and no Pikmin are near) or wakes, decided and done as its own
+  # update does each frame (GActor_UpdatePhysicsFreeze, from GActor_TickPre). awake_holds keeps it awake.
+  actor_sleep_decision: {address: 0x1B81160, args: [pointer]}
   mark_pose_dirty: {address: 0x5259F70, args: [pointer]}
   # A part: the renderer's copy of it is made again at the end of the frame.
   mark_render_state: {address: 0x52597B0, args: [pointer]}
@@ -1714,6 +2125,7 @@ functions:
   squad_icon_count: {address: 0x25542E0, args: [pointer, i32]}
   squad_throw_trajectory: {address: 0x1728E90, returns: u32, args: [pointer]}
 tables:
+  ui_hint_text_words: [0xD10543FF] # native rich-text SetText entry
   actor_tables: [0x8884F20, 0x8885C88, 0x8886398, 0x8886AA8, 0x88871B8, 0x8887F20, 0x8889FB0, 0x888C6A8, 0x888D040,
                  0x8891F00, 0x8892628, 0x88933F8, 0x8893B20, 0x8894248, 0x8894970, 0x8895098, 0x88957C0, 0x8895EE8,
                  0x88965F8, 0x8896D20, 0x8897448, 0x8897B70, 0x8898280, 0x88989A8, 0x88990D0, 0x88997F8, 0x8899F20,
@@ -1736,6 +2148,32 @@ tables:
                        0x8AD6958, 0x8AD7B30, 0x8AD9330, 0x8ADC2A0, 0x8ADC900, 0x8ADD4C0, 0x8AE1BE8, 0x8AE36C8,
                        0x8AE30D8, 0x8A60830, 0x89EA408, 0x8A0F2F0, 0x8A1E8A8, 0x8A25F10, 0x8A264F0, 0x8A64F60,
                        0x8A8A570, 0x8AC1750, 0x8AFC758, 0x8B0FF20]
+  # Where a captain's or a dog's action reads its logical input, in the order of character_backend.cpp's sites: the
+  # instruction, the game's instruction there, and the register that holds the character's steered part, or 31 when
+  # x0 holds its controller at the call, or 32 plus the register that holds the controller.
+  #   0 whistle pressed (blr, Orima_WhistleInput 0x15A9FC0)   1 whistle held after a ride (blr)
+  #   2 captain throw pressed (blr, 0xDF8760)                 3 captain throw held (br, IsThrowHeld 0x15A0670)
+  #   4 dismiss (blr, 0xDF4070)                                5 type switch one way (tbnz after bl 0x2044990, 0x157F810)
+  #   6 type switch the other way (blr, 0x157F810)            7 ride pressed (blr, Control Execute 0xE040F0)
+  #   8, 9 ride released 13 and 19 (blr)                      10 dog throw of riders (blr, 0x13BBB80)
+  #   11 dog throw pressed (br, 0x1402C20)                    12 dog throw held (br, 0x1402D10)
+  #   13 bite (blr, 0x13C5AE0)                                14 bite's press age (ldr s0, [x8, #0x124])
+  #   15 jump, buffered (blr, 0x13C6330)                      16 jump's press age (ldr s0, [x8, #0x144])
+  #   17 jump (blr)                                           18, 19 rush charge pressed and held (blr, 0x13BBB80)
+  #   20 interact (blr, 0x13C8670)                            21, 22 after the move direction is written (0x158BE20)
+  character_sites: [0x15AA0B0, 0x15AA108, 0xDF87AC, 0x15A0680, 0xDF40DC, 0x157F9A8, 0x157F9C4, 0xE06CC4, 0xE05C90,
+                    0xE05CA8, 0x13BC6A8, 0x1402C98, 0x1402D20, 0x13C5DD8, 0x13C5DE4, 0x13C6488, 0x13C6494, 0x13C650C,
+                    0x13BC8F4, 0x13BCBC0, 0x13C8A24, 0x158C780, 0x1591808]
+  character_site_words: [0xD63F0100, 0xD63F0100, 0xD63F0100, 0xD61F0040, 0xD63F0100, 0x37000BA0, 0xD63F0100, 0xD63F0100,
+                         0xD63F0100, 0xD63F0100, 0xD63F0100, 0xD61F0080, 0xD61F0040, 0xD63F0100, 0xBD412500, 0xD63F0100,
+                         0xBD414500, 0xD63F0100, 0xD63F0100, 0xD63F0100, 0xD63F0100, 0xB50037F4, 0xF9417D16]
+  character_site_registers: [19, 19, 19, 31, 19, 19, 19, 23, 23, 23, 31, 31, 31, 31, 53, 31, 53, 31, 31, 31, 31, 19, 19]
+  # Isolated action states additionally cover both throw-release held reads
+  # and the alternate throw predicate's shared return, before its epilogue.
+  # Then dismount's input 14 and RushCharge's own held-20 maintenance read.
+  character_remap_sites: [0x15A0C20, 0x15A196C, 0x15A06F4, 0xE02F70, 0x13BB5D0, 0x13E839C, 0x13E969C]
+  character_remap_words: [0xD63F0100, 0xD63F0100, 0xA9427BFD, 0xD63F0100, 0xD63F0100, 0xD63F0100, 0xD63F0100]
+  character_remap_registers: [31, 31, 19, 31, 31, 31, 31]
 
 # One entry in each of a list of tables, with the functions the game puts there.
 slot_groups:
@@ -1751,6 +2189,9 @@ slot_groups:
 
 
 slots:
+  options_presenter_tick: {table: 0x8AA1378, offset: 0x280, stock: 0x28E2660, args: [pointer, f32]}  # the Options menu presenter, each frame
+  title_flow_update: {table: 0x89C0620, offset: 0x28, stock: 0x1F310E0, args: [pointer, f32]}  # the title's state machine
+  title_presenter_tick: {table: 0x8AA49B8, offset: 0x280, stock: 0x2957170, args: [pointer, f32]}  # the title presenter, each frame it runs
   physics_contacts: {table: 0x89DA570, offset: 0x278, stock: 0x2166790, args: [pointer, pointer]} # handler, pending collision array
   ui_mod_list_construct:
     table: 144906144
@@ -1813,6 +2254,13 @@ slots:
   battle_roulette: {table: 0x89BBB30, offset: 0x50, stock: 0x1E26470, returns: u32, args: [pointer, pointer]}
   squad_grab_avatar: {table: 0x88A59D8, offset: 0xA20, stock: 0x15A21F0, returns: u64, args: [pointer, u64]}
   squad_grab_orima: {table: 0x88ADC78, offset: 0xA20, stock: 0x15A21F0, returns: u64, args: [pointer, u64]}
+  # A gameplay controller's logical inputs, in its function table 0x89D2208: (controller, input) -> held; (controller,
+  # input, repeat, count) -> pressed this frame; (controller, input) -> released this frame; (controller, seconds) once a
+  # frame from the controller manager (0x20576F8), which also ages the press-age table through the pressed entry.
+  controller_held: {table: 0x89D2208, offset: 0x38, stock: 0x2043250, returns: bool, args: [pointer, i32]}
+  controller_pressed: {table: 0x89D2208, offset: 0x60, stock: 0x20445C0, returns: bool, args: [pointer, i32, pointer, pointer]}
+  controller_released: {table: 0x89D2208, offset: 0x68, stock: 0x2043810, returns: bool, args: [pointer, i32]}
+  controller_update: {table: 0x89D2208, offset: 0x90, stock: 0x2042B70, args: [pointer, f32]}
 # What a native route's handler finds where, by route: register numbers, and offsets from the stack pointer
 # where the route's stack is read. Another compiler can put these elsewhere, so each is per build.
 # A number in a route's frame is a register, unless it is listed here as an offset from the stack.

@@ -111,6 +111,7 @@ class HoldTable {
         Operation* next;
         bool ended = false, restorable = false;
         HoldEnd why = HoldEnd::released;
+        uint32_t at = 0; // the slot the hold was at when the operation began: looked at first
     };
     Operation* active_ = nullptr;
     static bool operation_allowed(void* context);
@@ -121,6 +122,8 @@ class HoldTable {
     Hold& slot(uint32_t index) { return *reinterpret_cast<Hold*>(slots_ + size_t(index) * stride_); }
     int32_t index_of(const TSUCHI_Mod* mod, bool anyones, uint64_t object, uint64_t what) const;
     int32_t index_of(uint64_t id) const;
+    int32_t index_after(uint32_t was, uint64_t id) const;
+    bool allowed_at(const Operation& call, int32_t index) const;
     void remove(uint32_t index);
     void end(uint32_t index, HoldEnd why);
     void step();

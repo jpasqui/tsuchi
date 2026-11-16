@@ -3,6 +3,7 @@
 #include "ui_screens.h"
 #include "holds.h"
 #include "ids.h"
+#include "frame.h"
 #include <string.h>
 #include <float.h>
 namespace tsuchi {
@@ -10,8 +11,8 @@ void settings_player_prepare(ModRecord& record);
 void settings_player_changed(ModRecord& record, const Setting& setting);
 void setting_number_text(float value, char out[48]);
 namespace {
-enum class Action : uint8_t { toggle, integer, choice, mapped_choice, member, value, less, more, edit };
-struct Entry { char control[TSUCHI_ID_SIZE], key[kModIdBytes], value[TSUCHI_ID_SIZE]; Text word; Action action; };
+enum class Action : uint8_t { toggle, integer, number, choice, mapped_choice, member, value, edit, controlled };
+struct Entry { char control[TSUCHI_ID_SIZE], key[kModIdBytes], value[TSUCHI_ID_SIZE]; Text word; Action action; int64_t minimum, maximum; };
 struct Binding { char mod[kModIdBytes]; List<Entry> entries; uint64_t request; char edit_key[kModIdBytes], edit_value[TSUCHI_ID_SIZE]; };
 TSUCHI_Mod* settings_owner = nullptr;
 UiSettingsTextProvider editor = nullptr;
@@ -110,6 +111,52 @@ Binding* opened_binding(TSUCHI_Screen screen) {
     bool open = false;
     return ui::table.open(settings_owner, screen, &open) == TSUCHI_OK && open ? *slot : nullptr;
 }
+bool controlled_text(const Setting& setting, Text& out) {
+    Text value; Texts names, text;
+    bool ok = setting_display(setting, value);
+    const char* at = setting_controllers(setting);
+    while (ok && *at) {
+        char id[kModIdBytes]{}; uint32_t n = 0;
+        while (*at && *at != ',' && n + 1 < sizeof id) id[n++] = *at++;
+        const ModRecord* owner = find_mod(id);
+        const char* name = owner && *owner->name.get() ? owner->name.get() : id;
+        if (names.used) --names.used;
+        ok = names.add(names.used ? ", " : "", name);
+        if (*at == ',') ++at;
+        if (*at == ' ') ++at;
+    }
+    // Put ownership first so a long text value cannot clip its attribution away.
+    ok = ok && text.add(setting_controlled_value(setting) ? "Controlled by " : "", names.used ? names.data : "",
+                        setting_controlled_value(setting) ? ": " : "", value.get()) && safe_text(out, text.data);
+    value.clear(); names.clear(); text.clear(); return ok;
+}
+// A controller can fail or restart while its dependency's form is open. Close that
+// form when ownership changes so its next opening rebuilds passive/editable rows.
+void ownership_changed() {
+    for (uint32_t i = 0; i < bindings.count(); ++i) {
+        Binding* binding = bindings.kept_at(i);
+        const TSUCHI_Screen screen{bindings.hold_at(i).what};
+        if (opened_binding(screen) != binding) continue;
+        ModRecord* record = find_mod(binding->mod);
+        bool changed = !record;
+        for (uint32_t n = 0; record && !changed && n < binding->entries.count; ++n) {
+            const Entry& entry = binding->entries[n];
+            const Setting* setting = find_setting(record->settings, entry.key);
+            if (setting && entry.action == Action::integer) {
+                int64_t minimum = 0, maximum = 0, value = 0;
+                setting_integer_range(*setting, minimum, maximum);
+                if (entry.minimum != minimum || entry.maximum != maximum) {
+                    setting_integer(*setting, value);
+                    ui_screen_integer_range(settings_owner, screen, entry.control, minimum, maximum, value);
+                    binding->entries[n].minimum = minimum; binding->entries[n].maximum = maximum;
+                }
+            }
+            changed = !setting || (entry.action == Action::controlled ?
+                strcmp(entry.word.get(), setting_controllers(*setting)) != 0 : setting_controlled_value(*setting) != nullptr);
+        }
+        if (changed) ui::table.release_open(settings_owner, screen);
+    }
+}
 void synchronize(TSUCHI_Screen screen, Binding* expected, const char* mod) {
     for (uint32_t i = 0; ; ++i) {
         Binding* binding = opened_binding(screen);
@@ -119,8 +166,16 @@ void synchronize(TSUCHI_Screen screen, Binding* expected, const char* mod) {
         Setting* setting = record ? find_setting(record->settings, item.key) : nullptr;
         if (!setting) continue;
         char control[TSUCHI_ID_SIZE]; memcpy(control, item.control, sizeof control);
-        if (item.action == Action::toggle) ui::table.set_choice(settings_owner, screen, control, setting->integer ? "on" : "off");
-        else if (item.action == Action::integer) ui::table.set_integer(settings_owner, screen, control, setting->integer);
+        if (item.action == Action::controlled) {
+            Text shown;
+            if (controlled_text(*setting, shown)) ui::table.set_text(settings_owner, screen, control, shown.get());
+            shown.clear();
+        } else if (item.action == Action::toggle) ui::table.set_choice(settings_owner, screen, control, setting->integer ? "on" : "off");
+        else if (item.action == Action::integer) {
+            int64_t value = 0; setting_integer(*setting, value);
+            ui::table.set_integer(settings_owner, screen, control, value);
+        }
+        else if (item.action == Action::number) ui_screen_set_number(settings_owner, screen, control, setting->number);
         else if (item.action == Action::choice) ui::table.set_choice(settings_owner, screen, control, setting->text.get());
         else if (item.action == Action::mapped_choice) {
             uint32_t index = 0;
@@ -153,6 +208,7 @@ void reset_requested(void*, const TSUCHI_UiResetRequested* event) {
         ModRecord* record = find_mod(mod);
         if (!record || i >= record->settings.list.count) break;
         Setting& setting = record->settings.list[i];
+        if (setting.hidden) continue;
         bool changed = false;
         const TSUCHI_Result result = reset_setting(setting, changed);
         notify(*record, setting, result, changed);
@@ -196,7 +252,10 @@ void changed(void*, const TSUCHI_UiChanged* event) {
     Setting* setting = record ? find_setting(record->settings, selected->key) : nullptr;
     if (!setting) return;
     bool other = false; TSUCHI_Result result = TSUCHI_INVALID;
-    if (selected->action == Action::integer) {
+    if (selected->action == Action::number) {
+        double value = 0; result = ui_screen_number(settings_owner, event->screen, event->control, &value);
+        if (result == TSUCHI_OK) result = set_setting_number(*setting, static_cast<float>(value), other);
+    } else if (selected->action == Action::integer) {
         int64_t value = 0; result = ui::table.integer(settings_owner, event->screen, event->control, &value);
         if (result == TSUCHI_OK) result = set_setting_integer(*setting, value, other);
     } else {
@@ -230,18 +289,7 @@ void activated(void*, const TSUCHI_UiActivated* event) {
     ModRecord* record = find_mod(binding->mod);
     Setting* setting = record ? find_setting(record->settings, selected->key) : nullptr;
     if (!setting) return;
-    if (selected->action == Action::less || selected->action == Action::more) {
-        double value = setting->number + (selected->action == Action::less ? -1.0 : 1.0);
-        const Json* minimum = setting->declared->find("min"), *maximum = setting->declared->find("max");
-        if (minimum && value < minimum->number) value = minimum->number;
-        if (maximum && value > maximum->number) value = maximum->number;
-        if (value < -FLT_MAX) value = -FLT_MAX;
-        if (value > FLT_MAX) value = FLT_MAX;
-        bool other = false;
-        const TSUCHI_Result result = set_setting_number(*setting, static_cast<float>(value), other);
-        if (result == TSUCHI_OK) { char text[48]; setting_number_text(static_cast<float>(setting->number), text); ui::table.set_text(settings_owner, event->screen, selected->value, text); }
-        notify(*record, *setting, result, other);
-    } else if (selected->action == Action::edit && editor && !binding->request) {
+    if (selected->action == Action::edit && editor && !binding->request) {
         Text title, current;
         if (!title.set(label_of(*setting)) || !current.set(setting->text.get())) { title.clear(); current.clear(); return; }
         const Json* longest = setting->declared->find("max_length");
@@ -264,6 +312,7 @@ void closed(void*, const TSUCHI_UiClosed* event) {
 void ui_settings_text_provider(UiSettingsTextProvider provider) { editor = provider; }
 void ui_settings_start(TSUCHI_Mod* framework) {
     settings_owner = framework; bindings.start();
+    each_frame(ownership_changed);
     TSUCHI_Subscription subscription{};
     ui::table.on_changed(settings_owner, changed, nullptr, &subscription);
     ui::table.on_activated(settings_owner, activated, nullptr, &subscription);
@@ -274,7 +323,7 @@ TSUCHI_Result ui_mod_settings(ModRecord& record, TSUCHI_Screen* out) {
     if (!out) return TSUCHI_INVALID;
     if (!on_game_thread()) return TSUCHI_INVALID;
     if (!settings_owner || !mod_usable(settings_owner)) return TSUCHI_NOT_READY;
-    if (!record.settings.list.count) return TSUCHI_NOT_FOUND;
+    if (!has_visible_settings(record.settings)) return TSUCHI_NOT_FOUND;
     settings_player_prepare(record);
     auto* binding = static_cast<Binding*>(allocate(sizeof(Binding)));
     if (!binding) return TSUCHI_NO_MEMORY;
@@ -284,14 +333,37 @@ TSUCHI_Result ui_mod_settings(ModRecord& record, TSUCHI_Screen* out) {
     title.clear();
     for (uint32_t i = 0; result == TSUCHI_OK && i < record.settings.list.count; ++i) {
         const Setting& setting = record.settings.list[i]; Text label; Entry* item = nullptr;
+        if (setting.hidden) continue;
         if (!safe_text(label, label_of(setting))) { result = TSUCHI_NO_MEMORY; break; }
-        if (setting.kind == SettingKind::toggle) {
+        if (setting_controlled_value(setting)) {
+            Text shown;
+            result = entry(*binding, setting, Action::controlled, setting_controllers(setting), nullptr, item);
+            if (result == TSUCHI_OK && !controlled_text(setting, shown)) result = TSUCHI_NO_MEMORY;
+            if (result == TSUCHI_OK) result = ui::table.add_text(settings_owner, screen, item->control, label.get(), shown.get());
+            shown.clear();
+        } else if (setting.kind == SettingKind::toggle) {
             result = entry(*binding, setting, Action::toggle, nullptr, nullptr, item);
             if (result == TSUCHI_OK) result = ui::table.add_choice(settings_owner, screen, item->control, label.get(), toggles, setting.integer ? "on" : "off");
         } else if (setting.kind == SettingKind::integer) {
-            const Json* minimum = setting.declared->find("min"), *maximum = setting.declared->find("max");
+            int64_t minimum = 0, maximum = 0, value = 0;
+            setting_integer_range(setting, minimum, maximum); setting_integer(setting, value);
             result = entry(*binding, setting, Action::integer, nullptr, nullptr, item);
-            if (result == TSUCHI_OK) result = ui::table.add_integer(settings_owner, screen, item->control, label.get(), minimum ? minimum->integer : INT64_MIN, maximum ? maximum->integer : INT64_MAX, 1, setting.integer);
+            if (result == TSUCHI_OK) {
+                item->minimum = minimum; item->maximum = maximum;
+                result = ui::table.add_integer(settings_owner, screen, item->control, label.get(), minimum, maximum, 1, value);
+            }
+        } else if (setting.kind == SettingKind::number) {
+            const Json* minimum = setting.declared->find("min"), *maximum = setting.declared->find("max"), *step = setting.declared->find("step");
+            double increment = step ? step->number : 1;
+            if (!step && minimum && maximum && maximum->number > minimum->number &&
+                maximum->number - minimum->number <= 1) {
+                increment = (maximum->number - minimum->number) / 20;
+                if (!(static_cast<float>(increment) > 0)) increment = maximum->number - minimum->number;
+            }
+            result = entry(*binding, setting, Action::number, nullptr, nullptr, item);
+            if (result == TSUCHI_OK) result = ui_screen_add_number(settings_owner, screen, item->control, label.get(),
+                minimum ? minimum->number : -FLT_MAX, maximum ? maximum->number : FLT_MAX,
+                increment, setting.number, setting_number_text);
         } else if (setting.kind == SettingKind::set) {
             const Json* choices = setting.declared->find("choices");
             for (const Json* word = choices->first; result == TSUCHI_OK && word; word = word->next) {
@@ -328,11 +400,11 @@ TSUCHI_Result ui_mod_settings(ModRecord& record, TSUCHI_Screen* out) {
             if (result == TSUCHI_OK && !safe_text(shown, setting.kind == SettingKind::number ? number : setting.text.get())) result = TSUCHI_NO_MEMORY;
             if (result == TSUCHI_OK) result = ui::table.add_text(settings_owner, screen, value_id, label.get(), shown.get());
             shown.clear();
-            const uint32_t buttons = setting.kind == SettingKind::number ? 2 : editor ? 1 : 0;
+            const uint32_t buttons = editor ? 1 : 0;
             for (uint32_t n = 0; result == TSUCHI_OK && n < buttons; ++n) {
                 Texts named; Text button_label;
-                const Action action = setting.kind == SettingKind::number ? n ? Action::more : Action::less : Action::edit;
-                if (!named.add(action == Action::less ? "Decrease " : action == Action::more ? "Increase " : "Edit ", label.get())) result = TSUCHI_NO_MEMORY;
+                const Action action = Action::edit;
+                if (!named.add("Edit ", label.get())) result = TSUCHI_NO_MEMORY;
                 if (result == TSUCHI_OK) result = entry(*binding, setting, action, nullptr, value_id, item);
                 if (result == TSUCHI_OK && !safe_text(button_label, named.first())) result = TSUCHI_NO_MEMORY;
                 if (result == TSUCHI_OK) result = ui::table.add_button(settings_owner, screen, item->control, button_label.get());

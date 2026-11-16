@@ -8,6 +8,8 @@
 namespace tsuchi {
 
 void net_start();
+// The microphone and other players' voices (voice_backend.cpp).
+void voice_start();
 void session_start();
 void session_set_clock(double (*clock)());
 
@@ -31,6 +33,9 @@ void tables_start();
 void text_start();
 // The manifest's "tables" and "text": changes a mod declares, made as it starts. After `mods_start`.
 void declared_start();
+// The manifest's "academy_schedule": the Dandori Academy exam schedule a mod supplies. After `mods_start`.
+void academy_start();
+void academy_hooks_start(TSUCHI_Mod* self);
 // The manifest's "maps": a mod's levels loaded into the game's maps, and the game's actors there removed,
 // moved, or given other values. After `mods_start`.
 void maps_start();
@@ -93,11 +98,13 @@ void map_ai_start(TSUCHI_Mod* self);
 struct AiCounts;
 AiCounts map_ai_counts();
 void hud_start();
+// The watchers on the game's recognizer are the framework's own, so it is given the framework's mod.
+void howlout_start(TSUCHI_Mod* framework);
 void audio_start();
 void effects_start(TSUCHI_Mod* self);
 void world_start();
 void anim_start();
-void story_start();
+void story_start(TSUCHI_Mod* const* framework);
 // Wraps the two calls in which the game sets up a dialog, for the framework's own context. The first is entered
 // through `setup_entry`, which hands on the request the game is setting up from: see `tsuchi_dialog_on_setup`.
 void dialogs_start(TSUCHI_Mod* self, void* setup_entry);
@@ -142,6 +149,13 @@ struct SaveCounts {
 SaveCounts save_counts();
 // How many fields of table rows mods have changed now.
 unsigned table_changes();
+// Tells the tables service of a copy the game keeps of rows of a table: `copy_of` gives, for a table and a row's name,
+// where that row's copy is, or 0. With owner=0 the provider selects the current
+// owner; otherwise it resolves a retained owner's copy, including relocated rows.
+// `owner` is an object handle, not a native pointer. Fields and primitive-array
+// lengths are mirrored. A table and its copy own separate array storage.
+struct TableRowCopy { uint64_t base = 0, owner = 0; };
+void add_row_copies(TableRowCopy (*copy_of)(uint64_t table, uint64_t row, uint64_t owner));
 // How many texts mods have replaced now.
 unsigned text_replacements();
 // How many pauses mods hold now.
@@ -165,6 +179,8 @@ void carry_start(TSUCHI_Mod* self);
 
 // The input service: controllers read once per world step, buttons pressed and hidden, and the keyboard.
 void input_start(TSUCHI_Mod* self);
+// The character service: a captain's or a dog's logical inputs, movement and actions, held by mods.
+void characters_start(TSUCHI_Mod* self);
 // Every button the system says is held, on every controller read at this step, in the system's bit order. 0 before
 // the first step.
 uint64_t input_keys_held();

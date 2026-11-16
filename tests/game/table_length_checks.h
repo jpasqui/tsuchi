@@ -180,6 +180,159 @@ void array_lengths() {
     engine.out_of_memory = false;
     CHECK(tsuchi::table_lengths() == 0 && tsuchi::owned_count(mod) == owned && engine.allocated == allocated && engine.freed == freed);
 
+    // Native Academy-style copies: independent arrays, owners retained while
+    // stashed, all destinations prepared before publication, and late copies.
+    static uint64_t mirror_table = 0, mirror_name = 0, current_owner = 0;
+    static std::map<uint64_t, uint64_t> mirror_rows;
+    mirror_table = lists; mirror_name = row_name(u"FIRST");
+    tsuchi::add_row_copies([](uint64_t table, uint64_t name, uint64_t owner) -> tsuchi::TableRowCopy {
+        if (table != mirror_table || name != mirror_name) return {};
+        const auto handle = owner ? owner : current_owner;
+        const auto found = mirror_rows.find(handle);
+        return found != mirror_rows.end() && tsuchi::game::from_handle(handle) ? tsuchi::TableRowCopy{found->second, handle} : tsuchi::TableRowCopy{};
+    });
+    const uint64_t mirror_object = fake::object(u"ArrayCopyOwner", w.component_class, 0x80);
+    current_owner = to_handle(mirror_object);
+    uint64_t mirror_row = fake::memory(kRowBytes);
+    mirror_rows[current_owner] = mirror_row;
+    const uint64_t mirror_numbers = engine_block(12);
+    for (uint64_t i = 0; i < 3; ++i) fake::put<int32_t>(mirror_numbers + 4 * i, 10 * int32_t(i + 1));
+    const auto mirror_header = [&](uint64_t data, int32_t count) {
+        fake::put(mirror_row + kNumbers + a::data, data);
+        fake::put(mirror_row + kNumbers + a::count, count); fake::put(mirror_row + kNumbers + a::max, count);
+    };
+    const auto mirror_count = [&] { return fake::get<int32_t>(mirror_row + kNumbers + a::count); };
+    const auto mirror_data = [&] { return fake::get<uint64_t>(mirror_row + kNumbers + a::data); };
+    const auto mirror_value = [&](uint32_t i) { return fake::get<int32_t>(mirror_data() + 4 * i); };
+    mirror_header(mirror_numbers, 3);
+    CHECK(!tsuchi::game::object_kept(mirror_object));
+    for (bool framework : {false, true}) {
+        bool completed = false;
+        for (int fail = 0; fail < 96; ++fail) {
+            const auto before_data = data_of(kNumbers), before_mirror = mirror_data();
+            allocated = engine.allocated; freed = engine.freed;
+            engine.fail_after = framework ? -1 : fail;
+            watched_fail_after = framework ? fail : -1;
+            const auto result = sheet.resize(mod, lists_of, "FIRST", "Numbers", 5);
+            engine.fail_after = watched_fail_after = -1;
+            CHECK(result == TSUCHI_NO_MEMORY || result == TSUCHI_OK);
+            if (result == TSUCHI_OK) { completed = true; break; }
+            CHECK(data_of(kNumbers) == before_data && mirror_data() == before_mirror && count_of(kNumbers) == 3 && mirror_count() == 3);
+            CHECK(engine.allocated - allocated == engine.freed - freed && !tsuchi::game::object_kept(mirror_object));
+        }
+        CHECK(completed && count_of(kNumbers) == 5 && mirror_count() == 5 && data_of(kNumbers) != mirror_data());
+        CHECK(tsuchi::game::object_kept(mirror_object) && mirror_value(0) == 10 && mirror_value(4) == 0);
+        CHECK(sheet.restore(mod, lists_of, "FIRST", "Numbers") == TSUCHI_OK && mirror_data() == mirror_numbers && mirror_count() == 3);
+        CHECK(!tsuchi::game::object_kept(mirror_object));
+    }
+    CHECK(sheet.resize(mod, lists_of, "FIRST", "Numbers", 5) == TSUCHI_OK);
+    CHECK(sheet.override(mod, lists_of, "FIRST", "Numbers[4]", &ninety) == TSUCHI_OK && mirror_value(4) == 90);
+    TSUCHI_Mod* mirror_rival = tsuchi::mod_create("tables.copy.rival");
+    CHECK(sheet.resize(mirror_rival, lists_of, "FIRST", "Numbers", 1) == TSUCHI_OK && mirror_count() == 1);
+    CHECK(sheet.resize(mod, lists_of, "FIRST", "Numbers", 6) == TSUCHI_OK && mirror_count() == 1);
+    // A map relocation moves the header, not ownership of its elements.
+    const auto relocated = fake::memory(kRowBytes);
+    std::memcpy(reinterpret_cast<void*>(relocated), reinterpret_cast<void*>(mirror_row), kRowBytes);
+    std::memset(reinterpret_cast<void*>(mirror_row), 0, kRowBytes);
+    mirror_row = relocated; mirror_rows[current_owner] = mirror_row;
+    tsuchi::mod_stop(mirror_rival);
+    CHECK(count_of(kNumbers) == 6 && mirror_count() == 6 && mirror_value(4) == 90);
+    CHECK(sheet.restore(mod, lists_of, "FIRST", "Numbers[4]") == TSUCHI_OK);
+    CHECK(sheet.restore(mod, lists_of, "FIRST", "Numbers") == TSUCHI_OK && mirror_data() == mirror_numbers && mirror_count() == 3);
+    CHECK(!tsuchi::game::object_kept(mirror_object));
+
+    current_owner = 0;
+    CHECK(sheet.resize(mod, lists_of, "FIRST", "Numbers", 5) == TSUCHI_OK);
+    CHECK(sheet.override(mod, lists_of, "FIRST", "Numbers[1]", &ninety) == TSUCHI_OK);
+    const uint64_t late_object = fake::object(u"LateArrayCopyOwner", w.component_class, 0x80);
+    current_owner = to_handle(late_object);
+    mirror_row = fake::memory(kRowBytes); mirror_rows[current_owner] = mirror_row;
+    const uint64_t late_native = engine_block(20);
+    std::memcpy(reinterpret_cast<void*>(late_native), reinterpret_cast<void*>(data_of(kNumbers)), 20);
+    mirror_header(late_native, 5); // the game copied the already modified table
+    tsuchi::frame_begin();
+    CHECK(mirror_count() == 5 && mirror_value(1) == 90 && mirror_data() != late_native && tsuchi::game::object_kept(late_object));
+    const auto stable_data = mirror_data(); allocated = engine.allocated;
+    tsuchi::frame_begin(); tsuchi::frame_begin();
+    CHECK(mirror_data() == stable_data && engine.allocated == allocated); // no per-frame rebuild
+    CHECK(sheet.restore(mod, lists_of, "FIRST", "Numbers") == TSUCHI_OK && mirror_count() == 3 && mirror_value(1) == 90);
+    CHECK(sheet.restore(mod, lists_of, "FIRST", "Numbers[1]") == TSUCHI_OK && mirror_value(1) == 20 && !tsuchi::game::object_kept(late_object));
+
+    // String elements own independent copies, including normalized originals
+    // and all failure points before either array header is published.
+    const uint64_t mirror_words = engine_block(0x10), mirror_word = engine_block(8);
+    std::memcpy(reinterpret_cast<void*>(mirror_word), u"One", 8);
+    fake::put(mirror_words + a::data, mirror_word); fake::put<int32_t>(mirror_words + a::count, 4); fake::put<int32_t>(mirror_words + a::max, 4);
+    fake::put(mirror_row + kWords + a::data, mirror_words); fake::put<int32_t>(mirror_row + kWords + a::count, 1); fake::put<int32_t>(mirror_row + kWords + a::max, 1);
+    const auto mirror_text = [&] {
+        char buffer[32]; uint64_t bytes = 0;
+        CHECK(tsuchi::text_at(row_type, mirror_row, "Words[0]", buffer, sizeof buffer, &bytes) == TSUCHI_OK);
+        return std::string(buffer);
+    };
+    CHECK(sheet.override_text(mod, lists_of, "FIRST", "Words[0]", "Held") == TSUCHI_OK && mirror_text() == "Held");
+    for (bool framework : {false, true}) {
+        bool completed = false;
+        for (int fail = 0; fail < 96; ++fail) {
+            const auto before_source = data_of(kWords), before_copy = fake::get<uint64_t>(mirror_row + kWords + a::data);
+            allocated = engine.allocated; freed = engine.freed;
+            engine.fail_after = framework ? -1 : fail; watched_fail_after = framework ? fail : -1;
+            const auto result = sheet.resize(mod, lists_of, "FIRST", "Words", 3);
+            engine.fail_after = watched_fail_after = -1;
+            CHECK(result == TSUCHI_NO_MEMORY || result == TSUCHI_OK);
+            if (result == TSUCHI_OK) { completed = true; break; }
+            CHECK(data_of(kWords) == before_source && fake::get<uint64_t>(mirror_row + kWords + a::data) == before_copy);
+            CHECK(count_of(kWords) == 1 && fake::get<int32_t>(mirror_row + kWords + a::count) == 1 && mirror_text() == "Held");
+            CHECK(engine.allocated - allocated == engine.freed - freed && !tsuchi::game::object_kept(late_object));
+        }
+        CHECK(completed && mirror_text() == "Held" && fake::get<int32_t>(mirror_row + kWords + a::count) == 3);
+        CHECK(sheet.restore(mod, lists_of, "FIRST", "Words") == TSUCHI_OK && fake::get<uint64_t>(mirror_row + kWords + a::data) == mirror_words);
+    }
+    CHECK(sheet.restore(mod, lists_of, "FIRST", "Words[0]") == TSUCHI_OK && mirror_text() == "One");
+
+    // A removed source row does not strand the surviving native copy's roots.
+    const auto saved_mirror_row = mirror_row;
+    mirror_name = row_name(u"COPY_REMOVED");
+    const auto removed_row = fake::memory(kRowBytes), removed_numbers = engine_block(12), removed_copy = engine_block(12);
+    fake::put(removed_row + kNumbers + a::data, removed_numbers); fake::put<int32_t>(removed_row + kNumbers + a::count, 3); fake::put<int32_t>(removed_row + kNumbers + a::max, 3);
+    sheets.rows[{lists, mirror_name}] = removed_row;
+    mirror_row = fake::memory(kRowBytes); mirror_rows[current_owner] = mirror_row; mirror_header(removed_copy, 3);
+    CHECK(sheet.resize(mod, lists_of, "COPY_REMOVED", "Numbers", 5) == TSUCHI_OK && mirror_count() == 5 && tsuchi::game::object_kept(late_object));
+    sheets.rows.erase({lists, mirror_name});
+    CHECK(sheet.restore(mod, lists_of, "COPY_REMOVED", "Numbers") == TSUCHI_OK && mirror_data() == removed_copy && mirror_count() == 3 && !tsuchi::game::object_kept(late_object));
+    mirror_name = row_name(u"FIRST"); mirror_row = saved_mirror_row; mirror_rows[current_owner] = mirror_row;
+
+    // A foreign header survives stop; neither uncertain storage nor the foreign
+    // array is freed, and this owner/path cannot be acquired again.
+    TSUCHI_Mod* displaced = tsuchi::mod_create("tables.copy.displaced");
+    CHECK(sheet.resize(displaced, lists_of, "FIRST", "Numbers", 5) == TSUCHI_OK);
+    CHECK(sheet.resize(mod, lists_of, "FIRST", "Numbers", 4) == TSUCHI_OK && count_of(kNumbers) == 5 && mirror_count() == 5);
+    const uint64_t foreign = engine_block(4); fake::put<int32_t>(foreign, 777);
+    mirror_header(foreign, 1);
+    // Giving up a say is not refused over a copy another writer took, as stopping is not.
+    CHECK(sheet.restore(mod, lists_of, "FIRST", "Numbers") == TSUCHI_OK && count_of(kNumbers) == 5 && mirror_data() == foreign);
+    CHECK(sheet.resize(displaced, lists_of, "FIRST", "Numbers", 6) == TSUCHI_BUSY && count_of(kNumbers) == 5 && mirror_data() == foreign);
+    tsuchi::mod_stop(displaced);
+    CHECK(data_of(kNumbers) == numbers && count_of(kNumbers) == 3 && mirror_data() == foreign && mirror_value(0) == 777);
+    CHECK(!tsuchi::game::object_kept(late_object));
+    CHECK(sheet.resize(mod, lists_of, "FIRST", "Numbers", 5) == TSUCHI_BUSY && count_of(kNumbers) == 3 && mirror_data() == foreign);
+    fake::destroy(late_object); current_owner = 0; tsuchi::frame_begin();
+    mirror_table = 0; mirror_rows.clear();
+
+    // A stop that finds no memory for the length left in force leaves the array as it was. A later frame puts it
+    // right, and the frames after that find nothing to do.
+    TSUCHI_Mod* starved = tsuchi::mod_create("tables.length.starved");
+    CHECK(tsuchi::table_resize(mod, lists_of, "FIRST", "Numbers", 5) == TSUCHI_OK && tsuchi::table_resize(starved, lists_of, "FIRST", "Numbers", 2) == TSUCHI_OK && count_of(kNumbers) == 2);
+    engine.fail_after = 0;
+    tsuchi::mod_stop(starved);
+    engine.fail_after = -1;
+    CHECK(count_of(kNumbers) == 2 && tsuchi::table_lengths() == 1);
+    tsuchi::frame_begin();
+    CHECK(count_of(kNumbers) == 5 && number_at(2) == 30);
+    allocated = engine.allocated;
+    tsuchi::frame_begin(); tsuchi::frame_begin();
+    CHECK(engine.allocated == allocated);
+    CHECK(tsuchi::table_restore_length(mod, lists_of, "FIRST", "Numbers") == TSUCHI_OK && data_of(kNumbers) == numbers && count_of(kNumbers) == 3);
+
     // The game takes the row away meanwhile: the say is forgotten quietly, and nothing is written.
     CHECK(tsuchi::table_resize(mod, lists_of, "FIRST", "Numbers", 1) == TSUCHI_OK && count_of(kNumbers) == 1);
     const uint64_t left = data_of(kNumbers);

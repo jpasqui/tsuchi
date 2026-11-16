@@ -194,6 +194,8 @@ void take(void* context, const game::Message& message) {
     taken.amount = message.amount;
     taken.attack = message.attack;
     memcpy(taken.vector, message.vector, sizeof taken.vector);
+    taken.press = message.press;
+    memcpy(taken.point, message.point, sizeof taken.point);
     message_listener(taken);
 }
 
@@ -234,6 +236,11 @@ bool keep(const Hold& hold, Held& entry) {
             entry.update_due = false;
         }
     }
+    // Its own update, switched off, made the game's decision whether it sleeps (no player sees it and no Pikmin are
+    // near) or wakes: made here instead, before its body is kept still. A copy held while it slept stayed asleep,
+    // without animation and out of the players' aim, wherever the players went (seen 11-13).
+    if ((entry.parts & kSuspendLogic) && game::table::bound(game::table::fn::actor_sleep_decision) && !game::read_or<uint8_t>(actor + game::table::game_actor::removed))
+        game::table::fn::actor_sleep_decision(reinterpret_cast<void*>(actor));
     if (entry.parts & (kSuspendPhysics | kSuspendCollision)) keep_body(actor, entry);
     if (entry.parts & kSuspendLogic) game::take_messages(actor, take, &actor);
     return true;
@@ -279,6 +286,12 @@ TSUCHI_Result resume_parts(TSUCHI_Mod* mod, uint64_t actor, uint32_t parts) {
 uint32_t suspended_parts(uint64_t actor) {
     const Held* entry = held.find(game::to_handle(actor), 0);
     return entry ? entry->parts : 0;
+}
+
+uint32_t suspended_body(uint64_t actor) {
+    const Held* entry = held.find(game::to_handle(actor), 0);
+    if (!entry) return 0;
+    return (entry->was_simulating ? kSuspendPhysics : 0) | (entry->solid_count ? kSuspendCollision : 0);
 }
 
 void on_message_taken(void (*listener)(const TakenMessage&)) { message_listener = listener; }

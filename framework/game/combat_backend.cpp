@@ -46,6 +46,19 @@ TSUCHI_Result knockback(TSUCHI_Actor victim, const TSUCHI_Vec3* velocity, float 
     return game::send_knock(target, by, thrown, damage);
 }
 
+TSUCHI_Result thrown_hit(TSUCHI_Actor victim, TSUCHI_Actor pikmin, const TSUCHI_Vec3* point, bool press) {
+    const uint64_t target = actor_of(victim), thrower = actor_of(pikmin);
+    if (!target || !thrower) return TSUCHI_NOT_FOUND;
+    if (!game::is_pikmin(thrower)) return TSUCHI_INVALID;
+    const float at[3] = {point->x, point->y, point->z};
+    return game::send_thrown_hit(target, thrower, at, press);
+}
+
+TSUCHI_Result refresh_gauge(TSUCHI_Actor creature, float seconds, bool show) {
+    const uint64_t target = actor_of(creature);
+    return target ? game::refresh_gauge(target, seconds, show) : TSUCHI_NOT_FOUND;
+}
+
 TSUCHI_Result kill_pikmin(TSUCHI_Actor pikmin, TSUCHI_DeathCause cause, TSUCHI_Actor killer) {
     const uint64_t target = game::from_handle(pikmin.id), by = killer.id ? actor_of(killer) : 0;
     if (!game::is_pikmin(target) || (killer.id && !by)) return TSUCHI_NOT_FOUND;
@@ -55,10 +68,11 @@ TSUCHI_Result kill_pikmin(TSUCHI_Actor pikmin, TSUCHI_DeathCause cause, TSUCHI_A
 // Something a suspended actor was sent, as it is taken from the actor.
 void taken(const TakenMessage& message) {
     combat::emit_intercepted({{game::to_handle(message.actor)}, {message.sender ? game::to_handle(message.sender) : 0}, TSUCHI_MessageKind(uint32_t(message.kind)),
-                              message.amount, message.attack, {message.vector[0], message.vector[1], message.vector[2]}});
+                              message.amount, message.attack, {message.vector[0], message.vector[1], message.vector[2]}, message.press,
+                              {message.point[0], message.point[1], message.point[2]}});
 }
 
-const combat::Backend service{get_life, set_life, damage, knockback, kill_pikmin};
+const combat::Backend service{get_life, set_life, damage, knockback, thrown_hit, kill_pikmin, refresh_gauge};
 
 } // namespace
 

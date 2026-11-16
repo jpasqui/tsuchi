@@ -14,6 +14,12 @@
 #include "objects.h"
 #include "mods.h"
 #include "cost_clock.h"
+#include "packages.h"
+#include "ui_cheats.h"
+#include "ui_mod_page.h"
+#include "actors.h"
+#include "reflect.h"
+#include "frame.h"
 namespace tsuchi { namespace {
 TSUCHI_Mod* frontend_mod = nullptr;
 uint64_t current_host = 0, previous_buttons = UINT64_MAX;
@@ -49,10 +55,47 @@ List<Row> rows;
 uint32_t native_rows = 0;
 TSUCHI_Screen detail{}, settings{};
 TSUCHI_Dialog question{};
-enum class Question { none, dependency, save, defaults };
+enum class Question { none, dependency, save, defaults, remove };
 Question asking = Question::none;
 bool restart_needed = false, detail_external = false, external_overflow = false;
 char selected[kModIdBytes]{}, caption[641]{}, status[641]{};
+CheatMenu cheats;                // a mod's cheats, opened from its details
+char removing[33]{};             // the folder of the package a question asks to remove
+// A mod's entry on the page: a row after the mods, which Confirm chooses. One for each mod. An entry released
+// while the page shows keeps its row, with no mod, until the page is made again.
+constexpr uint32_t kEntries = 8, kEntryIdBytes = 64, kEntryLabelBytes = 81;
+struct Entry { TSUCHI_Mod* mod; char id[kEntryIdBytes], label[kEntryLabelBytes], owner[kModIdBytes]; };
+struct Chosen { TSUCHI_Mod* mod; char id[kEntryIdBytes]; };
+List<Entry> entries;
+List<Chosen> chosen;
+uint32_t shown_entries = 0;      // how many of them the page showing now has
+bool leaving = false;            // the page on its own is to close: the game's own Back goes through
+bool screen_up() { return detail.id || settings.id || cheats.showing(); }
+// A mod's own page over the menus (ui.hold_menu_input): while it holds their input, and after it lets go
+// until every button is up, the list and the title menu act on no press, and the game is shown no button at
+// all. The pause menu closes on Plus and Minus by a path of its own, which only hiding them stops.
+TSUCHI_Mod* input_holder = nullptr;
+bool input_quiet = false, buttons_hidden = false;
+// Ends the quiet after a release once nothing is down, and shows the game its buttons again.
+void settle_input() {
+    if (input_holder && !mod_usable(input_holder)) { input_holder = nullptr; input_quiet = true; }
+    if (!input_quiet || input_holder) return;
+    uint64_t down = 0;
+    // Without a reading of the controller, the press that released it may still be down: one step more.
+    if (buttons_hidden && ui_native_buttons_down(down) && down) return;
+    if (buttons_hidden) { ui_native_hide_buttons(false); buttons_hidden = false; }
+    input_quiet = false;
+}
+// A dialog on the screen, the game's own or any mod's, takes the presses. The list acts on none of them, nor
+// on the Confirm that closed it until that is let go.
+bool confirm_spent = false;
+bool dialog_up() {
+    namespace t = game::table;
+    if (!t::present(t::ui_manager::open_dialog)) return false;
+    const uint64_t framework = game::game_framework();
+    const uint64_t screens = framework ? game::read_or<uint64_t>(framework + t::game_framework::ui) : 0;
+    return screens && game::read_or<uint64_t>(screens + t::ui_manager::open_dialog) != 0;
+}
 bool live() { return frontend_mod && mod_usable(frontend_mod) && current_host; }
 // Plain labels cannot smuggle stock rich-text markup. Keep the stored data exact.
 void plain(const char* text, char out[641], uint32_t limit = 637) {
@@ -79,6 +122,15 @@ bool ordering() {
         rows[j] = row;
     }
     native_rows = rows.count;
+    // The entries of mods that stopped or let go of theirs leave here, between two pages. The ones that
+    // stay have their rows before the external packages are counted in: a full list drops packages, not entries.
+    for (uint32_t i = 0; i < entries.count;)
+        if (!entries[i].mod || !mod_usable(entries[i].mod)) {
+            for (uint32_t j = i; j + 1 < entries.count; ++j) entries[j] = entries[j + 1];
+            --entries.count;
+        } else ++i;
+    shown_entries = 0;
+    while (shown_entries < entries.count && rows.count + shown_entries < game::table::constant::ui_mod_list_rows_limit) ++shown_entries;
     for (uint32_t i = 0; i < external_mods().count(); ++i) {
         auto* record = external_mods().at(i);
         if (find_mod(record->id)) {
@@ -86,7 +138,7 @@ bool ordering() {
             record->requested = record->saved = record->observed == ExternalModState::enabled;
             if (!record->problem.set("A Tsuchi mod uses this ID. Import this external package with another ID.")) return false;
         }
-        if (rows.count < game::table::constant::ui_mod_list_rows_limit) {
+        if (rows.count + shown_entries < game::table::constant::ui_mod_list_rows_limit) {
             if (!rows.add({nullptr, record})) return false;
         } else external_overflow = true;
     }
@@ -122,14 +174,20 @@ const char* external_description(const ExternalModEntry& record) {
         return "Apply with manager";
     return observed(record);
 }
-uint32_t count() { return rows.count; } // the mods alone: B offers to save or discard a draft
+uint32_t count() { return rows.count + shown_entries; } // the mods, then the mods' entries
 bool row(uint32_t index, UiModListRow& out) {
     if (!live()) return false;
+    if (index >= rows.count && index - rows.count < shown_entries) {
+        const Entry& entry = entries[index - rows.count];
+        plain(entry.label, caption, 300);
+        out = {entry.owner, caption, false, "", false, true};
+        return true;
+    }
     if (index < rows.count) {
         if (rows[index].native) {
             auto& record = *rows[index].native; plain(record.name.get()[0] ? record.name.get() : record.id, caption, 300);
             plain(description(record), status, 300);
-            out = {record.id, caption, manager.draft().enabled(record.id), status, record.settings.list.count != 0};
+            out = {record.id, caption, manager.draft().enabled(record.id), status, has_visible_settings(record.settings)};
         } else {
             auto& record = *rows[index].external; plain(record.name.get()[0] ? record.name.get() : record.id, caption, 300);
             plain(external_description(record), status, 300);
@@ -143,6 +201,12 @@ void note(const char* message) {
     TSUCHI_Dialog ignored{}; dialog::table.message(frontend_mod, message, &ignored);
 }
 void sync() { if (live() && ui_mod_list_native_active(current_host)) ui_mod_list_native_sync(current_host); }
+// Leaves the list: for the Game tab in Settings, and out of the page when it is on its own. There the game's
+// own Back closes it, sent from the next input step that the menu takes it in.
+void leave(uint64_t host) {
+    if (ui_mod_page_alone()) leaving = true;
+    else ui_mod_list_native_release(host);
+}
 void ask(Question kind, const char* text) {
     if (!live() || asking != Question::none) return;
     TSUCHI_Dialog requested{};
@@ -170,7 +234,7 @@ void close_detail() {
     if (old.id && frontend_mod && mod_usable(frontend_mod)) ui::table.destroy(frontend_mod, old);
 }
 void show_detail(ModRecord& record) {
-    if (!live() || detail.id || settings.id) return;
+    if (!live() || screen_up()) return;
     TSUCHI_Screen screen{}; plain(record.name.get(), caption);
     TSUCHI_Result result = ui::table.create(frontend_mod, caption[0] ? caption : record.id, &screen);
     plain(description(record), status);
@@ -179,14 +243,25 @@ void show_detail(ModRecord& record) {
     if (result == TSUCHI_OK && record.problem.get()[0]) {
         plain(record.problem.get(), status); result = ui::table.add_text(frontend_mod, screen, "reason", "Reason", status);
     }
+    // A mod from a downloaded package says which, and the package can be removed here.
+    const package_store::Receipt* package = package_holding(record.id);
+    if (result == TSUCHI_OK && package) {
+        plain(package->title, caption, 300); plain(package->release, status, 300);
+        if (status[0]) { const size_t n = strlen(caption); if (n + 2 + strlen(status) < sizeof caption) { caption[n] = ' '; memcpy(caption + n + 1, status, strlen(status) + 1); } }
+        result = ui::table.add_text(frontend_mod, screen, "package", "Package", caption);
+        plain(package->source, status, 300);
+        if (result == TSUCHI_OK) result = ui::table.add_text(frontend_mod, screen, "source", "Source", status);
+    }
     if (result == TSUCHI_OK) result = ui::table.add_button(frontend_mod, screen, "earlier", "Move earlier");
     if (result == TSUCHI_OK) result = ui::table.add_button(frontend_mod, screen, "later", "Move later");
+    if (result == TSUCHI_OK && mod_has_cheats(record.id)) result = ui::table.add_button(frontend_mod, screen, "cheats", "Cheats");
+    if (result == TSUCHI_OK && package) result = ui::table.add_button(frontend_mod, screen, "remove", "Remove package");
     if (result == TSUCHI_OK) result = ui::table.hold_open(frontend_mod, screen);
     if (result == TSUCHI_OK && live()) { detail = screen; memcpy(selected, record.id, strlen(record.id) + 1); }
     else if (screen.id && mod_usable(frontend_mod)) ui::table.destroy(frontend_mod, screen);
 }
 void show_external_detail(const ExternalModEntry& record) {
-    if (!live() || detail.id || settings.id) return;
+    if (!live() || screen_up()) return;
     TSUCHI_Screen screen{}; plain(record.name.get(), caption);
     TSUCHI_Result result = ui::table.create(frontend_mod, caption[0] ? caption : record.id, &screen);
     const char* kind = record.kind == ExternalModKind::romfs ? "RomFS files" :
@@ -227,8 +302,28 @@ void show_external_detail(const ExternalModEntry& record) {
     } else if (screen.id && mod_usable(frontend_mod)) ui::table.destroy(frontend_mod, screen);
 }
 void activated(void*, const TSUCHI_UiActivated* event) {
+    if (live() && cheats.showing() && event->screen.id == cheats.screen().id) { cheats.activate(*event); return; }
     if (!live() || event->screen.id != detail.id || detail_external) return;
     auto* record = find_mod(selected); if (!record) { close_detail(); return; }
+    if (!strcmp(event->control, "cheats")) {
+        char id[kModIdBytes]; memcpy(id, record->id, strlen(record->id) + 1);
+        close_detail();
+        if (cheats.open(frontend_mod, id) != TSUCHI_OK) note("The cheats could not be shown.");
+        return;
+    }
+    if (!strcmp(event->control, "remove")) {
+        const package_store::Receipt* package = package_holding(record->id);
+        if (!package) return;
+        memcpy(removing, package->folder, sizeof removing);
+        close_detail();
+        plain(package->title, caption, 300);
+        char question[400] = "Remove the package ";
+        const char* tail = "? Its mods stop loading at the next start.";
+        const size_t used = strlen(question), n = strlen(caption), m = strlen(tail);
+        if (used + n + m < sizeof question) { memcpy(question + used, caption, n); memcpy(question + used + n, tail, m + 1); }
+        ask(Question::remove, question);
+        return;
+    }
     uint32_t index = 0; while (index < native_rows && rows[index].native != record) ++index;
     const char* before = nullptr;
     if (!strcmp(event->control, "earlier") && index && index < native_rows) before = rows[index - 1].native->id;
@@ -240,7 +335,12 @@ void activated(void*, const TSUCHI_UiActivated* event) {
         for (uint32_t i = 0; i < native_rows; ++i) if (rows[i].native == record) ui_mod_list_native_focus(current_host, i);
     } else note("The order could not be changed.");
 }
+void changed(void*, const TSUCHI_UiChoiceChanged* event) {
+    if (live() && cheats.showing()) cheats.change(*event);
+}
+void cheats_step() { if (live() && cheats.showing()) cheats.refresh(); else if (!live() && cheats.showing()) cheats.close(); }
 void closed(void*, const TSUCHI_UiClosed* event) {
+    if (cheats.showing() && event->screen.id == cheats.screen().id) cheats.close();
     if (event->screen.id == detail.id) close_detail();
     if (event->screen.id == settings.id) settings = {};
 }
@@ -248,6 +348,17 @@ void answered(void*, const TSUCHI_DialogAnswered* event) {
     if (!live() || event->dialog.id != question.id || asking == Question::none) return;
     const auto kind = asking; asking = Question::none; question = {};
     if (kind == Question::dependency) { if (event->accepted) manager.confirm(); else manager.cancel(); }
+    else if (kind == Question::remove) {
+        if (event->accepted) {
+            // The package by its folder: the list may have changed while the question was up.
+            TSUCHI_Result removed = TSUCHI_NOT_FOUND;
+            for (uint32_t i = 0; i < installed_package_count(); ++i)
+                if (!strcmp(installed_package(i)->folder, removing)) { removed = remove_installed_package(i); break; }
+            note(removed == TSUCHI_OK ? "Removed. Its mods stop loading when Pikmin 4 restarts." :
+                 removed == TSUCHI_BUSY ? "A download is running. Remove the package when it ends." : "The package could not be removed.");
+        }
+        removing[0] = 0;
+    }
     else if (kind == Question::defaults) {
         if (event->accepted) {
             if (manager.defaults() != TSUCHI_OK) note(manager.problem()[0] ? manager.problem() : "The defaults could not be restored.");
@@ -283,23 +394,34 @@ void answered(void*, const TSUCHI_DialogAnswered* event) {
             }
             external_mods().discard(); ordering();
         }
-        ui_mod_list_native_release(current_host);
+        leave(current_host);
         return;
     }
     sync();
 }
 bool selected_action(uint64_t host, uint32_t index, uint32_t action, bool requested) {
-    if (!live() || host != current_host || asking != Question::none || detail.id || settings.id) return false;
+    if (!live() || host != current_host || asking != Question::none || screen_up()) return false;
     if (action == 5) {
         if (external_mods().unread()) { note("Saved requests unread; reopen Mods."); return true; }
         if (manager.changed() || external_mods().changed()) ask(Question::save, external_mods().changed() ?
             "Save choices and external requests?" :
             "Save changes for the next restart?");
-        else ui_mod_list_native_release(host);
+        else leave(host);
         return true;
     }
     if (action == 7) { ask(Question::defaults, "Restore default mod activation and order?"); return true; }
-    if (index >= rows.count) return true;
+    if (index >= rows.count) {
+        // A mod's entry: Confirm chooses it, and its mod hears of it at the next frame.
+        if (action == 4 && index - rows.count < shown_entries) {
+            const Entry& entry = entries[index - rows.count];
+            if (entry.mod && mod_usable(entry.mod) && chosen.reserve(chosen.count + 1)) {
+                Chosen pick{entry.mod, {}};
+                memcpy(pick.id, entry.id, sizeof pick.id);
+                chosen.add(pick);
+            }
+        }
+        return true;
+    }
     if (rows[index].external) {
         auto& record = *rows[index].external;
         if (action == 2 || action == 3) {
@@ -316,7 +438,7 @@ bool selected_action(uint64_t host, uint32_t index, uint32_t action, bool reques
         const auto result = manager.propose(record.id, requested);
         if (result == TSUCHI_OK) { if (manager.pending()) review(); else sync(); }
         else note(manager.problem()[0] ? manager.problem() : "This mod cannot be enabled.");
-    } else if (action == 4 && record.settings.list.count) {
+    } else if (action == 4 && has_visible_settings(record.settings)) {
         TSUCHI_Screen screen{};
         if (ui_mod_settings(record, &screen) == TSUCHI_OK) {
             if (live() && ui::table.hold_open(frontend_mod, screen) == TSUCHI_OK) settings = screen;
@@ -344,20 +466,26 @@ bool keep(const Hold&, HoldNothing&) { return live(); }
 void restore(const Hold& hold, HoldNothing&, HoldEnd) {
     if (current_host != hold.object) return;
     current_host = 0; asking = Question::none; question = {}; previous_buttons = UINT64_MAX;
-    close_detail(); if (settings.id && mod_usable(frontend_mod)) ui::table.destroy(frontend_mod, settings);
+    close_detail(); cheats.close(); if (settings.id && mod_usable(frontend_mod)) ui::table.destroy(frontend_mod, settings);
     settings = {}; selected[0] = 0; rows.clear(); native_rows = 0; manager.cleanup(); external_mods().discard();
+    shown_entries = 0; leaving = false;
 }
 Holds<HoldNothing, HoldNothing, apply, keep, restore> sessions{"ui.mods", HoldOn::object, true};
 void ready(uint64_t host) {
     if (!frontend_mod || !mod_usable(frontend_mod)) return;
     if (current_host && current_host != host) sessions.release(frontend_mod, current_host, 0);
     sessions.take(frontend_mod, host, 0, {});
+    // On its own the page shows the list from its first picture, and the game's settings never.
+    if (ui_mod_page_alone() && current_host == host && !ui_mod_list_native_active(host)) ui_mod_list_native_hold(host);
 }
 void lost(uint64_t host) { if (current_host == host) sessions.release(frontend_mod, host, 0); }
 bool dispatch(uint64_t host, uint32_t action, bool& handled, bool& result) {
+    if (input_holder || input_quiet) { handled = true; result = true; return true; }   // the mod's page has the presses
     if (!live() || host != current_host || asking != Question::none) return false;
+    if (leaving && action == 5) return false;   // the game's own Back, which closes the page
     if (action == 100 || action == 101) {
-        handled = true; result = ui_mod_list_native_cycle(host, action == 101) == TSUCHI_OK;
+        // On its own the page has no other tab to go to.
+        handled = true; result = ui_mod_page_alone() || ui_mod_list_native_cycle(host, action == 101) == TSUCHI_OK;
         return true;
     }
     if (ui_active_screen()) return false;
@@ -367,9 +495,21 @@ void buttons(uint64_t held) {
     namespace t = game::table;
     const uint64_t previous = previous_buttons, edges = held & ~previous;
     previous_buttons = held; ++tab_input_sample;
+    const bool was_quiet = input_quiet;
+    if (!buttons_hidden && input_quiet && !input_holder && held) { confirm_spent = true; return; }   // not hidden: wait for all up here
+    settle_input();
+    if (input_holder || input_quiet || was_quiet) { confirm_spent = true; return; }
     const bool frontend_live = live();
+    if (leaving && frontend_live && asking == Question::none && !screen_up() && !dialog_up()) {
+        // Sent until the menu takes it in: a message over the page keeps the menu's input for a while.
+        if (ui_menu_action(current_host, 5)) leaving = false;
+        return;
+    }
+    const bool dialog = frontend_live && dialog_up();
+    if (dialog) confirm_spent = true;
+    else if (!(held & t::constant::ui_confirm_button)) confirm_spent = false;
     const uint32_t gates = uint32_t(!frontend_live) | (asking != Question::none ? 2u : 0u) |
-        (detail.id ? 4u : 0u) | (settings.id ? 8u : 0u);
+        (detail.id ? 4u : 0u) | (settings.id ? 8u : 0u) | (cheats.showing() ? 16u : 0u) | (dialog ? 32u : 0u);
     const bool tracing = current_host && tab_session_traces < 12 && tab_input_traces < 48 &&
         (previous == UINT64_MAX || ((held | previous) & t::constant::ui_next_tab_button));
     TabInputTrace trace{};
@@ -386,7 +526,7 @@ void buttons(uint64_t held) {
         if (edges & t::constant::ui_next_tab_button) action = 100;
         else if (edges & t::constant::ui_previous_tab_button) action = 101;
         else if ((edges & t::constant::ui_details_button) && ui_mod_list_native_active(current_host)) action = 102;
-        else if ((edges & t::constant::ui_confirm_button) && ui_mod_list_native_active(current_host)) action = 4;
+        else if ((edges & t::constant::ui_confirm_button) && !confirm_spent && ui_mod_list_native_active(current_host)) action = 4;
         if (action) {
             const bool result = ui_menu_action(current_host, action);
             trace.action = action; trace.attempted = true; trace.result = result;
@@ -394,7 +534,91 @@ void buttons(uint64_t held) {
     }
     if (tracing) tab_input_trace(trace);
 }
+// The mods' entries on the page, through the calls that add an entry to one of the game's menus. Those of the
+// other menus go on to their own adapter.
+using HoldEntry = TSUCHI_Result (*)(TSUCHI_Mod*, TSUCHI_Menu, const char*, const char*, const char*);
+using ReleaseEntry = TSUCHI_Result (*)(TSUCHI_Mod*, TSUCHI_Menu, const char*);
+HoldEntry next_hold_entry = nullptr;
+ReleaseEntry next_release_entry = nullptr;
+bool text_fits(const char* text, size_t most) {
+    char16_t units[301]; size_t made = 0;
+    return text && strlen(text) <= most && game::utf8_to_units(text, units, 300, made);
+}
+TSUCHI_Result hold_entry(TSUCHI_Mod* mod, TSUCHI_Menu menu, const char* id, const char* text, const char* description) {
+    if (menu != TSUCHI_MENU_MODS) return next_hold_entry ? next_hold_entry(mod, menu, id, text, description) : TSUCHI_UNSUPPORTED;
+    if (!mod || !id || !text || !description || !id[0] || !text[0] || !text_fits(id, kEntryIdBytes - 1) ||
+        !text_fits(text, kEntryLabelBytes - 1) || !text_fits(description, 300)) return TSUCHI_INVALID;
+    uint32_t held = 0;
+    for (uint32_t i = 0; i < entries.count; ++i) {
+        if (entries[i].mod != mod) { held += entries[i].mod ? 1 : 0; continue; }
+        if (strcmp(entries[i].id, id)) return TSUCHI_CAPACITY;   // one entry for each mod
+        memcpy(entries[i].label, text, strlen(text) + 1);
+        sync();
+        return TSUCHI_OK;
+    }
+    const char* owner = nullptr;
+    for (uint32_t i = 0; i < mod_count() && !owner; ++i) if (mod_at(i)->context == mod) owner = mod_at(i)->id;
+    if (!owner) return TSUCHI_INVALID;
+    if (held >= kEntries || !entries.reserve(entries.count + 1)) return TSUCHI_CAPACITY;
+    Entry entry{mod, {}, {}, {}};
+    memcpy(entry.id, id, strlen(id) + 1); memcpy(entry.label, text, strlen(text) + 1); memcpy(entry.owner, owner, strlen(owner) + 1);
+    entries.add(entry);
+    return TSUCHI_OK;
+}
+TSUCHI_Result release_entry(TSUCHI_Mod* mod, TSUCHI_Menu menu, const char* id) {
+    if (menu != TSUCHI_MENU_MODS) return next_release_entry ? next_release_entry(mod, menu, id) : TSUCHI_UNSUPPORTED;
+    if (!mod || !id) return TSUCHI_INVALID;
+    for (uint32_t i = 0; i < entries.count; ++i)
+        if (entries[i].mod == mod && !strcmp(entries[i].id, id)) { entries[i].mod = nullptr; return TSUCHI_OK; }
+    return TSUCHI_NOT_FOUND;
+}
+// Each frame: the cheat screen, and the entries chosen since the last one.
+void page_step() {
+    cheats_step();
+    if (!chosen.count) return;
+    Chosen picks[4]; uint32_t count = 0;
+    for (uint32_t i = 0; i < chosen.count && count < 4; ++i) picks[count++] = chosen[i];
+    chosen.count = 0;
+    for (uint32_t i = 0; i < count; ++i)
+        if (mod_usable(picks[i].mod)) ui::emit_entry_chosen_to(picks[i].mod, {TSUCHI_MENU_MODS, picks[i].id});
+}
+// Tsuchi's own entry in the title menu opens the page on its own.
+constexpr char kTitleEntry[] = "mods";
+void entry_chosen(void*, const TSUCHI_UiEntryChosen* event) {
+    if (event->menu != TSUCHI_MENU_TITLE || strcmp(event->entry, kTitleEntry)) return;
+    if (ui_mod_page_open() != TSUCHI_OK) mod_note(kFrameworkLogId, "The Mods page did not open from the title menu.");
+}
+// ui.hold_menu_input and its release.
+TSUCHI_Result hold_menu_input(TSUCHI_Mod* mod) {
+    if (!mod) return TSUCHI_INVALID;
+    if (input_holder && mod_usable(input_holder)) return input_holder == mod ? TSUCHI_OK : TSUCHI_BUSY;
+    // Hidden where an input service can: the list and the title menu are quiet either way. Another mod's
+    // presses or hides on that controller would leave the game its buttons, so then nothing is held.
+    if (!buttons_hidden) {
+        const TSUCHI_Result hidden = ui_native_hide_buttons(true);
+        if (hidden == TSUCHI_BUSY) return TSUCHI_BUSY;
+        buttons_hidden = hidden == TSUCHI_OK;
+    }
+    input_holder = mod; input_quiet = false;
+    return TSUCHI_OK;
+}
+TSUCHI_Result release_menu_input(TSUCHI_Mod* mod) {
+    if (!mod || input_holder != mod) return TSUCHI_NOT_FOUND;
+    input_holder = nullptr; input_quiet = true;
+    return TSUCHI_OK;
+}
+// ui.open_mods: the page on its own from the title menu, and the Mods tab while Settings takes input.
+TSUCHI_Result open_mods() {
+    if (!frontend_mod || !mod_usable(frontend_mod)) return TSUCHI_NOT_READY;
+    if (live() && ui_mod_list_native_host() == current_host) {
+        if (asking != Question::none || screen_up() || ui_active_screen()) return TSUCHI_BUSY;
+        if (ui_mod_list_native_active(current_host)) return TSUCHI_OK;
+        return ui_mod_list_native_show(current_host);
+    }
+    return ui_mod_page_open();
+}
 } // namespace
+bool ui_menu_input_held() { return (input_holder && mod_usable(input_holder)) || input_quiet; }
 void ui_mod_list_start(TSUCHI_Mod* framework) {
     frontend_mod = framework; restart_needed = false; sessions.start();
     const UiModListNativeCallbacks callbacks{count, row, selected_action, ready, lost};
@@ -402,7 +626,21 @@ void ui_mod_list_start(TSUCHI_Mod* framework) {
     TSUCHI_Subscription subscription{};
     ui::table.on_activated(frontend_mod, activated, nullptr, &subscription);
     ui::table.on_closed(frontend_mod, closed, nullptr, &subscription);
+    ui::table.on_choice_changed(frontend_mod, changed, nullptr, &subscription);
+    each_frame(page_step);
     dialog::table.on_answered(frontend_mod, answered, nullptr, &subscription);
     ui_mod_list_native_start(frontend_mod);
+    auto& backend = ui_screen_backend();
+    if (backend.hold_menu_entry != hold_entry) {
+        next_hold_entry = backend.hold_menu_entry; next_release_entry = backend.release_menu_entry;
+        backend.hold_menu_entry = hold_entry; backend.release_menu_entry = release_entry;
+    }
+    backend.open_mods = open_mods;
+    backend.hold_menu_input = hold_menu_input; backend.release_menu_input = release_menu_input;
+    ui::set_backend(&backend);
+    // The title menu's own adapter takes the entry where this build has one.
+    if (next_hold_entry && ui_mod_page_supported() && ui::table.hold_menu_entry(frontend_mod, TSUCHI_MENU_TITLE, kTitleEntry, "Mods",
+            "Turn mods on or off and change their settings.") == TSUCHI_OK)
+        ui::table.on_entry_chosen(frontend_mod, entry_chosen, nullptr, &subscription);
 }
 } // namespace tsuchi

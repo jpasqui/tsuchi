@@ -100,6 +100,15 @@ inline bool function(Gateway& out, uint64_t at, uint32_t word, uint64_t gateway,
     return replay(out, word, at, gateway, 4);
 }
 
+inline bool call(Gateway& out, uint64_t thunk) {
+    // The patched BL has already supplied the call site's return address.
+    // IP0 is caller-saved across this call, as at a function-entry gateway.
+    out.words[0] = 0x58000050; // LDR x16, +8
+    out.words[1] = 0xd61f0200; // BR x16
+    memcpy(&out.words[2], &thunk, 8);
+    return true;
+}
+
 inline bool inline_hook(Gateway& out, uint64_t at, uint32_t word, uint64_t gateway, uint64_t shared) {
     out.words[0] = 0xa9bf43fe; // STP x30, x16, [sp, #-16]!
     if (!branch(gateway + 4, shared, out.words[1], true)) return false;

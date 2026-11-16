@@ -156,11 +156,34 @@ class MultiBuild(unittest.TestCase):
         self.refused(past_code, 'past the end of the code')
         self.refused(fixed_differs, 'is fixed')
 
-    def test_absent_is_for_a_build_and_for_what_can_go(self):
-        def in_base(raw, build):
+    def test_the_base_build_can_lack_what_a_later_build_has(self):
+        def later(raw, build):
+            raw['data']['world'] = 'absent'
+            build['data']['world'] = 0x1234
             raw['functions']['spawn_now']['address'] = 'absent'
+            build['functions']['spawn_now'] = 0x2468
+            raw['structs']['game_actor']['fields']['color'] = 'absent'
+            site = raw['code_sites']['draw_call']
+            build['code_sites']['draw_call'] = {key: site[key] for key in ('address', 'instruction') if key in site}
+        layout = self.layout(later)
+        builds = game_table.load_builds(layout.table)
+        families = game_table.load_families(layout.table, builds[0])
+        self.assertIn('world', game_table.absent_families(builds[0], families, 'base'))
+        self.assertIn('other', game_table.absent_families(builds[0], families, 'base'))
+        self.assertNotIn('world', game_table.absent_families(builds[1], families, 'made-up'))
+        game_table.generate(layout.table)
+
+    def test_a_missing_function_that_returns_by_value_is_null(self):
         def by_value(raw, build):
             build['functions']['text_from_string'] = 'absent'
+        header = game_table.generate(self.layout(by_value).table)['framework/game_table.h']
+        bind = next(line for line in header.splitlines() if line.strip().startswith('fn::text_from_string ='))
+        self.assertIn('== absent_value ? nullptr :', bind)
+        self.assertIn('if constexpr (by_value<R>::value) return function != nullptr;', header)
+
+    def test_absent_is_for_a_build_and_for_what_can_go(self):
+        def in_base(raw, build):
+            raw['code_sites']['draw_call']['absent'] = True
         def core_file(raw, build):
             build['data']['status_words'] = 'absent'
         def buffer(raw, build):
@@ -168,7 +191,6 @@ class MultiBuild(unittest.TestCase):
         def where_code_is(raw, build):
             build['constants']['stub_base'] = 'absent'
         self.refused(in_base, 'only a build file')
-        self.refused(by_value, 'by value cannot be absent')
         self.refused(core_file, 'the framework does not run without it')
         self.refused(buffer, 'a buffer of its own')
         self.refused(where_code_is, '.')
@@ -323,6 +345,13 @@ class MultiBuild(unittest.TestCase):
         text = (ROOT / 'framework/target/module.cpp').read_text(encoding='utf-8')
         for key in ('maps', 'content', 'new_maps', 'shaders'):
             self.assertIn(f'add_manifest_key_off("{key}", t::families[t::family::{key}])', text)
+        self.assertIn('add_manifest_key_off("academy_schedule", t::families[t::family::academy])', text)
+
+    def test_only_the_switch_2_edition_has_the_academy(self):
+        builds = game_table.load_builds(TABLE)
+        families = game_table.load_families(TABLE, builds[0])
+        served = {build['key'] for build in builds if 'academy' not in game_table.absent_families(build, families, build['key'])}
+        self.assertEqual(served, {'sw2'})
 
     def test_a_guarded_entry_takes_no_family(self):
         table = game_table.load(TABLE)
@@ -354,7 +383,8 @@ class MultiBuild(unittest.TestCase):
         self.assertIn(f'constexpr unsigned build_count = {len(builds)};', header)
         self.assertEqual(stubs.patch_hash(builds[0]), stubs.patch_hash(table))
         self.assertEqual(stubs.cells(builds[0]), stubs.cells(table))
-        self.assertEqual(table['absent'], [])
+        # What it lacks is only what a later build has: globals, structure fields and functions, never a site or a slot.
+        self.assertTrue(all(at.startswith(('data.', 'structs.', 'functions.')) for at in table['absent']), table['absent'])
         self.assertEqual(build_patch.patch_names(table), ('exefs/1.1.1.pchtxt', 'ips/060F827BD2B38703E9EA11E3210D89BC.ips'))
 
     def test_fixed_and_most(self):
@@ -430,7 +460,7 @@ class MultiBuild(unittest.TestCase):
         raw = yaml.safe_load(TABLE.read_text(encoding='utf-8'))
         build = complete_build(raw)
         for body in build['structs'].values():
-            if 'size' in body:
+            if isinstance(body.get('size'), int):  # a size the base table has; one only later builds have stays absent
                 body['size'] += 0x40
         build['functions']['kill_actor'] = 'absent'
         build['structs']['clock_table']['fields']['day'] = 'absent'

@@ -162,7 +162,128 @@ TSUCHI_Result reset(TSUCHI_Mod* mod, const char* key) {
     return changed(result, is_other, *record, *setting);
 }
 
-const settings::Backend service{toggle, integer, number, text, has, set_toggle, set_integer, set_number, set_text, set_has, reset};
+TSUCHI_Result controllers(TSUCHI_Mod* mod, const char* key, char* buffer, uint64_t capacity, uint64_t* out) {
+    Setting* setting = nullptr;
+    const TSUCHI_Result result = readable(mod, key, setting);
+    if (result != TSUCHI_OK) return result;
+    *out = strlen(setting_controllers(*setting)) + 1;
+    if (capacity < *out) return TSUCHI_CAPACITY;
+    memcpy(buffer, setting_controllers(*setting), *out);
+    return TSUCHI_OK;
+}
+
+const Kind kIntegerRange{"settings.integer_range"};
+void forget_integer_range(void* context, uint64_t) { static_cast<Setting*>(context)->ranged = false; }
+TSUCHI_Result set_integer_range(TSUCHI_Mod* mod, const char* key, int64_t minimum, int64_t maximum) {
+    ModRecord* record = nullptr; Setting* setting = nullptr;
+    TSUCHI_Result result = changeable(mod, key, record, setting);
+    if (result != TSUCHI_OK) return result;
+    // Validate before recording ownership, and publish only after that succeeds.
+    Setting proposed = *setting; bool changed_range = false;
+    result = set_setting_integer_range(proposed, minimum, maximum, changed_range);
+    if (result != TSUCHI_OK || !changed_range) return result;
+    const uint64_t identity = reinterpret_cast<uint64_t>(setting);
+    if (!ownership_update_allowed(mod, kIntegerRange, identity)) return TSUCHI_BUSY;
+    result = own(mod, kIntegerRange, identity, forget_integer_range, setting, true);
+    if (result != TSUCHI_OK) return result;
+    setting->ranged = true; setting->runtime_minimum = minimum; setting->runtime_maximum = maximum;
+    ++counts.changes; told.add(record->id, ":", setting->key());
+    return TSUCHI_OK;
+}
+
+struct RuntimeHold {
+    RuntimeHold* next;
+    ModRecord* target;
+    Setting* setting;
+    TSUCHI_Mod* mod;
+    uint64_t id;
+    Json value;
+    char controller[kModIdBytes];
+};
+RuntimeHold* runtime_holds = nullptr;
+uint64_t next_runtime_hold = 1;
+const Kind kRuntimeHold{"settings.hold"};
+void tell_runtime(ModRecord& target, const Setting& setting) {
+    ++counts.changes;
+    if (target.state == ModState::running) told.add(target.id, ":", setting.key());
+}
+RuntimeHold* runtime_hold(uint64_t id) {
+    for (auto* held = runtime_holds; held; held = held->next) if (held->id == id) return held;
+    return nullptr;
+}
+void forget_runtime_hold(void* context, uint64_t) {
+    auto* held = static_cast<RuntimeHold*>(context);
+    RuntimeHold** at = &runtime_holds;
+    while (*at && *at != held) at = &(*at)->next;
+    if (*at) *at = held->next;
+    if (held->setting->held_value == &held->value) {
+        held->setting->held_value = nullptr; held->setting->held_controller = nullptr;
+        tell_runtime(*held->target, *held->setting);
+    }
+    release(held);
+}
+TSUCHI_Result scalar(const Setting& setting, const TSUCHI_Value* value, Json& out) {
+    out = {};
+    if (!value) return TSUCHI_INVALID;
+    if (setting.kind == SettingKind::toggle && value->kind == TSUCHI_VALUE_BOOLEAN) {
+        out.kind = Json::Kind::boolean; out.boolean = value->as.boolean;
+    } else if (setting.kind == SettingKind::integer && value->kind == TSUCHI_VALUE_INTEGER) {
+        out.kind = Json::Kind::number; out.whole = true; out.integer = value->as.integer; out.number = double(out.integer);
+    } else if (setting.kind == SettingKind::number &&
+               (value->kind == TSUCHI_VALUE_NUMBER || value->kind == TSUCHI_VALUE_INTEGER)) {
+        out.kind = Json::Kind::number;
+        out.number = value->kind == TSUCHI_VALUE_INTEGER ? double(value->as.integer) : value->as.number;
+    } else return TSUCHI_INVALID;
+    return setting_value_allowed(setting, out) ? TSUCHI_OK : TSUCHI_INVALID;
+}
+TSUCHI_Result hold(TSUCHI_Mod* mod, const char* key, const TSUCHI_Value* value, TSUCHI_SettingHold* out) {
+    ModRecord* target = nullptr; Setting* setting = nullptr;
+    auto result = find(mod, key, target, setting);
+    if (result != TSUCHI_OK) return result;
+    const ModRecord* source = record_of(mod);
+    const Json* required = source && source->manifest ? source->manifest->find("requires") : nullptr;
+    if (!source || (target->context != mod && (!required || !required->find(target->id))) ||
+        setting->hidden || !setting->overridable) return TSUCHI_DENIED;
+    if (setting->override_value || setting->held_value) return TSUCHI_BUSY;
+    Json wanted{};
+    result = scalar(*setting, value, wanted);
+    if (result != TSUCHI_OK) return result;
+    auto* held = static_cast<RuntimeHold*>(allocate(sizeof(RuntimeHold)));
+    if (!held) return TSUCHI_NO_MEMORY;
+    *held = {}; held->target = target; held->setting = setting; held->mod = mod;
+    held->value = wanted; held->id = next_runtime_hold++;
+    memcpy(held->controller, source->id, strlen(source->id) + 1);
+    result = own(mod, kRuntimeHold, held->id, forget_runtime_hold, held, true);
+    if (result != TSUCHI_OK) { release(held); return result; }
+    held->next = runtime_holds; runtime_holds = held;
+    setting->held_value = &held->value; setting->held_controller = held->controller;
+    out->id = held->id; tell_runtime(*target, *setting);
+    return TSUCHI_OK;
+}
+TSUCHI_Result update_hold(TSUCHI_Mod* mod, TSUCHI_SettingHold handle, const TSUCHI_Value* value) {
+    auto* held = runtime_hold(handle.id);
+    if (!held) return TSUCHI_NOT_FOUND;
+    if (held->mod != mod) return TSUCHI_DENIED;
+    if (!ownership_update_allowed(mod, kRuntimeHold, handle.id) || held->setting->override_value) return TSUCHI_BUSY;
+    Json wanted{};
+    const auto result = scalar(*held->setting, value, wanted);
+    if (result != TSUCHI_OK) return result;
+    if (!setting_values_equal(*held->setting, held->value, wanted)) {
+        held->value = wanted; tell_runtime(*held->target, *held->setting);
+    }
+    return TSUCHI_OK;
+}
+TSUCHI_Result release_hold(TSUCHI_Mod* mod, TSUCHI_SettingHold handle) {
+    auto* held = runtime_hold(handle.id);
+    if (!held) return TSUCHI_NOT_FOUND;
+    if (held->mod != mod) return TSUCHI_DENIED;
+    if (!ownership_update_allowed(mod, kRuntimeHold, handle.id)) return TSUCHI_BUSY;
+    const auto result = disown(mod, kRuntimeHold, handle.id);
+    if (result == TSUCHI_OK) forget_runtime_hold(held, handle.id);
+    return result;
+}
+
+const settings::Backend service{toggle, integer, number, text, has, set_toggle, set_integer, set_number, set_text, set_has, reset, controllers, set_integer_range, hold, update_hold, release_hold};
 
 // ---- Keeping the values in the save ---------------------------------------------------------------
 
@@ -210,6 +331,7 @@ void write_values(ModRecord& record) {
 void before_start(ModRecord& record) { read_values(record, false); }
 
 void step() {
+    refresh_setting_overrides();
     // What changed since the last frame is told first. A handler may change more, which is told next frame.
     Texts telling = told;
     told = Texts{};
@@ -233,6 +355,7 @@ void step() {
 void settings_start() {
     settings::set_backend(&service);
     set_before_start(before_start);
+    set_setting_override_changed([](ModRecord& record, const Setting& setting) { arrived_late(setting, &record); });
     each_frame(step);
 }
 

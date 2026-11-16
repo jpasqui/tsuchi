@@ -39,6 +39,27 @@ TSUCHI_Result validate_graph(const ModChoices& choices, Text& problem) {
     }
     for (uint32_t i = 0; i < nodes.count; ++i) {
         const ModRecord& record = *nodes[i].record;
+        const Json* overrides = section(record, "settings_overrides");
+        for (const Json* target = overrides ? overrides->first : nullptr; target; target = target->next) {
+            ModRecord* provider = find_mod(target->name);
+            for (const Json* value = target->first; value; value = value->next) {
+                const Setting* setting = provider ? find_setting(provider->settings, value->name) : nullptr;
+                if (!present(provider, choices) || !setting || !setting->overridable || !setting_value_allowed(*setting, *value)) {
+                    Texts reason;
+                    const bool kept = reason.add("Invalid settings override: ", target->name, ":", value->name) && problem.set(reason.data);
+                    reason.clear(); nodes.clear(); return kept ? TSUCHI_INVALID : TSUCHI_NO_MEMORY;
+                }
+                for (uint32_t j = 0; j < i; ++j) {
+                    const Json* other = section(*nodes[j].record, "settings_overrides");
+                    other = other ? other->find(target->name) : nullptr;
+                    other = other ? other->find(value->name) : nullptr;
+                    if (!other || setting_values_equal(*setting, *other, *value)) continue;
+                    Texts reason;
+                    const bool kept = reason.add("Conflicting settings overrides: ", target->name, ":", value->name) && problem.set(reason.data);
+                    reason.clear(); nodes.clear(); return kept ? TSUCHI_INVALID : TSUCHI_NO_MEMORY;
+                }
+            }
+        }
         const Json* conflicts = section(record, "conflicts");
         for (const Json* other = conflicts ? conflicts->first : nullptr; other; other = other->next)
             if (present(find_mod(other->text), choices)) {

@@ -2,6 +2,26 @@
 -- actor 3 is a creature with 500.
 local olimar, louie, bulborb = test.actor(1), test.actor(2), test.actor(3)
 
+-- Request methods, binary bodies, targeted completion, and response bytes pass
+-- through the real generated Lua binding and service glue.
+local request, completed = nil, 0
+local payload = "{\0\195\169}"
+local subscription = net.on_completed(function(event)
+    assert(event.request == request and event.state == "succeeded" and event.http_status == 200)
+    assert(net.request_info(request).received == #payload)
+    assert(net.read(request, 0, 16) == payload)
+    assert(net.release_request(request))
+    completed = completed + 1
+end)
+for _, method in ipairs({"post", "put", "patch", "remove"}) do
+    request = assert(net.request(method, "https://example.org/runs",
+        "Content-Type: application/json\r\nAuthorization: Bearer fixture\r\n", payload, 65536, 1000))
+    assert(net.request_info(request).state == "queued")
+    assert(test.request_done(request))
+end
+assert(completed == 4)
+subscription:cancel()
+
 -- World targets use the same empty handle the native Look contract accepts.
 local point = {x=1,y=2,z=3}
 assert(camera.hold_look(0,{point=point}))
@@ -113,6 +133,25 @@ assert(combat.damage(louie, 1) and handler_calls == 1)
 
 -- Steps and pictures. The host runs three frames after this script returns, and checks these. A step tells
 -- its number and no time; the picture that follows it tells the time, and is all the way at the step.
+local academy_order = ""
+local academy_open = academy.on_opened(function(e) assert(e.widget ~= nil); academy_order = academy_order .. "O" end)
+local academy_delivered = academy.on_period_delivered(function(e) assert(e.period == 11); academy_order = academy_order .. "D" end)
+local academy_unlocked = academy.on_period_unlocked(function(e) assert(e.period == 10); academy_order = academy_order .. "U" end)
+academy.on_exam_started(function(e)
+  assert(e.course == 71 and e.timed == true)
+  academy_order = academy_order .. "S"
+end)
+local academy_finish = academy.on_exam_finished(function(e)
+  assert(e.course == 71 and e.score == 12 and e.elapsed == 12.75 and e.timed == true)
+  assert(e.medal == "king" and e.cleared == false)
+  academy_order = academy_order .. "F"
+end)
+test.academy_events()
+assert(academy_order == "ODUSF")
+academy_open:cancel(); academy_delivered:cancel(); academy_unlocked:cancel(); academy_finish:cancel()
+test.academy_events()
+assert(academy_order == "ODUSFS") -- start remains subscribed for the mod-stop check
+
 frames_seen, steps_at_last_frame, last_frame_number, pictures_seen = 0, 0, 0, 0
 time.on_step(function(step)
   assert(pictures_seen == frames_seen and step.seconds == nil)

@@ -1,6 +1,7 @@
 // The command queue is deliberately asynchronous. These are host checks, not audio measurements.
 #include "fake_game.h"
 #include "audio_parameters.h"
+#include "audio_bus_binding.h"
 #include "audio_service.h"
 #include "frame.h"
 #include "hooks.h"
@@ -13,6 +14,11 @@
 #include <map>
 #include <string>
 #include <vector>
+
+// Native mods built with the preceding audio service retain their four slots.
+static_assert(offsetof(TSUCHI_AudioService, hold_parameter) == offsetof(TSUCHI_AudioService, parameter) + sizeof(void*));
+static_assert(offsetof(TSUCHI_AudioService, release_parameter) == offsetof(TSUCHI_AudioService, hold_parameter) + sizeof(void*));
+static_assert(offsetof(TSUCHI_AudioService, hold_bus_volume) > offsetof(TSUCHI_AudioService, release_parameter));
 
 using namespace tsuchi;
 namespace t = game::table;
@@ -506,6 +512,241 @@ void test_public_service_composition() {
     assert(audio::table.play_on(owner, {0x1234}, "") == TSUCHI_INVALID && actor_sounds == before + 2);
     mod_stop(owner);
 }
+
+// Bus callbacks exercise the shipped backend and real ownership/Term observers.
+// The made-up table changes every field offset from the original executables.
+uint64_t bus_manager = 0, bus_entries = 0;
+unsigned main_locks = 0, bus_locks = 0, registrations = 0;
+uint32_t register_result = 1;
+using BusCallback = void (*)(void*);
+using BusPoint = audio_bus_binding::Point;
+struct NativeCurve { uint32_t id, parameter; BusPoint points[4]; };
+struct NativeBus {
+    uint64_t node = 0, subscription = 0, entries = 0, graphs[4]{};
+    unsigned references = 0;
+    std::vector<NativeCurve> curves;
+};
+std::map<uint32_t, NativeBus> native_buses;
+uint32_t bind_result = 1, missing_bus = 0;
+bool partial_bind = false;
+unsigned bindings = 0, unbindings = 0;
+NativeBus& bus_from_node(uint64_t node) {
+    for (auto& entry : native_buses) if (entry.second.node == node) return entry.second;
+    assert(false); return native_buses.begin()->second;
+}
+void sync_curves(NativeBus& bus) {
+    assert(bus.curves.size() <= 4);
+    fake::put<uint64_t>(bus.subscription + t::wwise_bus_subscription::curves, bus.entries);
+    fake::put<uint32_t>(bus.subscription + t::wwise_bus_subscription::count, uint32_t(bus.curves.size()));
+    for (size_t i = 0; i < bus.curves.size(); ++i) {
+        const uint64_t entry = bus.entries + i * t::wwise_bus_curve::size;
+        const auto& curve = bus.curves[i];
+        fake::put<uint32_t>(entry + t::wwise_bus_curve::id, curve.id);
+        fake::put<uint32_t>(entry + t::wwise_bus_curve::parameter, curve.parameter);
+        fake::put<uint64_t>(entry + t::wwise_bus_curve::points, bus.graphs[i]);
+        fake::put<uint32_t>(entry + t::wwise_bus_curve::point_count, 4);
+        fake::put<uint32_t>(entry + t::wwise_bus_curve::scaling, 0);
+        std::memcpy(reinterpret_cast<void*>(bus.graphs[i]), curve.points, sizeof curve.points);
+    }
+}
+uint64_t native_get_bus(uint64_t index, uint32_t id, uint32_t type) {
+    assert(main_locks && bus_locks && index == 0x12345678 && type == 1);
+    if (id == missing_bus) return 0;
+    auto& bus = native_buses[id];
+    if (!bus.node) {
+        bus.node = fake::memory(0x100); bus.subscription = fake::memory(0x100);
+        bus.entries = fake::memory(4 * t::wwise_bus_curve::size);
+        for (auto& graph : bus.graphs) graph = fake::memory(4 * sizeof(BusPoint));
+        sync_curves(bus);
+    }
+    ++bus.references; return bus.node;
+}
+int32_t native_release_bus(uint64_t node) {
+    auto& bus = bus_from_node(node); assert(main_locks && bus.references); return int32_t(--bus.references);
+}
+uint64_t native_subscription(uint64_t rtpc, uint64_t subscriber, uint32_t property) {
+    assert(main_locks && rtpc == instance && property == 5);
+    auto& bus = bus_from_node(subscriber - t::wwise_bus_node::subscriber);
+    return bus.curves.empty() ? 0 : bus.subscription;
+}
+uint32_t native_bind_curve(uint64_t node, uint32_t parameter, uint32_t type, uint32_t accumulation,
+                           uint32_t property, uint32_t curve, uint32_t scaling, void* data, uint32_t count, bool notify) {
+    assert(main_locks && bus_locks && type == 0 && accumulation == 2 && property == 5 && scaling == 0 && count == 2 && notify);
+    assert(curve == parameter); ++bindings;
+    const auto* points = static_cast<BusPoint*>(data);
+    assert(points[0].x == 0 && points[1].x == 1 && points[0].y == 0 && points[1].y == 0);
+    auto& bus = bus_from_node(node);
+    if (bind_result == 1 || partial_bind) {
+        for (const auto& old : bus.curves) assert(old.id != curve);
+        bus.curves.push_back({curve, parameter, {{-FLT_MAX,0,9},points[0],points[1],{FLT_MAX,0,9}}});
+        sync_curves(bus);
+    }
+    return bind_result;
+}
+void native_unbind_curve(uint64_t node, uint32_t property, uint32_t curve) {
+    assert(main_locks && bus_locks && property == 5); ++unbindings;
+    auto& bus = bus_from_node(node);
+    for (size_t i = 0; i < bus.curves.size(); ++i) if (bus.curves[i].id == curve) {
+        bus.curves.erase(bus.curves.begin() + i); sync_curves(bus); return;
+    }
+    assert(false);
+}
+uint32_t bus_count() { return fake::get<uint32_t>(bus_manager + t::wwise_bus_callbacks::count); }
+uint64_t bus_entry(uint32_t at) { return bus_entries + uint64_t(at) * t::wwise_bus_callback_entry::size; }
+BusCallback registered(uint32_t bus) {
+    for (uint32_t i = 0; i < bus_count(); ++i)
+        if (fake::get<uint32_t>(bus_entry(i) + t::wwise_bus_callback_entry::bus) == bus)
+            return reinterpret_cast<BusCallback>(fake::get<uint64_t>(bus_entry(i) + t::wwise_bus_callback_entry::callback));
+    return nullptr;
+}
+void bus_lock(void* pointer) {
+    const auto address = reinterpret_cast<uint64_t>(pointer);
+    if (address == fake::main_image() + t::data::wwise_main_lock) { assert(!bus_locks || main_locks); ++main_locks; }
+    else { assert(address == bus_manager + t::wwise_bus_callbacks::mutex && main_locks); ++bus_locks; }
+}
+void bus_unlock(void* pointer) {
+    if (reinterpret_cast<uint64_t>(pointer) == fake::main_image() + t::data::wwise_main_lock) { assert(main_locks && !bus_locks); --main_locks; }
+    else { assert(bus_locks && main_locks); --bus_locks; }
+}
+uint32_t register_bus(uint32_t bus, void* function) {
+    assert(main_locks && bus_locks); ++registrations;
+    bus_lock(reinterpret_cast<void*>(bus_manager + t::wwise_bus_callbacks::mutex)); // recursive native setter
+    if (register_result != 1) { bus_unlock(reinterpret_cast<void*>(bus_manager + t::wwise_bus_callbacks::mutex)); return register_result; }
+    uint32_t count = bus_count(), at = count;
+    for (uint32_t i = 0; i < count; ++i)
+        if (fake::get<uint32_t>(bus_entry(i) + t::wwise_bus_callback_entry::bus) == bus) at = i;
+    if (!function && at < count) {
+        --count;
+        if (at != count) std::memcpy(reinterpret_cast<void*>(bus_entry(at)), reinterpret_cast<void*>(bus_entry(count)), t::wwise_bus_callback_entry::size);
+    } else if (function) {
+        assert(at < 128);
+        if (at == count) ++count;
+        fake::put<uint32_t>(bus_entry(at) + t::wwise_bus_callback_entry::bus, bus);
+        fake::put<uint64_t>(bus_entry(at) + t::wwise_bus_callback_entry::callback, reinterpret_cast<uint64_t>(function));
+    }
+    fake::put<uint32_t>(bus_manager + t::wwise_bus_callbacks::count, count);
+    bus_unlock(reinterpret_cast<void*>(bus_manager + t::wwise_bus_callbacks::mutex));
+    return 1;
+}
+float outgoing(uint32_t bus, float input) {
+    const auto function = registered(bus);
+    if (!function) return input;
+    // Native Wwise flattens a bus with no BusVolume binding. Registering a
+    // callback alone then succeeds but does not change its audible output.
+    if (native_buses[bus].curves.empty()) return input;
+    unsigned char info[128]{};
+    auto* value = &input;
+    std::memcpy(info + t::wwise_volume_callback::base_volume, &value, sizeof value);
+    function(info);
+    return input;
+}
+void foreign_bus_callback(void*) {}
+void replace_native_bus(uint32_t bus) {
+    bus_lock(reinterpret_cast<void*>(fake::main_image() + t::data::wwise_main_lock));
+    bus_lock(reinterpret_cast<void*>(bus_manager + t::wwise_bus_callbacks::mutex));
+    assert(register_bus(bus, reinterpret_cast<void*>(foreign_bus_callback)) == 1);
+    bus_unlock(reinterpret_cast<void*>(bus_manager + t::wwise_bus_callbacks::mutex));
+    bus_unlock(reinterpret_cast<void*>(fake::main_image() + t::data::wwise_main_lock));
+}
+void test_bus_volume() {
+    bus_manager = fake::memory(0x100);
+    bus_entries = fake::memory(128 * t::wwise_bus_callback_entry::size);
+    fake::put<uint64_t>(fake::main_image() + t::data::wwise_bus_callback_manager, bus_manager);
+    fake::put<uint64_t>(bus_manager + t::wwise_bus_callbacks::entries, bus_entries);
+    t::fn::lock_mutex = bus_lock; t::fn::unlock_mutex = bus_unlock;
+    t::fn::wwise_register_bus_volume_callback = register_bus;
+    fake::put<uint64_t>(fake::main_image() + t::data::wwise_index, 0x12345678);
+    t::fn::wwise_get_bus = native_get_bus;
+    t::fn::wwise_release_bus = native_release_bus;
+    t::fn::wwise_bus_subscription = native_subscription;
+    t::fn::wwise_bind_bus_curve = native_bind_curve;
+    t::fn::wwise_unbind_bus_curve = native_unbind_curve;
+    audio_bus_volumes_start(framework);
+    auto* owner = make_mod(); auto* other = make_mod();
+    assert(audio::table.hold_bus_volume(owner, 0, 1) == TSUCHI_INVALID);
+    for (float value : {-0.1f, 1.1f, std::numeric_limits<float>::infinity(), std::numeric_limits<float>::quiet_NaN()})
+        assert(audio::table.hold_bus_volume(owner, 11, value) == TSUCHI_INVALID);
+    initialized = false;
+    assert(audio::table.hold_bus_volume(owner, 11, 0.5f) == TSUCHI_NOT_READY);
+    initialized = true;
+    missing_bus = 11;
+    assert(audio::table.hold_bus_volume(owner, 11, 0.5f) == TSUCHI_NOT_FOUND && !owned_count(owner));
+    missing_bus = 0;
+    bind_result = 52; partial_bind = true;
+    assert(audio::table.hold_bus_volume(owner, 11, 0.5f) == TSUCHI_NO_MEMORY && !owned_count(owner));
+    assert(native_buses[11].curves.empty());
+    bind_result = 1; partial_bind = false;
+    register_result = 52;
+    assert(audio::table.hold_bus_volume(owner, 11, 0.5f) == TSUCHI_NO_MEMORY && !owned_count(owner));
+    register_result = 1;
+    assert(audio::table.hold_bus_volume(owner, 11, 0.5f) == TSUCHI_OK);
+    assert(owned_count(owner) == 1 && outgoing(11, 0.8f) == 0.4f && outgoing(12, 0.8f) == 0.8f);
+    assert(audio::table.hold_bus_volume(other, 11, 0.8f) == TSUCHI_BUSY);
+    const unsigned before = registrations;
+    for (unsigned i = 0; i < 20; ++i) step();
+    assert(registrations == before); // Successful callbacks stay installed without native rewrites.
+    assert(audio::table.hold_bus_volume(owner, 11, 0) == TSUCHI_OK && outgoing(11, 0.8f) == 0);
+    assert(audio::table.hold_bus_volume(owner, 11, 1) == TSUCHI_OK && outgoing(11, 0.8f) == 0.8f);
+    assert(registrations == before);
+    assert(audio::table.release_bus_volume(other, 11) == TSUCHI_NOT_FOUND);
+    assert(audio::table.release_bus_volume(owner, 11) == TSUCHI_OK && !registered(11) && !owned_count(owner));
+    assert(native_buses[11].curves.empty());
+
+    const uint32_t marker = hash_name("tsuchi_bus_volume_neutral");
+    auto foreign_marker = [&] (uint32_t bus) {
+        const uint64_t node = native_buses[bus].node;
+        assert(node);
+        native_buses[bus].curves = {{marker, marker + 1, {{-FLT_MAX,0,9},{0,0,4},{1,0,4},{FLT_MAX,0,9}}}};
+        sync_curves(native_buses[bus]);
+    };
+    foreign_marker(11);
+    assert(audio::table.hold_bus_volume(owner, 11, 0.5f) == TSUCHI_BUSY);
+    assert(native_buses[11].curves.size() == 1 && !registered(11));
+    native_buses[11].curves.clear(); sync_curves(native_buses[11]);
+    // An unrelated stock/native curve is retained byte-for-byte through a hold.
+    const NativeCurve unrelated{marker + 3, marker + 4, {{-FLT_MAX,0,9},{0,0,4},{1,0,4},{FLT_MAX,0,9}}};
+    native_buses[11].curves.push_back(unrelated); sync_curves(native_buses[11]);
+    assert(audio::table.hold_bus_volume(owner, 11, 0.5f) == TSUCHI_OK && native_buses[11].curves.size() == 2);
+    assert(audio::table.release_bus_volume(owner, 11) == TSUCHI_OK);
+    assert(native_buses[11].curves.size() == 1 && std::memcmp(&native_buses[11].curves[0], &unrelated, sizeof unrelated) == 0);
+    native_buses[11].curves.clear(); sync_curves(native_buses[11]);
+    assert(audio::table.hold_bus_volume(owner, 11, 0.5f) == TSUCHI_OK);
+    foreign_marker(11); // A later native writer using the marker must also survive cleanup.
+    assert(audio::table.release_bus_volume(owner, 11) == TSUCHI_OK);
+    assert(native_buses[11].curves.size() == 1 && native_buses[11].curves[0].parameter == marker + 1);
+    native_buses[11].curves.clear(); sync_curves(native_buses[11]);
+    assert(audio::table.hold_bus_volume(owner, 17, 0.5f) == TSUCHI_OK);
+    native_buses[17].curves.clear(); sync_curves(native_buses[17]); // unload/reload with the same node address
+    step(); assert(outgoing(17, 0.8f) == 0.4f && native_buses[17].curves.size() == 1);
+    assert(audio::table.release_bus_volume(owner, 17) == TSUCHI_OK && native_buses[17].curves.empty());
+
+    replace_native_bus(12);
+    assert(audio::table.hold_bus_volume(owner, 12, 0.5f) == TSUCHI_BUSY && registered(12) == foreign_bus_callback);
+    assert(audio::table.hold_bus_volume(owner, 13, 0.25f) == TSUCHI_OK);
+    replace_native_bus(13); // A writer replacing our callback must survive release and stop.
+    assert(audio::table.release_bus_volume(owner, 13) == TSUCHI_OK && registered(13) == foreign_bus_callback);
+
+    assert(audio::table.hold_bus_volume(owner, 14, 0) == TSUCHI_OK);
+    const auto paused_callback = registered(14);
+    initialized = false; mod_stop(owner);
+    assert(registered(14) == paused_callback && outgoing(14, 0.8f) == 0.8f);
+    initialized = true; step(); assert(!registered(14));
+
+    assert(audio::table.hold_bus_volume(other, 15, 0) == TSUCHI_OK);
+    assert(intercepted_term); intercepted_term();
+    // The replacement deliberately reuses every native address. Its foreign callback stays.
+    fake::put<uint32_t>(bus_manager + t::wwise_bus_callbacks::count, 0);
+    for (auto& bus : native_buses) { bus.second.curves.clear(); sync_curves(bus.second); }
+    initialized = true; replace_native_bus(15); step();
+    assert(registered(15) == foreign_bus_callback && !owned_count(other));
+    assert(audio::table.hold_bus_volume(other, 15, 0.5f) == TSUCHI_BUSY);
+    for (uint32_t bus = 100; bus < 164; ++bus)
+        assert(audio::table.hold_bus_volume(other, bus, 0.5f) == TSUCHI_OK);
+    assert(audio::table.hold_bus_volume(other, 164, 0.5f) == TSUCHI_CAPACITY);
+    mod_stop(other);
+    assert(bus_count() == 1 && registered(15) == foreign_bus_callback && !main_locks && !bus_locks);
+    for (const auto& bus : native_buses) assert(bus.second.references == 0);
+}
 } // namespace
 
 namespace tsuchi {
@@ -565,6 +806,7 @@ int main() {
     test_publication_identity_during_native_calls();
     test_public_service_composition();
     test_restarted_mod_keeps_its_hold();
+    test_bus_volume();
     settle(); assert(pending.empty()); mod_stop(framework);
     std::puts("audio parameters: asynchronous acceptance, ownership, restoration, drain and engine identity passed");
 }

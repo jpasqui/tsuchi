@@ -11,6 +11,55 @@ identity:
   hash: 17676423334391457610
 data:
   script_natives: absent
+  options_direction_delegate_table: 124569840
+  options_input_delegate_table: 124569952
+  dialog_answer_yes: 134277568
+  dialog_answer_no: 134277576
+  dialog_answer_cancel: 134277560
+  title_answer_load: 134213120
+  save_slot_paths: 134262984
+  dialog_answer_return: 134275168
+  academy_points_session_gate: 0x36765e8
+  academy_points_provider_gate: 0x36765f4
+  academy_points_blocked_gate: 0x36765fc
+  academy_time_session_gate: 0x367a7c8
+  academy_time_provider_gate: 0x367a7d4
+  academy_time_blocked_gate: 0x367a7dc
+  academy_board_apply: 0x39318c0
+  academy_local_launch_callback_table: 0x76c0958
+  academy_local_launch_callback_invoke: 0x3c6d210
+  academy_local_retry_callback_table: 0x76c0640
+  academy_local_retry_callback_invoke: 0x3c6bd40
+  academy_score_ready_table: 0x75d02a8
+  academy_score_ready_invoke: 0x3683f00
+  academy_local_course_details: 0x3c57a30
+  academy_local_course_refresh: 0x3c57200
+  academy_local_preflight: 0x364cea0
+  academy_local_provider_gate: 0x3c581e4
+  academy_local_admission_gate: 0x3c56d88
+  academy_local_schedule_refresh: 0x37355e0
+  academy_local_callback_table: 0x76c07f0
+  academy_local_callback_invoke: 0x3c6c720
+  academy_board_request: 0x37392b0
+  academy_exam_finish_site: 0x377c95c
+  academy_exam_points_start_site: 0x3675804
+  academy_exam_time_start_site: 0x3679690
+  academy_menu_update_entry: 0x76c87c0
+  academy_upload_table: 0x75e2c50
+  academy_score_request: 0x3739960
+  academy_score_task_update: 0x36750f0
+  academy_score_response_table: 0x75d02f0
+  academy_score_response_invoke: 0x36840d0
+  academy_delivery_update: 0x3735e90
+  academy_delivery_entry: 0x3736a2c
+  dialog_result_table: absent
+  dialog_result_header: absent
+  title_input_delegate_table: 124590576
+  title_direction_delegate_table: 124590464
+  academy_schedule: 134226088
+  wwise_index: 133583064
+  wwise_bus_callback_manager: 133583176
+  wwise_main_lock: 133583312
   wwise_audio_manager: 133583072
   wwise_parameter_manager: 133583128
   ui_select_sound: 134123088
@@ -87,6 +136,46 @@ data:
   content_icon_size: 134350656
 constants:
   script_end_parms: 22
+  academy_points_session_instruction: 0x54000ae1
+  academy_points_provider_instruction: 0x54000a81
+  academy_points_blocked_instruction: 0x37000a4a
+  academy_time_session_instruction: 0x54000181
+  academy_time_provider_instruction: 0x54000121
+  academy_time_blocked_instruction: 0x370000ea
+  academy_local_provider_instruction: 0x36000328
+  academy_local_admission_instruction: 0x36000a60
+  academy_local_idle_phase: 3
+  academy_local_refresh_success: 1
+  academy_hook_pac: 0xd503237f
+  academy_board_answered: 1
+  academy_status_open: 0
+  academy_status_between_exams: 1
+  academy_status_ended: 2
+  academy_status_upcoming: 3
+  academy_status_unavailable: 4
+  academy_points_rule: 4
+  academy_time_rule: 5
+  academy_exam_start_instruction: 0xfd4013e8
+  academy_exam_finish_instruction: 0xb9402269
+  academy_blocked_result: 0x30141
+  academy_blocked_detail: 0xffffffff
+  options_entry_icon: 0
+  options_row_pitch: 117
+  options_up_key: 0
+  options_down_key: 1
+  options_last_stock: 3
+  title_flow_players_wait: 0x30
+  title_flow_menu: 2
+  title_flow_story: 6
+  fade_out_in_front: 3
+  fade_role_title: 1
+  play_mode_one: 1
+  dialog_result_message: 0x45
+  title_confirm_key: 0x16
+  title_back_key: 0x17
+  title_menu_state: 5
+  game_menu_presenter: 82
+  game_menu_settings_page: 2
   stream_block_load: 128
   stream_source_cdo: 16
   physics_dynamic_kind: 6
@@ -179,6 +268,7 @@ constants:
   pause_blocks_travel: 2147421195
   request_from_menu: 4
   leave_request_id: 16
+  travel_request_id: 0xF
   portal_request_id: 11
   dialog_question: 21
   dialog_message: 94
@@ -211,6 +301,7 @@ constants:
   team_story: 4
   sort_dog: 4
   state_carcass: 16
+  state_target_collection: 512
   dismiss_keep_none: 16
   play_mode_two: 2
   pad_none: 7
@@ -240,6 +331,10 @@ constants:
   mutex_ready: 1
   shader_map_registered: 1
   listed_pikmin_types: 8
+  widget_visible: 0
+  texture_format_bgra8: 2
+  texture_not_offline_processed: 16
+  bulk_data_read_write: 2
   widget_collapsed: 1
   widget_hidden: 2
   collision_records_most: 128
@@ -268,6 +363,140 @@ constants:
   effect_spawn_blocked: 2097664
   ui_keyboard_characters: 31
 structs:
+  slate_brush:
+    size: 0x88
+    fields: {resource: 0x48, resource_handle: 0x70}
+  options_button: {fields: {look: 0x4D8, look_bytes: 0x15}}
+  options_presenter: {fields: {input: 0x78, view: 0x80}}
+  game_menu_presenter: {fields: {view: 0x90}}
+  presenter_table: {fields: {reset: 0x318}}
+  options_view: {fields: {state: 0x4D8, buttons: 0x4F8, count: 0x500, room: 0x504, selected: 0x508}}
+  title_flow: {fields: {state: 0xD8, answered: 0xE8, answer: 0xEC, slot: 0xF4}}
+  academy_local_presenter:
+    fields: {widget: 0x80, phase: 0xcb, busy: 0x73}
+  academy_local_callback:
+    fields: {target: 32, presenter: 8}
+  academy_local_callback_table:
+    fields: {invoke: 48}
+  academy_local_ready_callback_table:
+    fields: {invoke: 48}
+  academy_local_reply:
+    size: 40
+    fields: {state: 0, owned_data: 24}
+  dialog_result: {size: absent, fields: {self: absent, header: absent, message: absent, dialog_kind: absent, as_flow: absent}}
+  title_presenter: {fields: {cursor: 0x80, view: 0x88, input: 0xA8, state: 0xB0}}
+  title_view: {fields: {description: 0x570, buttons: 0x578, count: 0x580, room: 0x584, hidden_select: 0x5EB, hide: 0x5EC, hidden: 0x5F0, hidden_other: 0x5F4}}
+  title_button: {fields: {id: 0x300, label: 0x528, mark: 0x540}}
+  title_input: {fields: {data: 0xC8, count: 0xD0, capacity: 0xD4}}
+  title_handler: {fields: {key: 0x0, instance: 0x8, kind: 0x10, presenter_index: 0x18, presenter_serial: 0x1C, function: 0x20, zero: 0x28}}
+  academy_schedule:
+    fields:
+      interface: 16
+      boards: 0x250
+      status: 72
+      record: 672
+      valid: 680
+      set: 688
+      latest: 704
+      prev: 760
+      first_period: 816
+      refresh_pending: 933
+      uses_schedule: 1042
+      tab_checked: 932
+  academy_period:
+    fields:
+      stage: 0
+      delivery: 8
+      starts: 16
+      ends: 32
+      ticket: 48
+      ticket_limit: 52
+      closed: 53
+  academy_save:
+    fields:
+      opened_ids: 488
+      redo_passes: 632
+      reserve_passes: 636
+      dandori_points: 268
+      dandori_rank: 256
+      card_rank: 260
+      exam_results: 360
+      training_results: 280
+      held_ids: 504
+      disable_test_guide: 545
+      update_delivery: 576
+      delivery_text: 584
+      service_end: 952
+  academy_exam_row:
+    fields: {courses: 32}
+  academy_training_row:
+    fields: {course: 64}
+  academy_course:
+    size: 280
+    fields: {level: 0}
+  academy_exam_entry:
+    size: 136
+    fields: {key: 0, value: 8}
+  academy_training_entry:
+    size: 32
+    fields: {key: 0, value: 8}
+  academy_exam_result:
+    size: 120
+    fields: {practice_score: 0, score: 4, local_score: 8, practice_time: 12, time: 16, local_time: 20, practice_count: 24, count: 28, medal: 32, viewed_medal: 36, local_medal: 40, practice_medal: 44, practice_clear: 48, clear: 49, stamp_rank: 52, stamp_x: 56, stamp_y: 60, stamp_rotation: 64}
+  academy_training_result:
+    size: 16
+    fields: {count: 0, score: 4, medal: 8, clear: 12}
+  academy_sticker_data:
+    fields: {mask_count: 0x1780, color_count: 0x1508}
+  academy_member:
+    size: 80
+    fields: {nickname: 0, id: 16, score: 32, kings: 36, type: 40, color: 44}
+  academy_board_list:
+    size: 32
+    fields: {key: 0, members: 8, next: 24}
+  academy_board_reply:
+    size: 48
+    fields: {state: 0, answered: 40}
+  academy_chart:
+    fields: {face_enabled: 0x748}
+  academy_context:
+    fields: {course: 0xb70, board_key: 0xc78, submission_mode: 0xca8}
+  academy_end_report:
+    fields: {score: 0x14, elapsed: 0x20, cleared: 0xa}
+  academy_menu_state:
+    fields: {parent: 0x78}
+  academy_menu_presenter:
+    fields: {widget: 0x80}
+  academy_score_task:
+    fields: {phase: 0x4}
+  academy_upload_job:
+    fields: {result: 8}
+  academy_upload_job_table:
+    fields: {run: 24}
+  academy_upload_result_table:
+    fields: {failed: 24}
+  academy_training_course_entry:
+    size: 360
+    fields: {key: 0, row: 8}
+  academy_course_entry:
+    size: 64
+    fields:
+      key: 0
+      row: 8
+  wwise_bus_node:
+    fields: {subscriber: 48}
+  wwise_bus_subscription:
+    fields: {curves: 80, count: 88}
+  wwise_bus_curve:
+    size: 32
+    fields: {id: 0, parameter: 4, points: 8, point_count: 16, scaling: 20}
+  wwise_bus_callbacks:
+    fields: {entries: 0, count: 8, mutex: 32}
+  wwise_bus_callback_entry:
+    size: 16
+    fields: {bus: 0, callback: 8}
+  wwise_volume_callback:
+    fields: {base_volume: 40}
   console_manager_table:
     fields:
       find_variable: 176
@@ -287,6 +516,7 @@ structs:
       clipping: 194
       cached_slate: 216
       remove_from_parent: 672
+      visibility: 195
   ui_user_widget:
     fields:
       tree: 488
@@ -416,6 +646,9 @@ structs:
   ui_panel_slot:
     fields:
       content: 48
+      size_rule: 56
+      padding: 64
+      alignment: 88
   pikmin_counter:
     size: 39704
     fields:
@@ -578,7 +811,7 @@ structs:
     fields:
       name: 0
       kind: 772
-      bytes: absent
+      bytes: 776
   dialog_request:
     size: 944
     fields:
@@ -589,10 +822,23 @@ structs:
       player: 480
   dialog_widget:
     fields:
+      kind: absent
       text: 1416
+  academy_data:
+    fields:
+      training_courses: 56
+      test_courses: 96
   ui_manager:
     fields:
+      open_dialog: 2520
+      academy_data: 6000
+      academy_training_courses: 5504
+      academy_courses: 5584
+      face_messages: 3088
+      actor_access: 1032
       announcer: 840
+  face_message_manager: {fields: {labels: absent, label_buckets: absent}}
+  ui_actor_access: {fields: {captain: absent}}
   announcer:
     fields:
       banner: 704
@@ -603,6 +849,21 @@ structs:
     fields:
       wait_time: 1300
       state: 1344
+  texture_2d:
+    fields:
+      platform_data: 400
+      flags: 133
+      update_resource: 744
+  texture_platform_data:
+    fields:
+      width: 0
+      height: 4
+      format: 12
+      mips: 24
+      mip_count: 32
+  texture_mip:
+    fields:
+      bulk_data: 16
   widget_table:
     fields:
       set_visibility: 656
@@ -768,11 +1029,18 @@ structs:
       story_save: 504
       controllers: 768
       pause_manager: 1360
+      fade: 1128
       saves: 496
+      academy_save: 552
+      title_extra: 1800
   config_save:
     fields:
       play_mode: 128
       slot: 152
+      difficulty: 728
+      difficulty_count: 736
+      difficulty_set: 744
+      difficulty_set_count: 752
   story_save:
     fields:
       night: 188
@@ -951,6 +1219,13 @@ structs:
     fields:
       components: 552
       count: 560
+  carry_numbers:
+    fields:
+      entries: absent
+      count: absent
+  carry_number:
+    fields:
+      place: absent
   instanced_mesh:
     fields:
       instances: 1392
@@ -969,6 +1244,9 @@ structs:
       anchor: 1712
       shown: 1692
       position: 560
+  action_marker:
+    fields:
+      actor: 2552
   material_instance_values:
     fields:
       scalars: 224
@@ -1022,6 +1300,7 @@ structs:
       actor_list: 4008
       pikmin_list: 4056
       pikmin_counters: 3968
+      carry_numbers: 1264
   actor_node:
     size: 24
     fields:
@@ -1083,6 +1362,25 @@ structs:
       air_steps: 7384
       contact_step: 7388
       placement: 10344
+      body: 752
+  skeletal_mesh:
+    fields:
+      blueprint: 1824
+  motion_blueprint:
+    fields:
+      speed: 696
+      motions: 1008
+      move_motion: 1088
+  motion_entry:
+    size: 160
+    fields:
+      state_machine: 0
+      motion: 8
+  motion_blueprint_table:
+    fields:
+      set_motion: 856
+      set_move_motion: 864
+      set_speed: 872
   spawn_request:
     size: 232
     fields:
@@ -1211,6 +1509,25 @@ structs:
   avatar_table:
     fields:
       squad: 2336
+  character_part:
+    fields:
+      controller: 1880
+      move: 1860
+  game_controller:
+    fields:
+      unpaused_frames: 128
+      lock_mask: 136
+      lock_timer: 144
+      press_ages: 152
+      press_age_count: 160
+  press_age:
+    size: 16
+    fields:
+      seconds: 4
+  game_controller_table:
+    fields:
+      locked: 216
+      pressed: 96
   whistle_part:
     fields:
       radius: 564
@@ -1226,6 +1543,26 @@ structs:
       current: 816
       extra: 820
       max_extra: 824
+      actor: 520
+      gauge_enabled: 720
+      gauge_views: 684
+      gauge_list_1: 584
+      gauge_list_2: 648
+      gauge_list_3: 664
+      gauge_full: 1340
+      linked: 712
+      mitigation: 928
+      frozen: 1024
+      cold_clock: 1044
+      cold_limit: 1048
+      shocked: 1088
+  gauge_actor:
+    fields:
+      part_1: 928
+      part_2: 1200
+  gauge_stick:
+    fields:
+      clung: 673
   action:
     fields:
       child: 104
@@ -1250,6 +1587,12 @@ structs:
       attack: 73
       riding_applies: 170
       origin: 184
+  pikmin_hit:
+    fields:
+      point: 76
+      press: 120
+      part: 128
+      freeze_scaled: 176
   knock_message:
     size: 288
     fields:
@@ -1391,6 +1734,7 @@ structs:
       maximum: 1468
       carriers: 1624
       info: 1656
+      shown_count: 3204
   carry_info:
     fields:
       destination: 224
@@ -1431,13 +1775,13 @@ structs:
     fields:
       save: absent
   ui_keyboard:
-    size: absent
+    size: 1352
     fields:
-      maximum: absent
-      minimum: absent
-      utf8: absent
-      work: absent
-      work_bytes: absent
+      maximum: 940
+      minimum: 944
+      utf8: 957
+      work: 1304
+      work_bytes: 1312
   effect_owner:
     fields:
       manager: 1384
@@ -1689,6 +2033,30 @@ structs:
     fields:
       throw_length_max: 1104
 functions:
+  options_button_icon: 11961184
+  options_direction: 63622000
+  options_confirm: 63622400
+  ui_presenter_find: 14555616
+  presenter_begin: 63188768
+  game_menu_open_page: 63457552
+  set_slot_difficulty: 58444688
+  fade_request: 9948464
+  face_message_request: 12432816
+  options_gate: 65999856
+  options_list_grow: 11960656
+  options_button_highlight: 16576672
+  title_confirm: 63828992
+  ui_set_render_opacity: 4897904
+  title_direction: 10514352
+  title_back: 63829328
+  title_list_grow: 66060608
+  ui_vertical_slot_sync: 82663360
+  wwise_get_bus: 24556128
+  wwise_release_bus: 24954816
+  wwise_bind_bus_curve: 24695648
+  wwise_unbind_bus_curve: 24696240
+  wwise_bus_subscription: 25027392
+  wwise_register_bus_volume_callback: 24462400
   map_add_stream: 10875472
   map_remove_stream: 10864176
   map_duplicate_stream: 9787472
@@ -1696,8 +2064,24 @@ functions:
   ui_arrow_left: 59306432
   ui_arrow_right: 59306512
   ui_post_sound: 6162000
+  academy_board_slot: 0x3748970
+  academy_board_copy: 0x37490f0
+  academy_board_link: 0x3748ba0
+  academy_menu_update_stock: 0x3c77180
+  academy_local_launch_ready: 0x3c582a0
+  academy_local_retry_ready: 0x3c58130
+  academy_is_exam: 0x10de0b0
+  academy_upload_stock: 0x3745620
+  academy_status: 57892032
+  academy_open_periods: 57872448
+  academy_period_start: 57873600
   ui_context_world: 2909680
   ui_widget_in_viewport: 9958848
+  texture_create_transient: 12589536
+  bulk_data_size: 6837168
+  bulk_data_lock: 5347776
+  bulk_data_unlock: 12592576
+  texture_from_image: 87688352
   ui_widget_viewport: 15774736
   ui_scroll_offset: absent
   ui_scroll_reveal: absent
@@ -1855,6 +2239,8 @@ functions:
   pause_change: 9922944
   return_to_title: 4187328
   set_life: 14096384
+  life_refresh_gauge: absent
+  life_update: 1960208
   damage_message: 7310976
   knock_message: 11146336
   post_message: 5833888
@@ -1864,6 +2250,7 @@ functions:
   npad_handheld_state: 96122352
   npad_joy_dual_state: 96122384
   mark_end_of_frame: 881760
+  actor_sleep_decision: absent
   mark_pose_dirty: 874544
   mark_render_state: 6280240
   widget_scale: 3426640
@@ -1943,6 +2330,9 @@ functions:
   squad_icon_count: 6370816
   squad_throw_trajectory: 3848544
 slots:
+  options_presenter_tick: {table: 0x76CB4B0, offset: 0x288, stock: 0x3CAC670}
+  title_flow_update: {table: 0x75D2070, offset: 0x28, stock: 0x36E2EA0}
+  title_presenter_tick: {table: 0x76CF040, offset: 0x288, stock: 0x514AD0}
   physics_contacts:
     table: 123681040
     offset: 640
@@ -2067,7 +2457,24 @@ slots:
     table: 122417184
     offset: 2600
     stock: 53480288
+  controller_held:
+    table: 123629280
+    offset: 56
+    stock: 58237232
+  controller_pressed:
+    table: 123629280
+    offset: 96
+    stock: 23924224
+  controller_released:
+    table: 123629280
+    offset: 104
+    stock: 58238624
+  controller_update:
+    table: 123629280
+    offset: 144
+    stock: 1497312
 tables:
+  ui_hint_text_words: [0xD503237F] # native rich-text SetText entry
   actor_tables:
   - 122245408
   - 122330512
@@ -2182,6 +2589,102 @@ tables:
   - 124706800
   - 124923184
   - 125037256
+  character_sites:
+  - 5638388
+  - 5638468
+  - 1952584
+  - 53479968
+  - 16037900
+  - 4872004
+  - 4872032
+  - 48839856
+  - 48839928
+  - 48839952
+  - 5696496
+  - 1923716
+  - 52633280
+  - 52576464
+  - 52576476
+  - 52577472
+  - 52577484
+  - 52577528
+  - 5695704
+  - 5695772
+  - 52578808
+  - 7817476
+  - 7834420
+  character_site_words:
+  - 3594453248
+  - 3594453248
+  - 3594453248
+  - 3592355904
+  - 3594453248
+  - 922749696
+  - 3594453248
+  - 3594453248
+  - 3594453248
+  - 3594453248
+  - 3594453248
+  - 3592355968
+  - 3592355904
+  - 3594453248
+  - 3175163136
+  - 3594453248
+  - 3175171328
+  - 3594453248
+  - 3594453248
+  - 3594453248
+  - 3594453248
+  - 3036689108
+  - 4181818644
+  character_remap_sites:
+  - 5582068
+  - 5582132
+  - 1952892
+  - 5599848
+  - 52572780
+  - 52609456
+  - 52609764
+  character_remap_words:
+  - 3594453248
+  - 3594453248
+  - 2839695348
+  - 3594453248
+  - 3594453248
+  - 3594453248
+  - 3594453248
+  character_remap_registers:
+  - 31
+  - 31
+  - 19
+  - 31
+  - 31
+  - 31
+  - 31
+  character_site_registers:
+  - 19
+  - 19
+  - 19
+  - 31
+  - 19
+  - 19
+  - 19
+  - 23
+  - 23
+  - 23
+  - 31
+  - 31
+  - 31
+  - 31
+  - 53
+  - 31
+  - 53
+  - 31
+  - 31
+  - 31
+  - 31
+  - 19
+  - 19
 slot_groups:
   actor_register:
     offset: 1744

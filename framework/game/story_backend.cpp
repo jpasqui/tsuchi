@@ -7,12 +7,14 @@
 #include "flow.h"
 #include "frame.h"
 #include "game.h"
+#include "hooks.h"
 #include "ids.h"
 #include "names.h"
 #include "new_maps.h"
 #include "objects.h"
 #include "people.h"
 #include "reflect.h"
+#include "registry.h"
 #include "services.h"
 #include "story_service.h"
 
@@ -275,13 +277,78 @@ TSUCHI_Result enter_portal(TSUCHI_Actor actor) {
     return TSUCHI_OK;
 }
 
+// ---- Trips that were asked for -------------------------------------------------------
+
+// Every request reaches the story through its queue's push, the player's own from the map as much as a mod's.
+// The ones for a trip are noted there and told on the next world step, before the game has begun to fade out.
+using Push = void (*)(void*, void*);
+Push next_push = nullptr;
+TSUCHI_Mod* const* framework_mod = nullptr;   // the framework's own mod, made after this starts
+uint64_t pushed_entry = 0;   // the queue's push entry that is wrapped
+struct Trip {
+    bool waiting = false;
+    TSUCHI_TripKind kind = TSUCHI_TRIP_KIND_TRAVEL;
+    uint64_t area = 0;      // the area's name as the game keeps it, 0 for none
+    int32_t base = -1;
+    uint64_t portal = 0;    // weak reference to the portal
+} trip;
+
+void push_noted(void* queue, void* message) {
+    const uint64_t at = reinterpret_cast<uint64_t>(message);
+    if (at && on_game_thread() && story::trip_requested_wanted()) {
+        const uint32_t id = game::read_or<uint32_t>(at + t::request::id);
+        if (id == uint32_t(t::constant::travel_request_id)) {
+            trip = Trip{true, TSUCHI_TRIP_KIND_TRAVEL, game::read_or<uint64_t>(at + t::travel_request::area),
+                game::read_or<int32_t>(at + t::travel_request::base, -1), 0};
+        } else if (id == uint32_t(t::constant::portal_request_id)) {
+            trip = Trip{true, TSUCHI_TRIP_KIND_PORTAL, 0, -1, game::read_or<uint64_t>(at + t::portal_request::portal)};
+        } else if (id == uint32_t(t::constant::leave_request_id)) {
+            trip = Trip{true, TSUCHI_TRIP_KIND_LEAVE_CAVE, 0, -1, 0};
+        }
+    }
+    next_push(queue, message);
+}
+
+// The queue lives as long as the game: its push is wrapped once it is there.
+void watch_requests() {
+    if (pushed_entry || !framework_mod || !*framework_mod) return;
+    const uint64_t context = game::game_context();
+    const uint64_t queue = context ? game::read_or<uint64_t>(context + t::game_context::requests) : 0;
+    const uint64_t table = queue ? game::read_or<uint64_t>(queue) : 0;
+    if (!table || !game::table_entry(queue, t::request_queue_table::push)) return;
+    const uint64_t entry = table + t::request_queue_table::push;
+    void* original = nullptr;
+    uint64_t id = 0;
+    if (hook_wrap(*framework_mod, entry, 0, reinterpret_cast<void*>(&push_noted), 0, &id, &original) == TSUCHI_OK) {
+        next_push = reinterpret_cast<Push>(original);
+        pushed_entry = entry;
+    }
+}
+
+void tell_trip() {
+    if (!trip.waiting) return;
+    const Trip told = trip;
+    trip.waiting = false;
+    char area[game::kNameBytes] = "";
+    if (told.area) {
+        game::Name name{};
+        memcpy(&name, &told.area, sizeof told.area < sizeof name ? sizeof told.area : sizeof name);
+        game::name_text(name, area, sizeof area);
+    }
+    const uint64_t portal = told.portal ? game::from_weak_value(told.portal) : 0;
+    story::emit_trip_requested({told.kind, area, told.base, TSUCHI_Actor{portal ? game::to_handle(portal) : 0}});
+}
+
 const story::Backend service{day, time_of_day, set_time, travel, leave_cave, enter_portal, treasure_count, give_treasure};
 
 } // namespace
 
-void story_start() {
+void story_start(TSUCHI_Mod* const* framework) {
+    framework_mod = framework;
     story::set_backend(&service);
     each_frame(step);
+    each_frame(watch_requests);
+    each_frame(tell_trip);
 }
 
 } // namespace tsuchi

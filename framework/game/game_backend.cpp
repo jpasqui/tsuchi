@@ -221,10 +221,13 @@ void step() {
     }
 }
 
-const game_service::Backend service{mode, rule, stage, world, paused, has_control, hold_pause, release_pause, return_to_title, get_random, set_random,
-                                    reserve_game_preview, game_preview_scene, admit_game_preview, prepare_game_preview, release_game_preview};
+game_service::Backend service{mode, rule, stage, world, paused, has_control, hold_pause, release_pause, return_to_title, get_random, set_random,
+                              reserve_game_preview, game_preview_scene, admit_game_preview, prepare_game_preview, release_game_preview,
+                              nullptr, nullptr, nullptr, nullptr};
 
 } // namespace
+
+game_service::Backend& game_service_backend() { return service; }
 
 void game_start() {
     game_service::set_backend(&service);

@@ -539,7 +539,7 @@ TSUCHI_Buttons service_held = 0, service_hidden = 0;
 bool hidden_ready = true;
 TSUCHI_Result service_pad(uint32_t player, TSUCHI_PadState* out) { assert(!player); *out = {}; out->connected = true; out->held = service_held; return TSUCHI_OK; }
 TSUCHI_Result service_hidden_mask(uint32_t player, TSUCHI_Buttons* out) { assert(!player); if (!hidden_ready) return TSUCHI_NOT_READY; *out = service_hidden; return TSUCHI_OK; }
-const input::Backend input_backend{service_pad,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,service_hidden_mask};
+const input::Backend input_backend{service_pad,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,service_hidden_mask,nullptr,nullptr};
 #endif
 }
 namespace tsuchi {
@@ -728,6 +728,15 @@ int main() {
     assert(labels[field(active_row(0), t::ui_mod_list_row::title)] == u"Difficulty");
     assert(labels[field(active_selector(0), t::ui_mod_list_selector::value)] == u"Hard");
     assert(labels[field(active_selector(1), t::ui_mod_list_selector::value)] == u"-9223372036854775808");
+    assert(labels[field(active_selector(3), t::ui_mod_list_selector::value)] == u"Ready");
+    assert(screen.controls[3].text.set("A")); ++screen.revision;
+    assert(renderer->update(active_view, screen));
+    assert(labels[field(active_selector(3), t::ui_mod_list_selector::value)] == u"A");
+    assert(visibility[field(active_selector(3), t::ui_mod_list_selector::left)] == t::constant::widget_hidden);
+    assert(visibility[field(active_selector(3), t::ui_mod_list_selector::right)] == t::constant::widget_hidden);
+    assert(screen.controls[3].text.set("B")); ++screen.revision;
+    assert(renderer->update(active_view, screen));
+    assert(labels[field(active_selector(3), t::ui_mod_list_selector::value)] == u"B");
     assert(visibility[field(active_selector(1), t::ui_mod_list_selector::left)] == t::constant::widget_hidden);
     assert(visibility[field(active_selector(1), t::ui_mod_list_selector::right)] == t::constant::widget_shown);
     assert(!fake::get<uint8_t>(active_row(2) + t::ui_mod_list_row::enabled));
@@ -769,6 +778,13 @@ int main() {
     assert(labels[field(active_selector(1), t::ui_mod_list_selector::value)] == u"9223372036854775807" && texts[old_middle].references == 0);
     assert(visibility[field(active_selector(1), t::ui_mod_list_selector::left)] == t::constant::widget_shown);
     assert(visibility[field(active_selector(1), t::ui_mod_list_selector::right)] == t::constant::widget_hidden);
+    // Decimal settings retain a native arrow selector and show their value.
+    screen.controls[1].number.enabled=true;screen.controls[1].text.set("0.875");
+    ++screen.revision;assert(renderer->update(active_view,screen));
+    assert(labels[field(active_selector(1),t::ui_mod_list_selector::value)]==u"0.875");
+    assert(fake::get<Array>(active_selector(1)+t::ui_mod_list_selector::choices).count==3);
+    screen.controls[1].number.enabled=false;++screen.revision;
+    assert(renderer->update(active_view,screen));
     screen.selected = 1; action_changes = true;
     thread = 2; assert(intercepted(reinterpret_cast<void*>(host), 2) && accepted_calls == 0); thread = 1;
     assert(intercepted(reinterpret_cast<void*>(root), 3) && accepted_calls == 0);

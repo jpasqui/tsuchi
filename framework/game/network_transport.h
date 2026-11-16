@@ -17,6 +17,8 @@ struct NetBackend {
     int32_t (*local)(int32_t fd, uint8_t ip[4], uint16_t* port); // 0, or -1
     void (*close)(int32_t fd);
     int32_t (*resolve)(const char* host, uint8_t ip[4]);        // 0, 1 unknown, -1 error
+    // The address this machine sends from toward the internet: 0, or -1 with no route. Null: not known.
+    int32_t (*route)(uint8_t ip[4]) = nullptr;
 };
 TSUCHI_Result network_numeric_address(const char*,uint32_t,TSUCHI_NetAddress*);
 void network_native_start();

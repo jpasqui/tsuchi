@@ -16,7 +16,7 @@ static_assert(native_code::kGatewayBytes == kNativeGatewayBytes, "gateway slot s
 const Kind kPatch{"instruction_patch"};
 CodeMemory memory{};
 CodeArena arena{};
-enum class Mode : uint8_t { function, inline_hook };
+enum class Mode : uint8_t { function, inline_hook, call };
 struct Target {
     uint64_t address, gateway, entry;
     uint32_t expected, branch;
@@ -112,11 +112,13 @@ TSUCHI_Result wrap(TSUCHI_Mod* mod, uint64_t offset, uint32_t expected, void* fu
         mod_block(mod, patch_problem());
         return TSUCHI_NOT_READY;
     }
-    if (mode == Mode::function) {
+    if (mode == Mode::call && ((expected & 0xfc000000u) != 0x94000000u ||
+        !offset_valid(offset + 4 * native_code::signed_bits(expected & 0x03ffffffu, 26)))) return TSUCHI_INVALID;
+    if (mode == Mode::function || mode == Mode::call) {
         for (unsigned i = 0; i < t::code_site_count; ++i) {
             const auto& site = t::code_sites[i];
             if (site.address != offset) continue;
-            if (site.call || site.instruction != expected) return TSUCHI_BUSY;
+            if (bool(site.call) != (mode == Mode::call) || site.instruction != expected) return TSUCHI_BUSY;
             return hook_code_site(mod, i, function, id, original);
         }
     }
@@ -147,12 +149,15 @@ TSUCHI_Result wrap(TSUCHI_Mod* mod, uint64_t offset, uint32_t expected, void* fu
         if (!memory.gateway_arena || !writable_word(offset) || !admit_arena()) return TSUCHI_NOT_READY;
         const uint64_t gateway = arena.rx + native_code::kGatewayBytes * target_count;
         uint32_t jump;
-        if (!native_code::branch(main + offset, gateway, jump) ||
-            !(mode == Mode::function ? native_code::function(code, main + offset, expected, gateway, 0) :
+        if (!native_code::branch(main + offset, gateway, jump, mode == Mode::call) ||
+            !(mode == Mode::call ? native_code::call(code, 0) :
+              mode == Mode::function ? native_code::function(code, main + offset, expected, gateway, 0) :
                                       native_code::inline_hook(code, main + offset, expected, gateway, main + t::stub::native_shared)))
             return TSUCHI_INVALID;
         target = &targets[target_count];
-        *target = {offset, gateway, mode == Mode::function ? gateway + 16 : reinterpret_cast<uint64_t>(&inline_end), expected, jump, mode, false};
+        const uint64_t entry = mode == Mode::call ? main + offset + 4 * native_code::signed_bits(expected & 0x03ffffffu, 26) :
+            mode == Mode::function ? gateway + 16 : reinterpret_cast<uint64_t>(&inline_end);
+        *target = {offset, gateway, entry, expected, jump, mode, false};
         created = true;
     }
     // Fill the caller's continuation under the hook engine's dispatch lock.
@@ -169,7 +174,7 @@ TSUCHI_Result wrap(TSUCHI_Mod* mod, uint64_t offset, uint32_t expected, void* fu
     if (created) __atomic_store_n(&target_count, target_count + 1, __ATOMIC_RELEASE);
     if (!target->published) {
         native_code::Gateway code;
-        const bool emitted = mode == Mode::function ?
+        const bool emitted = mode == Mode::call ? native_code::call(code, target->entry) : mode == Mode::function ?
             native_code::function(code, main + offset, expected, target->gateway, target->entry) :
             native_code::inline_hook(code, main + offset, expected, target->gateway, main + t::stub::native_shared);
         void* alias = gateway_alias(*target);
@@ -196,6 +201,9 @@ TSUCHI_Result wrap_function(TSUCHI_Mod* mod, uint64_t at, uint32_t expected, voi
 }
 TSUCHI_Result wrap_inline(TSUCHI_Mod* mod, uint64_t at, uint32_t expected, void* fn, uint64_t* id, void** next) {
     return wrap(mod, at, expected, fn, id, next, Mode::inline_hook);
+}
+TSUCHI_Result wrap_call(TSUCHI_Mod* mod, uint64_t at, uint32_t expected, void* fn, uint64_t* id, void** next) {
+    return wrap(mod, at, expected, fn, id, next, Mode::call);
 }
 
 void end_patch(void*, uint64_t id) {
@@ -260,7 +268,7 @@ TSUCHI_Result check_code(uint64_t offset, const void* expected, uint64_t bytes) 
     if (!game::readable(at, bytes)) return TSUCHI_NOT_READY;
     return memcmp(reinterpret_cast<const void*>(at), expected, bytes) ? TSUCHI_BUSY : TSUCHI_OK;
 }
-const NativeHooks backend{wrap_function, wrap_inline, patch_instruction, remove_patch, check_code};
+const NativeHooks backend{wrap_function, wrap_inline, patch_instruction, remove_patch, check_code, wrap_call};
 } // namespace
 
 void native_hooks_start(CodeMemory next) {

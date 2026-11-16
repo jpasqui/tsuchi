@@ -42,19 +42,25 @@ SockAddrIn address(const u8 ip[4],uint16_t port){
 }
 
 bool available(){return true;}
-bool connected(){
-    if(P4U_NET_IMPORT(bool(*)(),tsuchi::game::table::fn::nifm_available)())return true;
-    // UDP connect selects a route without sending a datagram or resolving DNS.
-    // Recheck on every query rather than keeping a stale success after disconnect.
+// UDP connect selects a route without sending a datagram or resolving DNS: the socket's own address is then the one
+// this machine sends from toward the internet. Asked again on every query rather than kept after a disconnect.
+int32_t route(u8 ip[4]){
     const int fd=P4U_NET_IMPORT(int(*)(int,int,int),tsuchi::game::table::fn::socket_socket)(AF_INET,SOCK_DGRAM,IPPROTO_UDP);
-    if(fd<0)return false;
+    if(fd<0)return -1;
     const u8 documentation[4]={192,0,2,1};const auto to=address(documentation,9);
     SockAddrOutput self{};u32 length=sizeof self;
-    const bool route=P4U_NET_IMPORT(int(*)(int,const SockAddrIn*,u32),tsuchi::game::table::fn::socket_connect)(fd,&to,sizeof to)==0&&
+    const bool found=P4U_NET_IMPORT(int(*)(int,const SockAddrIn*,u32),tsuchi::game::table::fn::socket_connect)(fd,&to,sizeof to)==0&&
         P4U_NET_IMPORT(int(*)(int,SockAddrIn*,u32*),tsuchi::game::table::fn::socket_get_sock_name)(fd,&self.value,&length)==0&&valid_address(self,length)&&
         self.value.addr[0]!=0&&self.value.addr[0]!=127&&self.value.addr[0]<224;
     P4U_NET_IMPORT(int(*)(int),tsuchi::game::table::fn::socket_close)(fd);
-    return route;
+    if(!found)return -1;
+    for(int i=0;i<4;++i)ip[i]=self.value.addr[i];
+    return 0;
+}
+bool connected(){
+    if(P4U_NET_IMPORT(bool(*)(),tsuchi::game::table::fn::nifm_available)())return true;
+    u8 ip[4];
+    return route(ip)==0;
 }
 int32_t udp_open(uint16_t port,bool broadcast){
     const int fd=P4U_NET_IMPORT(int(*)(int,int,int),tsuchi::game::table::fn::socket_socket)(AF_INET,SOCK_DGRAM,IPPROTO_UDP);
@@ -108,7 +114,7 @@ int32_t local(int32_t fd,uint8_t ip[4],uint16_t* port){
     for(int i=0;i<4;++i)ip[i]=self.value.addr[i];*port=swap16(self.value.port);return 0;
 }
 void close(int32_t fd){P4U_NET_IMPORT(int(*)(int),tsuchi::game::table::fn::socket_close)(fd);}
-const tsuchi::NetBackend backend{available,connected,udp_open,send_to,receive_from,local,close,nullptr};
+const tsuchi::NetBackend backend{available,connected,udp_open,send_to,receive_from,local,close,nullptr,route};
 }
 namespace tsuchi {
 void network_native_start(){set_network_transport(&backend);}

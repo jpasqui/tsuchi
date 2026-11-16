@@ -11,7 +11,7 @@ namespace {
 using JsonKind = Json::Kind;
 
 const char* const kKinds[] = {"toggle", "integer", "number", "text", "choice", "set"};
-const char* const kKnown[] = {"type", "default", "name", "description", "public", "min", "max", "max_length", "choices"};
+const char* const kKnown[] = {"type", "default", "name", "description", "public", "min", "max", "step", "max_length", "choices", "hidden", "overridable"};
 
 bool is_text(const Json* value) { return value && value->kind == JsonKind::text && strlen(value->text) == value->bytes; }
 bool is_whole(const Json* value) { return value && value->kind == JsonKind::number && value->whole; }
@@ -150,10 +150,19 @@ bool declare(Setting& setting, const Json& declared, Text& problem) {
         if (declared.find(name) && !is_text(declared.find(name))) return wrong(problem, key, "has a name or a description that is not a text");
     if (open && open->kind != JsonKind::boolean) return wrong(problem, key, "has a \"public\" that is not true or false");
     setting.open = open && open->boolean;
+    const Json* hidden = declared.find("hidden"), *overridable = declared.find("overridable");
+    if ((hidden && hidden->kind != JsonKind::boolean) || (overridable && overridable->kind != JsonKind::boolean))
+        return wrong(problem, key, "needs boolean hidden and overridable flags");
+    setting.hidden = hidden && hidden->boolean;
+    setting.overridable = !setting.hidden && (!overridable || overridable->boolean);
 
     // What only some kinds have.
     const bool ranged = setting.kind == SettingKind::integer || setting.kind == SettingKind::number;
     const bool listed = setting.kind == SettingKind::choice || setting.kind == SettingKind::set;
+    const Json* step = declared.find("step");
+    if (step && (setting.kind != SettingKind::number || step->kind != JsonKind::number ||
+                 !fits_float(step->number) || !(static_cast<float>(step->number) > 0)))
+        return wrong(problem, key, "needs a positive finite number step for a number setting");
     if (!ranged && (least || most)) return wrong(problem, key, "has a \"min\" or a \"max\", which only an integer or a number has");
     if (setting.kind != SettingKind::text && longest) return wrong(problem, key, "has a \"max_length\", which only a text has");
     if (!listed && choices) return wrong(problem, key, "has \"choices\", which only a choice or a set has");
@@ -389,6 +398,7 @@ bool declare_settings(Settings& out, const Json* declared, Text& problem) {
 void forget_settings(Settings& settings) {
     for (uint32_t i = 0; i < settings.list.count; ++i) {
         settings.list[i].text.clear();
+        settings.list[i].controllers.clear();
         release(settings.list[i].chosen);
     }
     release(settings.list.items);
@@ -403,50 +413,68 @@ Setting* find_setting(Settings& settings, const char* key) {
 
 TSUCHI_Result setting_toggle(const Setting& setting, bool& out) {
     if (setting.kind != SettingKind::toggle) return TSUCHI_INVALID;
-    out = setting.integer != 0;
+    out = setting_controlled_value(setting) ? setting_controlled_value(setting)->boolean : setting.integer != 0;
     return TSUCHI_OK;
 }
 TSUCHI_Result setting_integer(const Setting& setting, int64_t& out) {
     if (setting.kind != SettingKind::integer) return TSUCHI_INVALID;
-    out = setting.integer;
+    out = setting_controlled_value(setting) ? setting_controlled_value(setting)->integer : setting.integer;
+    if (setting.ranged) {
+        if (out < setting.runtime_minimum) out = setting.runtime_minimum;
+        if (out > setting.runtime_maximum) out = setting.runtime_maximum;
+    }
     return TSUCHI_OK;
 }
 TSUCHI_Result setting_number(const Setting& setting, float& out) {
     if (setting.kind != SettingKind::number) return TSUCHI_INVALID;
-    out = float(setting.number);
+    out = float(setting_controlled_value(setting) ? setting_controlled_value(setting)->number : setting.number);
     return TSUCHI_OK;
 }
 TSUCHI_Result setting_text(const Setting& setting, const char*& out) {
     if (setting.kind != SettingKind::text && setting.kind != SettingKind::choice) return TSUCHI_INVALID;
-    out = setting.text.get();
+    out = setting_controlled_value(setting) ? setting_controlled_value(setting)->text : setting.text.get();
     return TSUCHI_OK;
 }
 TSUCHI_Result setting_has(const Setting& setting, const char* word, bool& out) {
     const int64_t index = setting.kind == SettingKind::set ? choice_at(setting, word) : -1;
     if (index < 0) return TSUCHI_INVALID;
     out = setting.chosen[index] != 0;
+    if (setting_controlled_value(setting)) {
+        out = false;
+        for (const Json* item = setting_controlled_value(setting)->first; item; item = item->next)
+            out = out || !strcmp(item->text, word);
+    }
     return TSUCHI_OK;
 }
 
 TSUCHI_Result set_setting_toggle(Setting& setting, bool value, bool& changed) {
+    changed = false;
+    if (setting_controlled_value(setting)) return TSUCHI_DENIED;
     if (setting.kind != SettingKind::toggle) return TSUCHI_INVALID;
     changed = put_integer(setting, value);
     setting.touched = true;
     return TSUCHI_OK;
 }
 TSUCHI_Result set_setting_integer(Setting& setting, int64_t value, bool& changed) {
-    if (setting.kind != SettingKind::integer || !integer_allowed(setting, value)) return TSUCHI_INVALID;
+    changed = false;
+    if (setting_controlled_value(setting)) return TSUCHI_DENIED;
+    if (setting.kind != SettingKind::integer || !integer_allowed(setting, value) ||
+        (setting.ranged && (value < setting.runtime_minimum || value > setting.runtime_maximum))) return TSUCHI_INVALID;
     changed = put_integer(setting, value);
     setting.touched = true;
     return TSUCHI_OK;
 }
 TSUCHI_Result set_setting_number(Setting& setting, float value, bool& changed) {
+    changed = false;
+    if (setting_controlled_value(setting)) return TSUCHI_DENIED;
     if (setting.kind != SettingKind::number || !number_allowed(setting, double(value))) return TSUCHI_INVALID;
     changed = put_number(setting, double(value));
     setting.touched = true;
     return TSUCHI_OK;
 }
 TSUCHI_Result set_setting_text(Setting& setting, const char* value, bool& changed) {
+    changed = false;
+    if (setting_controlled_value(setting)) return TSUCHI_DENIED;
     const bool allowed = setting.kind == SettingKind::text ? text_allowed(setting, value) : setting.kind == SettingKind::choice && choice_at(setting, value) >= 0;
     if (!allowed) return TSUCHI_INVALID;
     const TSUCHI_Result result = put_text(setting, value, changed);
@@ -454,6 +482,8 @@ TSUCHI_Result set_setting_text(Setting& setting, const char* value, bool& change
     return result;
 }
 TSUCHI_Result set_setting_has(Setting& setting, const char* word, bool value, bool& changed) {
+    changed = false;
+    if (setting_controlled_value(setting)) return TSUCHI_DENIED;
     const int64_t index = setting.kind == SettingKind::set ? choice_at(setting, word) : -1;
     if (index < 0) return TSUCHI_INVALID;
     changed = put_chosen(setting, index, value);
@@ -461,6 +491,8 @@ TSUCHI_Result set_setting_has(Setting& setting, const char* word, bool value, bo
     return TSUCHI_OK;
 }
 TSUCHI_Result reset_setting(Setting& setting, bool& changed) {
+    changed = false;
+    if (setting_controlled_value(setting)) return TSUCHI_DENIED;
     const TSUCHI_Result result = to_default(setting, changed);
     if (result == TSUCHI_OK) setting.touched = true;
     return result;
@@ -491,12 +523,100 @@ bool take_settings(Settings& settings, const char* text, size_t bytes, void (*ch
     if (!held || held->kind != JsonKind::object) return release_json(held), false;
     for (const Json* value = held->first; value; value = value->next) {
         Setting* setting = find_setting(settings, value->name);
-        if (setting && !setting->touched && take(*setting, *value) && changed) changed(*setting, user);
+        if (setting && !setting->touched && take(*setting, *value) && !setting_controlled_value(*setting) && changed) changed(*setting, user);
     }
     release_json(held);
+    return true;
+}
+
+bool setting_value_allowed(const Setting& setting, const Json& value) {
+    switch (setting.kind) {
+    case SettingKind::toggle: return value.kind == JsonKind::boolean;
+    case SettingKind::integer: return is_whole(&value) && integer_allowed(setting, value.integer);
+    case SettingKind::number: return value.kind == JsonKind::number && number_allowed(setting, value.number);
+    case SettingKind::text: return is_text(&value) && text_allowed(setting, value.text);
+    case SettingKind::choice: return is_text(&value) && choice_at(setting, value.text) >= 0;
+    case SettingKind::set:
+        if (value.kind != JsonKind::list) return false;
+        for (const Json* word = value.first; word; word = word->next) {
+            if (!is_text(word) || choice_at(setting, word->text) < 0) return false;
+            for (const Json* earlier = value.first; earlier != word; earlier = earlier->next)
+                if (!strcmp(earlier->text, word->text)) return false;
+        }
+        return true;
+    }
+    return false;
+}
+
+bool setting_values_equal(const Setting& setting, const Json& a, const Json& b) {
+    switch (setting.kind) {
+    case SettingKind::toggle: return a.boolean == b.boolean;
+    case SettingKind::integer: return a.integer == b.integer;
+    case SettingKind::number: return float(a.number) == float(b.number);
+    case SettingKind::text:
+    case SettingKind::choice: return !strcmp(a.text, b.text);
+    case SettingKind::set:
+        if (a.count != b.count) return false;
+        for (const Json* x = a.first; x; x = x->next) {
+            bool found = false;
+            for (const Json* y = b.first; y; y = y->next) found |= !strcmp(x->text, y->text);
+            if (!found) return false;
+        }
+        return true;
+    }
+    return false;
+}
+
+bool setting_display(const Setting& setting, Text& out) {
+    Writer writer;
+    char number[48];
+    switch (setting.kind) {
+    case SettingKind::toggle: {
+        bool value = false; setting_toggle(setting, value); writer.add(value ? "On" : "Off"); break;
+    }
+    case SettingKind::integer: {
+        int64_t value = 0; setting_integer(setting, value); writer.add(whole_text(value, number)); break;
+    }
+    case SettingKind::number: {
+        float value = 0; setting_number(setting, value); number_text(value, number); writer.add(number); break;
+    }
+    case SettingKind::text:
+    case SettingKind::choice: {
+        const char* value = nullptr; setting_text(setting, value); writer.add(value); break;
+    }
+    case SettingKind::set: {
+        bool first = true;
+        for (const Json* word = choices_of(setting)->first; word; word = word->next) {
+            bool has = false; setting_has(setting, word->text, has);
+            if (!has) continue;
+            if (!first) writer.add(", ");
+            writer.add(word->text); first = false;
+        }
+        if (first) writer.add("None");
+        break;
+    }
+    }
+    if (!writer.whole) { release(writer.data); return false; }
+    out.clear(); out.data = writer.data; out.capacity = writer.capacity;
     return true;
 }
 
 void setting_number_text(float value, char out[48]) { number_text(value, out); }
 
 } // namespace tsuchi
+
+namespace tsuchi {
+void setting_integer_range(const Setting& setting, int64_t& minimum, int64_t& maximum) {
+    const Json* low = setting.declared->find("min"), *high = setting.declared->find("max");
+    minimum = setting.ranged ? setting.runtime_minimum : low ? low->integer : INT64_MIN;
+    maximum = setting.ranged ? setting.runtime_maximum : high ? high->integer : INT64_MAX;
+}
+TSUCHI_Result set_setting_integer_range(Setting& setting, int64_t minimum, int64_t maximum, bool& changed) {
+    changed = false;
+    if (setting.kind != SettingKind::integer || minimum > maximum ||
+        !integer_allowed(setting, minimum) || !integer_allowed(setting, maximum)) return TSUCHI_INVALID;
+    changed = !setting.ranged || setting.runtime_minimum != minimum || setting.runtime_maximum != maximum;
+    setting.ranged = true; setting.runtime_minimum = minimum; setting.runtime_maximum = maximum;
+    return TSUCHI_OK;
+}
+}

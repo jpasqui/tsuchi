@@ -13,6 +13,8 @@
 #include "mod_service.h"
 #include "tsuchi_lua.h"
 #include "registry.h"
+#include "network_request_fixture.h"
+#include "academy_event_fixture.h"
 extern "C" {
 #include "lualib.h"
 }
@@ -63,7 +65,11 @@ TSUCHI_Result knockback(TSUCHI_Actor victim, const TSUCHI_Vec3* velocity, float,
 // The stand-in has no Pikmin.
 TSUCHI_Result kill_pikmin(TSUCHI_Actor, TSUCHI_DeathCause, TSUCHI_Actor) { return TSUCHI_NOT_FOUND; }
 
-const tsuchi::combat::Backend backend{get_life, set_life, damage, knockback, kill_pikmin};
+// Nor a Pikmin to land.
+TSUCHI_Result thrown_hit(TSUCHI_Actor, TSUCHI_Actor, const TSUCHI_Vec3*, bool) { return TSUCHI_NOT_FOUND; }
+
+TSUCHI_Result refresh_gauge(TSUCHI_Actor, float, bool) { return TSUCHI_NOT_FOUND; }
+const tsuchi::combat::Backend backend{get_life, set_life, damage, knockback, thrown_hit, kill_pikmin, refresh_gauge};
 
 TSUCHI_Result hold_look(TSUCHI_Mod*, uint32_t player, const TSUCHI_Look* target) {
     return player == 0 && target->actor.id <= 1 && target->point.x == 1 &&
@@ -135,8 +141,10 @@ int test_deprecated(lua_State* L) {
 }
 
 const luaL_Reg test_functions[] = {
+    {"academy_events", [](lua_State*) { academy_event_fixture::emit(); return 0; }},
     {"actor", test_actor}, {"last", test_last}, {"errors", test_errors}, {"steps", test_steps},
     {"subscriptions", test_subscriptions}, {"told", test_told}, {"logged", test_logged}, {"deprecated", test_deprecated},
+    {"request_done", [](lua_State* L) { const auto id=tsuchi_lua::check_handle(L,1,"request",false);lua_pushboolean(L,network_request_fixture::finish(tsuchi_lua::mod(L),id));return 1; }},
     {nullptr, nullptr}};
 
 lua_Integer global_integer(lua_State* L, const char* name) {
@@ -159,6 +167,7 @@ int main(int argc, char** argv) {
     actors[2] = {100, 100, 20, 20};
     actors[kCreature] = {500, 500, 0, 0};
     tsuchi::combat::set_backend(&backend);
+    network_request_fixture::start();
     static tsuchi::camera::Backend camera_backend{};
     camera_backend.hold_look = hold_look;
     tsuchi::camera::set_backend(&camera_backend);
@@ -190,6 +199,7 @@ int main(int argc, char** argv) {
     if (!tsuchi::combat::damaged_wanted()) return fail("the script should leave a damaged handler subscribed");
     const lua_Integer before = global_integer(L, "handler_calls");
     tsuchi::mod_stop(mod);
+    if (academy_event_fixture::wanted()) return fail("Academy subscription outlived mod");
     if (tsuchi::combat::damaged_wanted() || tsuchi::combat::defeated_wanted()) return fail("a subscription outlived its mod");
     damage({2}, 1, TSUCHI_ATTACK_KIND_NORMAL, {0});
     if (global_integer(L, "handler_calls") != before) return fail("a handler ran after its mod stopped");

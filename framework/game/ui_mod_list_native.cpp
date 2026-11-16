@@ -1,4 +1,5 @@
 #include "ui_mod_list_native.h"
+#include "ui_mod_page.h"
 #include "ui_screens.h"
 #include "ui_native.h"
 #include "ui_feedback.h"
@@ -21,7 +22,7 @@ struct Array { uint64_t data; int32_t count, capacity; };
 struct Row {
     char id[kModIdBytes], name[641], status[641];
     uint64_t widget, selector;
-    bool requested, has_settings;
+    bool requested, has_settings, button;
     UiLabelFitStamp fit;
 };
 struct State {
@@ -143,13 +144,15 @@ void update_footer(State& state) {
     if (ui_active_screen()) { ui_footer_release(state.footer); return; }
     const int32_t selected = game::read_or<int32_t>(live(state.host) + t::ui_mod_list_menu::selected, -1);
     const bool selected_row = selected >= 0 && uint32_t(selected) < state.rows.count;
+    const bool entry = selected_row && state.rows[uint32_t(selected)].button;
     UiFooterGuide guide;
-    guide.tabs = true;
-    guide.edit = selected_row;
+    guide.tabs = !ui_mod_page_alone();
+    guide.edit = selected_row && !entry;
     guide.settings = selected_row && state.rows[uint32_t(selected)].has_settings;
+    guide.confirm = entry;
     guide.reset = state.rows.count != 0;
-    guide.details = selected_row;
-    guide.back = true; // Back returns to Game, after the save question when there is a draft
+    guide.details = selected_row && !entry;
+    guide.back = true; // Back leaves the list, after the save question when there is a draft
     ui_footer_update(state.footer, state.host, guide);
 }
 void release_widgets(uint64_t host, uint64_t group) {
@@ -206,8 +209,8 @@ bool label(uint64_t widget, const char* text) {
     game::drop_shared(text_value.counter()); return true;
 }
 bool choice(uint64_t widget, const char* text) {
-    char16_t units[4]; size_t count = 0;
-    if (!game::utf8_to_units(text, units, 3, count)) return false;
+    char16_t units[641]; size_t count = 0;
+    if (!game::utf8_to_units(text, units, 640, count)) return false;
     units[count] = 0;
     alignas(8) uint8_t string[t::array::size]{};
     const uint64_t data = reinterpret_cast<uint64_t>(units); const int32_t length = int32_t(count + 1);
@@ -315,8 +318,9 @@ TSUCHI_Result apply(const Hold& hold, Kept& kept, const HoldNothing&, bool fresh
         UiModListRow input{}; Row row{};
         okay = callbacks.row(i, input) && guard.permits() && valid_mod_id(input.id) && copy(row.id, sizeof row.id, input.id) &&
             copy(row.name, sizeof row.name, input.name) && copy(row.status, sizeof row.status, input.status ? input.status : "");
-        row.requested = input.requested;
+        row.requested = input.requested && !input.button;   // an entry's one choice is its label
         row.has_settings = input.has_settings;
+        row.button = input.button;
         if (okay) okay = state->rows.add(row) != nullptr;
     }
     if (okay && guard.permits()) {
@@ -352,9 +356,10 @@ TSUCHI_Result apply(const Hold& hold, Kept& kept, const HoldNothing&, bool fresh
                 problem = "Mods menu: row controls unavailable";
                 const uint64_t title_widget = child(widget, t::ui_mod_list_row::title), selector = child(widget, t::ui_mod_list_row::selector);
                 row.selector = game::to_handle(selector);
+                // A mod's entry shows its label in the box, as its one choice, and nothing beside it: a button.
                 char text[641];
-                okay = guard.permits() && title_widget && selector && caption(row, text) && label(title_widget, text) && guard.permits() &&
-                    choice(widget, "Off") && guard.permits() && choice(widget, "On") && guard.permits() &&
+                okay = guard.permits() && title_widget && selector && caption(row, text) && label(title_widget, row.button ? "" : text) && guard.permits() &&
+                    (row.button ? choice(widget, row.name) : choice(widget, "Off") && guard.permits() && choice(widget, "On")) && guard.permits() &&
                     game::write<uint8_t>(widget + t::ui_mod_list_row::kind, uint8_t(t::constant::ui_mod_list_item)) &&
                     game::write<uint8_t>(widget + t::ui_mod_list_row::parent, 0) && game::write<int32_t>(widget + t::ui_mod_list_row::count, -1) &&
                     game::write<uint8_t>(widget + t::ui_mod_list_row::enabled, 1) && game::write<uint8_t>(selector + t::ui_mod_list_selector::wrap, 0) &&
@@ -411,6 +416,7 @@ struct Tabs {
     uint32_t calls, refresh_depth, cycle_traces;
     uint8_t clipping_before;
     bool retired, changed, clipping_changed, announced;
+    bool alone;   // made for the page on its own: no tab shows, and the list keeps the whole page
     // Made by the menu's own construction or reopening: until it accepts input, a short while at most, its
     // Game guide is written already. A bar found on a menu that is not opening never writes it before state 1.
     uint64_t opening_until;
@@ -574,6 +580,7 @@ TSUCHI_Result apply_tabs(const Hold& hold, TabKept& kept, const HoldNothing&, bo
         if (!(tabs->bar_before > -10000 && tabs->bar_before < 10000)) { release(tabs); return TSUCHI_UNSUPPORTED; }
         tabs->bar_rendered = tabs->bar_before + tabs->rendered.height - tabs->installed.height;
     }
+    tabs->alone = ui_mod_page_alone();
     kept.tabs = tabs; hold_apply_checkpoint(hold);
     // Retain the host until its Slate teardown or closed state hands its
     // original arrays back. Polling after collection would be too late.
@@ -592,7 +599,8 @@ TSUCHI_Result apply_tabs(const Hold& hold, TabKept& kept, const HoldNothing&, bo
         const uint64_t button = reinterpret_cast<uint64_t>(t::fn::ui_create_widget(reinterpret_cast<void*>(host), reinterpret_cast<void*>(kind), nullptr));
         tabs->buttons.add(game::to_handle(button));
         const uint64_t text = member(button, t::name::ui_mod_list_tab_label_member);
-        okay = current() && button && text && pin(button, hold.object, tabs->scope) && label(text, caption) && current() && visibility(button, uint32_t(t::constant::widget_shown)) && current();
+        okay = current() && button && text && pin(button, hold.object, tabs->scope) && label(text, caption) && current() &&
+            visibility(button, uint32_t(tabs->alone ? t::constant::widget_collapsed : t::constant::widget_shown)) && current();
         if (!okay) break;
         const uint64_t slot = reinterpret_cast<uint64_t>(t::fn::ui_add_child(reinterpret_cast<void*>(root), reinterpret_cast<void*>(button)));
         okay = current() && game::live(slot); if (!okay) break;
@@ -615,7 +623,7 @@ TSUCHI_Result apply_tabs(const Hold& hold, TabKept& kept, const HoldNothing&, bo
         if (okay && tabs->bar_slot) okay = bar_associated(*tabs) &&
             game::read_or<Margin>(live(tabs->bar_slot) + t::ui_mod_list_tab::offsets).height == tabs->bar_before;
     }
-    if (okay && current()) {
+    if (okay && current() && !tabs->alone) {
         tabs->changed = true; offsets(scroll_slot, tabs->installed); okay = current() && tabs_current(*tabs) && tabs_associated(*tabs);
         if (okay) {
             tabs->clipping_changed = true;
@@ -836,7 +844,9 @@ void prepare_host(uint64_t object, const char* path, bool opening = false) {
         tab_highlight(host, tabs->selected + 1 == tabs->buttons.count);
     }
     const TabKept* kept = bars.find(framework_mod, host, 0);
-    if (!kept || !kept->tabs || kept->tabs->revision != ui_settings_tab_revision() || live(host) != object || !active_host(object)) return;
+    if (!kept || !kept->tabs || kept->tabs->revision != ui_settings_tab_revision() || live(host) != object) return;
+    // The page on its own is announced while it opens, so that its first picture has the list.
+    if (!active_host(object) && !(kept->tabs->alone && opening && layout_host(object))) return;
     Tabs* tabs = kept->tabs; RetainTabs retained(tabs);
     cached_host = host;
     if (!tabs->announced) {
@@ -993,7 +1003,7 @@ void ui_mod_list_native_footer_release(uint64_t host) {
 }
 TSUCHI_Result ui_mod_list_native_hold(uint64_t host) {
     if (!mod_usable(framework_mod)) return TSUCHI_INVALID;
-    if (!on_game_thread() || !ready || !active_host(live(host))) return TSUCHI_NOT_READY;
+    if (!on_game_thread() || !ready || !(active_host(live(host)) || (ui_mod_page_alone() && layout_host(live(host))))) return TSUCHI_NOT_READY;
     if (!bars.find(framework_mod, host, 0)) { const auto result = bars.take(framework_mod, host, 0, {}); if (result != TSUCHI_OK) return result; }
     ui_mod_list_native_footer_release(host);
     return hosts.take(framework_mod, host, 0, {});
@@ -1036,6 +1046,22 @@ TSUCHI_Result ui_mod_list_native_cycle(uint64_t host, bool previous) {
     }
     return done(result);
 }
+TSUCHI_Result ui_mod_list_native_show(uint64_t host) {
+    const TabKept* kept = bars.find(framework_mod, host, 0);
+    if (!kept || !kept->tabs || kept->tabs->revision != ui_settings_tab_revision() || !active_host(live(host))) return TSUCHI_NOT_READY;
+    Tabs* tabs = kept->tabs; RetainTabs retained(tabs);
+    const uint32_t last = tabs->buttons.count - 1;
+    if (state_for(host)) return TSUCHI_OK;
+    ui_mod_list_native_footer_release(host);
+    ui_settings_tab_close();
+    if (tabs->retired) return TSUCHI_NOT_READY;
+    const TSUCHI_Result result = hosts.take(framework_mod, host, 0, {});
+    if (result == TSUCHI_OK && !tabs->retired) {
+        tabs->selected = last; tab_highlight(host, true);
+        if (!tabs->retired && last < tabs->buttons.count) ui_feedback_focus(tabs->buttons[last]);
+    }
+    return result;
+}
 bool ui_mod_list_native_active(uint64_t host) { State* state = state_for(host); return state && usable(*state); }
 TSUCHI_Result ui_mod_list_native_selected(uint64_t host, uint32_t& index) {
     if (!mod_usable(framework_mod)) return TSUCHI_INVALID;
@@ -1053,16 +1079,18 @@ TSUCHI_Result ui_mod_list_native_sync(uint64_t host) {
         if (!callbacks.row || !callbacks.row(i, input) || !usable(*state) || !input.id || strcmp(input.id, state->rows[i].id)) return TSUCHI_NOT_READY;
         Row row = state->rows[i];
         if (!copy(row.name, sizeof row.name, input.name) || !copy(row.status, sizeof row.status, input.status ? input.status : "")) return TSUCHI_INVALID;
-        row.requested = input.requested;
+        row.requested = input.requested && !input.button;
         row.has_settings = input.has_settings;
+        row.button = input.button;
         const uint64_t widget = live(row.widget), selector = live(row.selector);
         if (!widget || !selector) return TSUCHI_NOT_READY;
-        if (strcmp(row.name, state->rows[i].name) || strcmp(row.status, state->rows[i].status)) {
+        // An entry's label is its choice, made with the row: a new label shows on the next page.
+        if (!row.button && (strcmp(row.name, state->rows[i].name) || strcmp(row.status, state->rows[i].status))) {
             char text[641]; const uint64_t title = child(widget, t::ui_mod_list_row::title);
             if (!caption(row, text) || !label(title, text) || !usable(*state)) return TSUCHI_NOT_READY;
         }
-        if (game::read_or<uint32_t>(selector + t::ui_mod_list_selector::choice) != uint32_t(input.requested)) {
-            if (!set_choice(widget, selector, input.requested, {[](void* pointer) { return usable(*static_cast<State*>(pointer)); }, state}) || !usable(*state)) return TSUCHI_NOT_READY;
+        if (game::read_or<uint32_t>(selector + t::ui_mod_list_selector::choice) != uint32_t(row.requested)) {
+            if (!set_choice(widget, selector, row.requested, {[](void* pointer) { return usable(*static_cast<State*>(pointer)); }, state}) || !usable(*state)) return TSUCHI_NOT_READY;
         }
         state->rows[i] = row;
     }
@@ -1090,6 +1118,7 @@ bool ui_mod_list_native_dispatch(uint64_t host, uint32_t action, bool& handled, 
     uint32_t index = 0; if (ui_mod_list_native_selected(host, index) != TSUCHI_OK) return false;
     handled = true;
     bool requested = state->rows[index].requested;
+    if (state->rows[index].button && (action == 2 || action == 3)) return true;   // an entry has nothing to turn
     if (action == 2 || action == 3) {
         if (!t::bound(t::fn::ui_mod_list_adjust) || !t::fn::ui_mod_list_adjust(reinterpret_cast<void*>(live(host)), action == 3 ? 1 : 0, int32_t(index)) || !usable(*state)) return true;
         const uint64_t selector = live(state->rows[index].selector);

@@ -45,7 +45,7 @@ void dispose(HttpsJob& job){https_body_free(job.body,release);}
 void empty(){if(memory.snapshot().total){std::printf("FAIL retained allocation: %llu\n",(unsigned long long)memory.snapshot().total);std::exit(1);}}
 bool successful(const HttpsJob& job){return job.state.load()==HTTPS_SUCCEEDED;}
 int main(int count,char** args){
- if(count!=6)return 2;WSADATA startup{};if(WSAStartup(MAKEWORD(2,2),&startup))return 2;
+ if(count!=7)return 2;WSADATA startup{};if(WSAStartup(MAKEWORD(2,2),&startup))return 2;
  FILE* file=std::fopen(args[1],"rb");if(!file)return 2;std::fseek(file,0,SEEK_END);const long size=std::ftell(file);std::rewind(file);auto* roots=static_cast<unsigned char*>(std::malloc(size_t(size)+1));if(std::fread(roots,1,size_t(size),file)!=size_t(size))return 2;std::fclose(file);roots[size]=0;
  if(!memory.configure({heap_allocate,heap_free})||memory.snapshot().total)return 2;
  const HttpsPlatform platform{allocate,release,response_allocate,release,random,utc,milliseconds,pause,open,read,write,close,nullptr,nullptr,nullptr,nullptr,roots,uint32_t(size+1)};
@@ -56,6 +56,34 @@ int main(int count,char** args){
   char body[8]{};if(i==0&&(job.received.load()!=7||job.body.allocated!=7||!https_body_read(job.body,7,0,body,7)||std::memcmp(body,"captain",7)))return 1;
   if(i!=0&&job.body.allocated)return 1;dispose(job);empty();
  }
+ // Exercise the real TLS writer, including binary bytes, body framing, and
+ // redirects. The Python peer independently checks the requests it received.
+ unsigned char upload[HTTPS_UPLOAD_LIMIT];for(unsigned i=0;i<sizeof upload;++i)upload[i]=uint8_t(i);
+ const char* upload_headers="Authorization: Bearer academy-test\r\nContent-Type: application/octet-stream\r\n";
+ for(uint32_t method=HTTPS_POST;method<=HTTPS_DELETE;++method){
+  HttpsJob job{};prepare(job,args[2],"/echo");job.method=method;job.headers=upload_headers;job.upload=upload;job.upload_bytes=sizeof upload;job.same_origin_redirects=true;
+  https_tls_run(job);unsigned char echo[HTTPS_UPLOAD_LIMIT]{};
+  if(!successful(job)||job.received.load()!=sizeof upload||!https_body_read(job.body,sizeof upload,0,echo,sizeof echo)||std::memcmp(echo,upload,sizeof upload)){std::printf("FAIL upload method %u status %u error %u\n",method,job.http_status.load(),job.error.load());return 1;}
+  dispose(job);empty();
+ }
+ for(unsigned status:{301u,302u,303u,307u,308u}){
+  char path[64];std::snprintf(path,sizeof path,"/write-redirect-%u",status);
+  HttpsJob job{};prepare(job,args[2],path);job.method=HTTPS_POST;job.headers=upload_headers;job.upload=upload;job.upload_bytes=13;job.same_origin_redirects=true;
+  https_tls_run(job);
+  if(status==307||status==308){unsigned char echo[13]{};if(!successful(job)||!https_body_read(job.body,13,0,echo,13)||std::memcmp(echo,upload,13))return 1;}
+  else if(job.state.load()!=HTTPS_FAILED||job.error.load()!=HTTPS_ERROR_HTTP||job.http_status.load()!=status)return 1;
+  dispose(job);empty();
+  std::snprintf(path,sizeof path,"/get-redirect-%u",status);HttpsJob get{};prepare(get,args[2],path);get.headers=upload_headers;get.same_origin_redirects=true;https_tls_run(get);
+  if(!successful(get)||get.received.load()!=7)return 1;dispose(get);empty();
+ }
+ HttpsJob cross_write{};prepare(cross_write,args[2],"/write-cross");cross_write.method=HTTPS_POST;cross_write.headers=upload_headers;cross_write.upload=upload;cross_write.upload_bytes=13;cross_write.same_origin_redirects=true;https_tls_run(cross_write);
+ if(cross_write.state.load()!=HTTPS_FAILED||cross_write.error.load()!=HTTPS_ERROR_HTTP||cross_write.http_status.load()!=307)return 1;empty();
+ HttpsJob cross_get{};prepare(cross_get,args[2],"/get-cross");cross_get.headers=upload_headers;cross_get.same_origin_redirects=true;https_tls_run(cross_get);
+ if(cross_get.state.load()!=HTTPS_FAILED||cross_get.error.load()!=HTTPS_ERROR_HTTP||cross_get.http_status.load()!=302)return 1;empty();
+ HttpsJob legacy_get{};prepare(legacy_get,args[2],"/get-cross");https_tls_run(legacy_get);
+ if(!successful(legacy_get)||legacy_get.received.load()!=7)return 1;dispose(legacy_get);empty();
+ HttpsJob dropped{};prepare(dropped,args[2],"/drop");dropped.method=HTTPS_POST;dropped.headers=upload_headers;dropped.upload=upload;dropped.upload_bytes=13;dropped.same_origin_redirects=true;https_tls_run(dropped);
+ if(dropped.state.load()!=HTTPS_FAILED)return 1;empty();
  HttpsJob limited{};prepare(limited,args[2],"/small",2);https_tls_run(limited);
  if(limited.state.load()!=HTTPS_FAILED||limited.error.load()!=HTTPS_ERROR_LIMIT||limited.body.allocated)return 1;empty();
  HttpsJob cancelled{};prepare(cancelled,args[2],"/slow-body");

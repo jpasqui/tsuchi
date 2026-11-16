@@ -21,6 +21,7 @@
 
 #include "list.h"
 #include "texts.h"
+#include "text.h"
 
 namespace tsuchi {
 
@@ -66,6 +67,11 @@ uint32_t container_order_raise(const char* pak_name);
 // the game's own folder of containers, which the game mounts by itself. Called once, after the mods
 // are found and before any of them starts.
 void mount_mod_containers();
+// Framework-only late activation of a validated code-free downloaded container.
+// Makes packages available to subsequent loads; it does not replace live UObjects
+// or promise unmount. Same container identities are refused while retained.
+TSUCHI_Result validate_downloaded_assets(const char* id,const char* folder,Text& problem);
+TSUCHI_Result mount_downloaded_assets(const char* id,const char* folder,Text& problem);
 
 // Called under the engine's package-store lock before its first-entry check. Only entries
 // belonging to the container currently mounted by Tsuchi may replace existing metadata.
@@ -97,6 +103,9 @@ TSUCHI_Result mount_asset_container(const char* id, const char* engine_pak_path,
 // How many containers the framework has mounted, and whether it mounted one for the mod of this ID.
 uint32_t containers_mounted();
 bool container_mounted_for(const char* id);
+// Whether the framework mounted a container from a mod folder whose path starts with `prefix`. The
+// engine reads that folder until the game is closed.
+bool container_mounted_from(const char* prefix);
 // Writes to the log of each mod that was blocked as it started, with its container mounted, that the
 // container stays mounted. Called once, after the mods have started.
 void tell_containers_left_mounted();

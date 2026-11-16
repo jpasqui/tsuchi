@@ -3,8 +3,9 @@ title: Manage mods
 description: Choose mods, review dependencies, set load order, and change settings.
 ---
 
-Open the game's **Settings** menu, then use **L / R** to select **Mods** or
-return to **Game**. Installed mods can add tabs between them. You should see the mods
+Choose **Mods** on the title screen to open the Mods page. During play, open the game's
+**Settings** menu, then use **L / R** to select **Mods** or return to **Game**. Installed mods can
+add tabs between them. Both show the same page. You should see the mods
 that you [installed](/players/install-a-mod/), including mods that couldn't start.
 Press **A** on a mod with declared settings to open its settings. Press **X** to
 read its details and change its order.
@@ -38,6 +39,9 @@ choices you had before you opened it. If a dependency is missing, incompatible,
 or part of a circular dependency, Tsuchi refuses the proposal. Conflicting enabled
 mods and incompatible optional integrations also prevent the proposal.
 
+A mod can add a button of its own under the list, such as one that opens a browser for more mods.
+Press **A** on it to open what it offers.
+
 Press **B** to leave the page. If you changed anything, Tsuchi asks whether to save it. Choose
 **Yes** to save your choices for the next start, or **No** to discard them. Then close and
 restart the game. Activation and load order take effect when Tsuchi loads mods at startup. A
@@ -63,6 +67,19 @@ Tsuchi follows your order, then mod ID order for mods you haven't placed.
 When mods replace the same game asset, the game uses the replacement from the mod
 that loads later. Table fields and text replacements also follow load order. Read
 the authors' compatibility instructions before changing the order of those mods.
+
+## Packages
+
+If you installed a mod from the internet with a downloader mod, its details show the package's
+title, release, and source, and **Remove package**. Removing asks first, then stops the
+package's mods from loading at the next start. Tsuchi deletes the files once the game no longer
+uses them.
+
+## Cheats
+
+A mod with cheat files has **Cheats** in its details. Choose **On** or **Off** for each cheat. A cheat
+turned on runs from the next frame. Turning one off restores code it patched, but memory it changed
+stays changed. A cheat that can't run shows why instead of a choice.
 
 ## Settings
 

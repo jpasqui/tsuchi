@@ -39,6 +39,13 @@ void choose(TSUCHI_Screen screen, const char* label, const char* value) {
     assert(ui::table.set_choice(framework, screen, id, value) == TSUCHI_OK);
     ui::emit_changed_to(framework, {screen, id, 1});
 }
+void arrow(const char* label, bool right) {
+    auto* screen = const_cast<UiScreen*>(ui_active_screen()); assert(screen);
+    for (uint32_t i=0;i<screen->controls.count;++i) if (!std::strcmp(screen->controls[i].label.get(),label)) {
+        screen->selected=i; assert(ui_action(right ? 3 : 2)); frame(); return;
+    }
+    assert(false);
+}
 void button(TSUCHI_Screen screen, const char* label) { ui::emit_activated({screen, control(label)}); }
 TSUCHI_Result editor(const char* title, const char* current, uint32_t maximum, uint64_t request, UiSettingsTextDone done) {
     assert(!std::strcmp(title, "Name") && maximum == 12); editor_initial = current;
@@ -107,6 +114,15 @@ void float_range() {
         forget_settings(settings);
         release_json(declared);
     }
+    for(const char* invalid : {R"({"a":{"type":"number","default":0,"step":0}})",
+        R"({"a":{"type":"number","default":0,"step":-1}})",
+        R"({"a":{"type":"number","default":0,"step":true}})",
+        R"({"a":{"type":"number","default":0,"step":1e39}})",
+        R"({"a":{"type":"integer","default":0,"step":1}})"}) {
+        const Json* declaration=read_json(invalid,std::strlen(invalid));assert(declaration);
+        Settings rejected{};Text reason;assert(!declare_settings(rejected,declaration,reason));
+        forget_settings(rejected);reason.clear();release_json(declaration);
+    }
     const char* document = R"({"near":{"type":"number","default":2,"max":3.4028235e38}})";
     const Json* declared = read_json(document, std::strlen(document));
     Settings settings{};
@@ -131,27 +147,61 @@ int main() {
     ModRecord empty{}; TSUCHI_Screen empty_screen{999};
     assert(ui_mod_settings(empty,&empty_screen) == TSUCHI_NOT_FOUND && empty_screen.id == 999 && prepares == 0);
     std::memcpy(record.id,"garden",7); record.state = ModState::disabled;
-    const char* document = R"({"enabled":{"type":"toggle","name":"Enabled","default":false},"count":{"type":"integer","name":"Count","min":-2,"max":5,"default":1},"rate":{"type":"number","name":"Rate","min":0.25,"max":2.75,"default":0.75},"name":{"type":"text","name":"Name","max_length":12,"default":"Olimar"},"difficulty":{"type":"choice","name":"Difficulty","choices":["normal","hard"],"default":"normal"},"colours":{"type":"set","name":"Colours","choices":["red","Blue Pikmin"],"default":["red"]},"single":{"type":"choice","name":"Single","choices":["[one]"],"default":"[one]"},"spaced":{"type":"choice","name":"Spaced","choices":["Normal Mode","Hard Mode","Hard [\"Mode\"]"],"default":"Normal Mode"}})";
+    const char* document = R"({"enabled":{"type":"toggle","name":"Enabled","default":false},"count":{"type":"integer","name":"Count","min":-2,"max":5,"default":1},"rate":{"type":"number","name":"Rate","min":0.25,"max":2.75,"step":0.25,"default":0.75},"name":{"type":"text","name":"Name","max_length":12,"default":"Olimar"},"difficulty":{"type":"choice","name":"Difficulty","choices":["normal","hard"],"default":"normal"},"colours":{"type":"set","name":"Colours","choices":["red","Blue Pikmin"],"default":["red"]},"single":{"type":"choice","name":"Single","choices":["[one]"],"default":"[one]"},"cave":{"type":"number","name":"Cave time","default":0,"min":0,"max":1},"spaced":{"type":"choice","name":"Spaced","choices":["Normal Mode","Hard Mode","Hard [\"Mode\"]"],"default":"Normal Mode"}})";
     const Json* declared = read_json(document,std::strlen(document)); assert(declared); Text problem;
     assert(declare_settings(record.settings,declared,problem));
     TSUCHI_Screen screen{};
     assert(ui_mod_settings(record,nullptr) == TSUCHI_INVALID);
     assert(ui_mod_settings(record,&screen) == TSUCHI_OK && prepares == 1);
     assert(ui::table.hold_open(framework,screen) == TSUCHI_OK);
-    assert(ui_active_screen()->controls.count == 11);
+    assert(ui_active_screen()->controls.count == 10);
     choose(screen,"Enabled","on"); assert(find_setting(record.settings,"enabled")->integer == 1);
     const char* integer_id = control("Count");
     assert(ui::table.set_integer(framework,screen,integer_id,3) == TSUCHI_OK); ui::emit_changed_to(framework, {screen,integer_id, 2});
     assert(find_setting(record.settings,"count")->integer == 3);
+    // Runtime bounds refresh a live selector and never rewrite its saved preference.
+    Setting* bounded = find_setting(record.settings,"count"); bool range_changed = false;
+    assert(set_setting_integer_range(*bounded,0,2,range_changed)==TSUCHI_OK && range_changed);
+    frame(); int64_t bounded_value=0;
+    assert(ui::table.integer(framework,screen,integer_id,&bounded_value)==TSUCHI_OK && bounded_value==2 && bounded->integer==3);
+    arrow("Count",true); assert(bounded->integer==3);
+    assert(set_setting_integer_range(*bounded,0,0,range_changed)==TSUCHI_OK && range_changed); frame();
+    assert(setting_integer(*bounded,bounded_value)==TSUCHI_OK && bounded_value==0 && bounded->integer==3);
+    assert(set_setting_integer(*bounded,1,range_changed)==TSUCHI_INVALID && !range_changed);
+    assert(set_setting_integer_range(*bounded,3,2,range_changed)==TSUCHI_INVALID && !range_changed);
+    assert(set_setting_integer_range(*bounded,-3,2,range_changed)==TSUCHI_INVALID && !range_changed);
+    assert(set_setting_integer_range(*bounded,-2,5,range_changed)==TSUCHI_OK); frame();
+    assert(ui::table.integer(framework,screen,integer_id,&bounded_value)==TSUCHI_OK && bounded_value==3);
+    assert(set_setting_integer_range(*bounded,-2,5,range_changed)==TSUCHI_OK && !range_changed);
+    bounded->ranged=false; frame();
     choose(screen,"Difficulty","hard"); assert(!std::strcmp(find_setting(record.settings,"difficulty")->text.get(),"hard"));
     choose(screen,"Colours: Blue Pikmin","on"); bool has = false;
     assert(setting_has(*find_setting(record.settings,"colours"),"Blue Pikmin",has) == TSUCHI_OK && has);
     choose(screen,"Colours: red","off"); assert(setting_has(*find_setting(record.settings,"colours"),"red",has) == TSUCHI_OK && !has);
     Setting* number = find_setting(record.settings,"rate"); assert(number->number == 0.75);
-    button(screen,"Increase Rate"); assert(number->number == 1.75);
-    button(screen,"Increase Rate"); assert(number->number == 2.75);
-    const uint32_t at_max = changes; button(screen,"Increase Rate"); assert(changes == at_max && number->number == 2.75);
-    button(screen,"Decrease Rate"); button(screen,"Decrease Rate"); button(screen,"Decrease Rate"); assert(number->number == 0.25);
+    const UiScreen* numeric_screen=ui_active_screen();
+    for (uint32_t i=0;i<numeric_screen->controls.count;++i) {
+        const auto& row=numeric_screen->controls[i];
+        assert(std::strncmp(row.label.get(),"Decrease ",9) && std::strncmp(row.label.get(),"Increase ",9));
+        if (!std::strcmp(row.label.get(),"Rate")) assert(row.kind==UiKind::integer && row.number.enabled && !std::strcmp(row.text.get(),"0.75"));
+    }
+    arrow("Rate",true); assert(number->number==1);
+    for(int i=0;i<7;++i) arrow("Rate",true);
+    assert(number->number==2.75);
+    const uint32_t at_max=changes; arrow("Rate",true); assert(changes==at_max && number->number==2.75);
+    for(int i=0;i<12;++i) arrow("Rate",false);
+    assert(number->number==0.25);
+    bool off_grid_changed=false; assert(set_setting_number(*number,0.777f,off_grid_changed)==TSUCHI_OK);
+    assert(ui_screen_set_number(framework,screen,control("Rate"),number->number)==TSUCHI_OK);
+    double off_grid=0;assert(ui_screen_number(framework,screen,control("Rate"),&off_grid)==TSUCHI_OK && off_grid==number->number);
+    arrow("Rate",true); assert(number->number>1.0269 && number->number<1.0271);
+    // Existing unit-interval mods get fractional arrows without manifest changes.
+    arrow("Cave time",true);auto* cave=find_setting(record.settings,"cave");
+    assert(cave->number>0.04999 && cave->number<0.05001);
+    for(int i=0;i<25;++i) arrow("Cave time",true);
+    assert(cave->number==1);
+    for(int i=0;i<25;++i) arrow("Cave time",false);
+    assert(cave->number==0);
     assert(record.settings.unsaved && record.state == ModState::disabled);
     char text[96]; uint64_t needed = 0;
     assert(ui::table.text(framework,screen,control("Single"),text,sizeof text,&needed) == TSUCHI_OK && !std::strcmp(text,u8"［one］"));
@@ -174,7 +224,7 @@ int main() {
     // A provider makes the text edit explicit. Cancellation and failure preserve the setting.
     ui_settings_text_provider(editor);
     assert(ui_mod_settings(record,&screen) == TSUCHI_OK && ui::table.hold_open(framework,screen) == TSUCHI_OK);
-    assert(ui_active_screen()->controls.count == 12);
+    assert(ui_active_screen()->controls.count == 11);
     button(screen,"Edit Name"); assert(editor_initial == "Olimar" && edit_done);
     edit_done(edit_request,TSUCHI_NOT_READY,nullptr); assert(!std::strcmp(find_setting(record.settings,"name")->text.get(),"Olimar"));
     editor_result = TSUCHI_IO; button(screen,"Edit Name");
@@ -206,7 +256,7 @@ int main() {
     }
     int64_t default_count = 0;
     assert(ui::table.integer(framework,screen,control("Count"),&default_count) == TSUCHI_OK && default_count == 1);
-    assert(ui::table.text(framework,screen,control("Rate"),text,sizeof text,&needed) == TSUCHI_OK && !std::strcmp(text,"0.75"));
+    double default_rate=0;assert(ui_screen_number(framework,screen,control("Rate"),&default_rate)==TSUCHI_OK && default_rate==0.75);
     assert(ui::table.text(framework,screen,control("Name"),text,sizeof text,&needed) == TSUCHI_OK && !std::strcmp(text,"Olimar"));
     assert(ui::table.text(framework,screen,control("Single"),text,sizeof text,&needed) == TSUCHI_OK && !std::strcmp(text,u8"［one］"));
     // A no-op reset neither publishes another change nor requests persistence.
@@ -246,5 +296,36 @@ int main() {
     assert(!std::strcmp(find_setting(record.settings,"name")->text.get(),"Louie"));
     assert(ui_mod_settings(record,&screen) == TSUCHI_NOT_READY);
     assert(closes == 4);
+    // Controlled settings are passive, hidden values are absent, and reset/forged input
+    // cannot overwrite the preference underneath an override.
+    framework = mod_create("settings.override-ui"); assert(framework);
+    ui_settings_start(framework);
+    Setting* count = find_setting(record.settings, "count");
+    Setting* name = find_setting(record.settings, "name");
+    count->integer = 4;
+    const Json* override_value = read_json("7", 1); assert(override_value);
+    count->override_value = override_value;
+    assert(count->controllers.set("test.rules"));
+    name->hidden = true;
+    assert(ui_mod_settings(record,&screen) == TSUCHI_OK && ui::table.hold_open(framework,screen) == TSUCHI_OK);
+    assert(ui::table.text(framework,screen,control("Count"),text,sizeof text,&needed) == TSUCHI_OK);
+    assert(!std::strcmp(text,"Controlled by test.rules: 7"));
+    for (uint32_t i = 0; i < ui_active_screen()->controls.count; ++i)
+        assert(std::strcmp(ui_active_screen()->controls[i].label.get(), "Name") && std::strcmp(ui_active_screen()->controls[i].label.get(), "Edit Name"));
+    ui::emit_changed_to(framework,{screen,control("Count"),1});
+    ui::emit_reset_requested_to(framework,{screen});
+    assert(count->integer == 4 && !std::strcmp(name->text.get(),"Louie"));
+    count->override_value = nullptr; count->controllers.clear();
+    frame(); // ownership changed: close the stale passive form, then reopen as editable
+    bool still_open = true;
+    assert(ui::table.open(framework,screen,&still_open) == TSUCHI_OK && !still_open);
+    assert(ui_mod_settings(record,&screen) == TSUCHI_OK && ui::table.hold_open(framework,screen) == TSUCHI_OK);
+    int64_t restored = 0;
+    assert(ui::table.integer(framework,screen,control("Count"),&restored) == TSUCHI_OK && restored == 4);
+    release_json(override_value);
+    assert(ui::table.release_open(framework,screen) == TSUCHI_OK); frame();
+    for (uint32_t i = 0; i < record.settings.list.count; ++i) record.settings.list[i].hidden = true;
+    assert(!has_visible_settings(record.settings) && ui_mod_settings(record,&screen) == TSUCHI_NOT_FOUND);
+    mod_stop(framework); frame();
     forget_settings(record.settings); release_json(declared); problem.clear();
 }

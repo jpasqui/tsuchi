@@ -1,0 +1,160 @@
+---
+title: Install packages
+description: Download, install, list, and remove mod packages from your mod.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+Use [`packages`](/reference/packages/) to install a mod package from an HTTPS URL. Tsuchi
+downloads the file to the SD card, checks it, and installs it. Your mod chooses which file to
+install, and Tsuchi writes every file to the SD card.
+
+## Capability
+
+Only a mod that declares the `packages` capability can use the service. Add it to `mod.json`:
+
+```json title="mod.json"
+{
+  "id": "olimar.downloader",
+  "name": "Downloader",
+  "version": "1.0.0",
+  "capabilities": ["packages"]
+}
+```
+
+Without it, every `packages` call fails with `denied`.
+
+## Packages
+
+A package is a ZIP file of one of three kinds:
+
+| Kind | Contents |
+| --- | --- |
+| Mods | One or more mod folders under `romfs/tsuchi/mods/`, as [Publish your mod](/develop/publish/) describes. |
+| Assets | One cooked container: a `.pak`, `.utoc`, and `.ucas` of the same name. |
+| Cheats | Cheat files named by the game's build ID, such as `060F827BD2B38703.txt`. |
+
+Tsuchi accepts one outer folder around the contents. Outside the mod folders, Tsuchi ignores only
+`README.md`, `README.txt`, `LICENSE`, and `LICENSE.txt`. Any other file refuses the package.
+
+The ZIP file can be up to 512 MiB, with up to 1 GiB expanded and 256 entries. Stored and DEFLATE
+compression are supported. Encrypted, ZIP64, and split archives are refused.
+
+Assets and cheats come without a manifest. Tsuchi installs them as one mod with the ID
+`external.` followed by 24 hexadecimal digits made from the source and key. A new release of the
+same source and key keeps that ID, whatever its files are named.
+
+## Source and key
+
+Every install names where the package comes from with two texts of your own: `source`, such as
+`github`, and `key`, such as `olimar/tougher-bulborbs`. Tsuchi stores them and compares them byte
+for byte. It never reads anything into them.
+
+An install replaces an installed package when it has the same source and key and at least one of
+the same mod IDs. Pass a mod ID as `replacing` when the player chose to update that mod. The install
+then fails with `different` unless it replaces a package that holds that mod and the new package
+holds it too.
+
+## Install
+
+Subscribe to [`packages.finished`](/reference/packages/#finished), then call `packages.install`
+with the URL, the file's exact size, the source, the key, a title, and a release. Pass the file's
+SHA-256 digest when you know it.
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua title="main.lua"
+packages.on_finished(function(event)
+    local status = packages.status(event.install)
+    print(event.phase, event.failure, status.message)
+end)
+
+local install, why = packages.install(
+    "https://example.com/releases/tougher-1.2.0.zip", 48213,
+    "example", "olimar/tougher", "Tougher Bulborbs", "1.2.0")
+if not install then print(why) end
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript title="main.js"
+packages.on_finished((event) => {
+    const status = packages.status(event.install);
+    console.log(event.phase, event.failure, status.message);
+});
+
+packages.install("https://example.com/releases/tougher-1.2.0.zip", 48213,
+    "example", "olimar/tougher", "Tougher Bulborbs", "1.2.0");
+```
+
+</TabItem>
+<TabItem label="C">
+
+```c title="main.c"
+#include "tsuchi/tsuchi.h"
+
+static const TSUCHI_Host *tsuchi;
+static TSUCHI_Mod *me;
+
+static void finished(void *user, const TSUCHI_PackagesFinished *event) {
+    (void)user;
+    if (event->phase == TSUCHI_INSTALL_PHASE_FAILED)
+        tsuchi->mod->log(me, event->failure);
+}
+
+TSUCHI_Result tsuchi_mod_start(const TSUCHI_Host *host, TSUCHI_Mod *self) {
+    tsuchi = host;
+    me = self;
+    TSUCHI_Subscription subscription = {0};
+    host->packages->on_finished(self, finished, NULL, &subscription);
+    TSUCHI_PackageInstall install = {0};
+    return host->packages->install(self, "https://example.com/releases/tougher-1.2.0.zip", 48213,
+        "example", "olimar/tougher", "Tougher Bulborbs", "1.2.0", "", "", &install);
+}
+```
+
+</TabItem>
+</Tabs>
+
+One install runs at a time across all mods. While it runs, `progress` reports the bytes downloaded,
+then the bytes extracted. `packages.cancel` stops it. If your mod stops, the install stops too.
+
+## Checks
+
+Tsuchi publishes a package only after every check passes. A failed check leaves nothing installed,
+and `failure` names the reason:
+
+| Failure | Meaning |
+| --- | --- |
+| `network` | The download failed. |
+| `http` | The server refused the download. |
+| `size` | The file is not the size you gave. |
+| `digest` | The file's SHA-256 digest is not the one you gave. |
+| `archive` | The ZIP file is damaged or uses a format Tsuchi doesn't read. |
+| `unsupported` | The ZIP file holds files that are none of the three kinds. |
+| `storage` | The SD card refused the files. |
+| `manifest` | A mod's manifest is invalid, is for another build, or conflicts with an installed mod. |
+| `required` | A mod requires a mod that isn't installed. |
+| `conflict` | A mod conflicts with an installed mod. |
+| `different` | The package doesn't replace the mod named by `replacing`. |
+| `receipt` | The record of the installation couldn't be saved. |
+
+After a failure or a success, `packages.status` gives a sentence for the player in `message`.
+
+## Installed packages
+
+`packages.count` and `packages.at` list the installed packages, with the source, key, title,
+release, file name, installation time, kind, and mod IDs of each. Compare them with your source to
+find updates. The order changes when packages are installed or removed.
+
+New mods load at the next start. A cooked container that the player has enabled also loads for new
+loads at once. Reload the affected maps or objects to see it.
+
+Cooked containers can use indexed TOC version 2 or a single-file version 3 TOC. Split containers
+that need more than one UCAS file are not supported.
+
+`packages.remove` removes a package. Its mods stop loading at the next start. Tsuchi deletes the
+files once nothing loaded uses them, and deletes interrupted downloads when the game starts.
+Players can also remove a package from the [Mods page](/players/mod-list/#packages).

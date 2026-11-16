@@ -4,10 +4,13 @@
 #include <string.h>
 
 #include "game.h"
+#include "academy_internal.h"
 #include "list.h"
 #include "objects.h"
+#include "object_retention.h"
 #include "reflect.h"
 #include "reflection.h"
+#include "frame.h"
 #include "registry.h"
 #include "services.h"
 #include "datatable_service.h"
@@ -106,6 +109,40 @@ TSUCHI_Result field_at(TSUCHI_Object table, const char* row, const char* path, u
     return found == TSUCHI_OK ? field_name_at(at.type, at.base, path, index, true, buffer, capacity, out) : found;
 }
 
+// ---- Copies the game keeps of rows ------------------------------------------------------------------
+// Some of the game's systems copy rows of a table once and read only their copy from then on. A family that knows
+// of such a copy says where it is, and each field written into a row, or put back, is written into its copy too.
+constexpr uint32_t kMostRowCopies = 4;
+TableRowCopy (*row_copies[kMostRowCopies])(uint64_t table, uint64_t row, uint64_t owner) = {};
+uint32_t row_copy_count = 0;
+
+void copy_field(uint64_t handle, uint64_t row, const char* path, bool is_text) {
+    const uint64_t table = row_copy_count ? game::from_handle(handle) : 0;
+    const uint64_t type = table ? game::read_or<uint64_t>(table + t::data_table::row_struct) : 0;
+    const auto base = type && t::bound(t::fn::find_table_row) ? reinterpret_cast<uint64_t>(t::fn::find_table_row(reinterpret_cast<void*>(table), row)) : 0;
+    if (!base) return;
+    for (uint32_t i = 0; i < row_copy_count; ++i) {
+        const uint64_t copy = row_copies[i](table, row, 0).base;
+        if (!copy || copy == base) continue;
+        if (is_text) {
+            char text[512];
+            uint64_t needed = 0;
+            const TSUCHI_Result read = text_at(type, base, path, text, sizeof text, &needed);
+            if (read == TSUCHI_OK) {
+                write_text_at(type, copy, path, text);
+            } else if (read == TSUCHI_CAPACITY) {
+                Text whole; // text longer than the room on the stack
+                if (whole.reserve(size_t(needed)) && text_at(type, base, path, whole.data, whole.capacity, &needed) == TSUCHI_OK)
+                    write_text_at(type, copy, path, whole.data);
+                whole.clear();
+            }
+        } else {
+            TSUCHI_Value value{};
+            if (read_at(type, base, path, &value) == TSUCHI_OK) write_at(type, copy, path, &value);
+        }
+    }
+}
+
 // Writes into the row what is in force for a field: the say of the mod started last, or with no say left, what
 // the field held at first, which is then forgotten. Nothing is written when the table or the row is gone.
 void put_in_force(uint64_t handle, uint64_t row, const char* path) {
@@ -123,6 +160,7 @@ void put_in_force(uint64_t handle, uint64_t row, const char* path) {
             else write_at(type, base, path, &original->before);
         }
     }
+    if (last || original) copy_field(handle, row, path, last ? last->is_text : original->was_text);
     if (!last && original) {
         original->path.clear(), original->before_text.clear();
         originals.remove(original);
@@ -255,6 +293,7 @@ TSUCHI_Result script_override(TSUCHI_Mod* mod, const ScriptTarget& target, const
     if (fresh_changes > UINT32_MAX - changes.count || fresh_originals > UINT32_MAX - originals.count) return TSUCHI_CAPACITY;
     if (!changes.reserve(changes.count + fresh_changes) || !originals.reserve(originals.count + fresh_originals)) return TSUCHI_NO_MEMORY;
     if ((result = reserve_owned(mod, fresh_changes)) != TSUCHI_OK) return result;
+    if ((result = academy_before_table_change(game::from_handle(target.object.id))) != TSUCHI_OK) return result;
     // Capacity is reserved and no native or script callback runs while records are installed.
     for (uint32_t i = 0; i < pending.items.count; ++i) {
         PendingChange& each = pending.items[i];
@@ -273,6 +312,8 @@ TSUCHI_Result script_override(TSUCHI_Mod* mod, const ScriptTarget& target, const
     }
     next_change += fresh_changes;
     plan.commit();
+    for (uint32_t i = 0; i < plan.fields.count; ++i)
+        copy_field(target.object.id, row.name, plan.fields[i].path.get(), plan.fields[i].wanted->kind == ScriptWriteKind::text);
     return TSUCHI_OK;
 }
 TSUCHI_Result set(TSUCHI_Mod* mod, TSUCHI_Object table, const char* row, const char* path, const TSUCHI_Value* value) {
@@ -324,6 +365,8 @@ TSUCHI_Result add_row(TSUCHI_Object handle, const char* row, const char* from) {
     memcpy(&packed, &name, sizeof name);
     if (!packed || t::fn::find_table_row(reinterpret_cast<void*>(table), packed)) return TSUCHI_INVALID;
     if (!plain_table(table)) return TSUCHI_UNSUPPORTED;
+    const TSUCHI_Result guarded = academy_before_table_change(table);
+    if (guarded != TSUCHI_OK) return guarded;
     t::fn::add_table_row(reinterpret_cast<void*>(table), packed, reinterpret_cast<void*>(source.base));
     const auto made = reinterpret_cast<uint64_t>(t::fn::find_table_row(reinterpret_cast<void*>(table), packed));
     return made && made != source.base ? TSUCHI_OK : TSUCHI_NOT_READY;
@@ -352,6 +395,7 @@ struct Aside {
     uint64_t table, row;
     Text path;
     game::ArrayMemory first;
+    game::Place place;
 };
 List<Length> lengths;
 List<Aside> asides;
@@ -416,8 +460,232 @@ TSUCHI_Result prepare_says(game::WritePlan& plan, uint64_t handle, uint64_t row,
     return TSUCHI_OK;
 }
 
+// Each retained native row owns its own array. Stashed arrays are never shared
+// with the table or another copy. A tainted entry is a weak conflict guard.
+struct ArrayCopy {
+    uint64_t table = 0, row = 0, owner = 0, type = 0;
+    uint32_t provider = 0;
+    Text path;
+    game::Place place{};
+    game::ArrayMemory first{}, shown{};
+    bool tainted = false, finished = false;
+};
+List<ArrayCopy> array_copies;
+constexpr uint32_t kMostArrayCopies = 4096;
+bool equal_array(const game::ArrayMemory& a, const game::ArrayMemory& b) {
+    return a.data == b.data && a.count == b.count && a.max == b.max;
+}
+int32_t copy_index(uint64_t table, uint64_t row, const char* path, uint32_t provider, uint64_t owner) {
+    for (uint32_t i = 0; i < array_copies.count; ++i) {
+        const auto& copy = array_copies[i];
+        if (copy.table == table && copy.row == row && copy.provider == provider && copy.owner == owner && same_path(copy.path.get(), path)) return int32_t(i);
+    }
+    return -1;
+}
+void unpin_copy(const ArrayCopy& copy) { release_game_object(copy.owner); release_game_object(copy.table); }
+struct CopyUpdate {
+    uint32_t index = UINT32_MAX;
+    ArrayCopy made;
+    game::Place place{};
+    game::ArrayMemory before{}, after{};
+    bool fresh = false, copied_first = false, allocated_after = false, abandon = false, native_first = false;
+};
+struct CopyPlan {
+    List<CopyUpdate> updates;
+    game::WritePlan normalize, effective;
+    bool committed = false;
+    ~CopyPlan() {
+        for (uint32_t i = 0; i < updates.count; ++i) {
+            auto& update = updates[i];
+            if (!committed) {
+                if (update.allocated_after) game::free_array(update.place, update.after);
+                if (update.copied_first) game::free_array(update.place, update.made.first);
+                if (update.fresh) unpin_copy(update.made);
+            }
+            update.made.path.clear();
+        }
+        updates.clear();
+    }
+    TSUCHI_Result stage(uint64_t handle, uint64_t row, const char* path, uint64_t type,
+                        uint64_t source_address,
+                        const game::ArrayMemory& source_first, const game::ArrayMemory& source_now,
+                        bool first, const Length* last, bool allow_displaced = false) {
+        const uint64_t table = game::from_handle(handle);
+        uint32_t fresh = 0;
+        for (uint32_t i = 0; i < array_copies.count; ++i) {
+            const auto& copy = array_copies[i];
+            if (copy.table != handle || copy.row != row || !same_path(copy.path.get(), path)) continue;
+            CopyUpdate update{}; update.index = i;
+            if (!updates.add(update)) return TSUCHI_NO_MEMORY;
+        }
+        if (last) for (uint32_t i = 0; i < row_copy_count; ++i) {
+            const auto copy = row_copies[i](table, row, 0);
+            if (!copy.base) continue;
+            if (!copy.owner || !game::from_handle(copy.owner)) return TSUCHI_NOT_READY;
+            if (copy_index(handle, row, path, i, copy.owner) >= 0) continue;
+            if (array_copies.count + ++fresh > kMostArrayCopies) return TSUCHI_CAPACITY;
+            CopyUpdate update{}; update.fresh = true;
+            update.made.table = handle; update.made.row = row; update.made.owner = copy.owner; update.made.provider = i;
+            update.made.type = type;
+            if (!update.made.path.set(path)) return TSUCHI_NO_MEMORY;
+            if (!retain_game_object(handle)) { update.made.path.clear(); return TSUCHI_NO_MEMORY; }
+            if (!retain_game_object(copy.owner)) { release_game_object(handle); update.made.path.clear(); return TSUCHI_NO_MEMORY; }
+            if (!updates.add(update)) { unpin_copy(update.made); update.made.path.clear(); return TSUCHI_NO_MEMORY; }
+        }
+        if (!array_copies.reserve(array_copies.count + fresh)) return TSUCHI_NO_MEMORY;
+        for (uint32_t i = 0; i < updates.count; ++i) {
+            auto& update = updates[i];
+            const auto& copy = update.fresh ? update.made : array_copies[update.index];
+            if (copy.tainted) { if (last && !allow_displaced) return TSUCHI_BUSY; update.abandon = true; continue; }
+            const auto current = game::from_handle(copy.owner) ? row_copies[copy.provider](table, row, copy.owner) : TableRowCopy{};
+            TSUCHI_Result result = current.base && current.owner == copy.owner ? game::find_place(type, current.base, path, update.place) : TSUCHI_NOT_FOUND;
+            if (result == TSUCHI_OK) result = game::array_of(update.place, update.before);
+            if (result != TSUCHI_OK || (!update.fresh && !equal_array(update.before, copy.shown))) {
+                if (update.fresh) return result;
+                if (last && !allow_displaced) return TSUCHI_BUSY;
+                update.abandon = true; continue;
+            }
+            if (!game::writable(update.place.address, t::array::size)) return TSUCHI_NOT_READY;
+            if (update.place.address == source_address) return TSUCHI_BUSY;
+            // A shallow alias cannot be freed independently. Refuse before any publication.
+            if (update.before.data && (update.before.data == source_first.data || update.before.data == source_now.data)) return TSUCHI_BUSY;
+            for (uint32_t j = 0; j < i; ++j)
+                if (!updates[j].abandon && (update.place.address == updates[j].place.address ||
+                    (update.before.data && update.before.data == updates[j].before.data))) return TSUCHI_BUSY;
+            game::ArrayMemory baseline = copy.first;
+            if (update.fresh) {
+                update.native_first = first;
+                if (first) baseline = update.before;
+                else {
+                    result = game::copy_array(update.place, source_first, uint32_t(source_first.count), baseline);
+                    if (result != TSUCHI_OK) return result;
+                    update.copied_first = true;
+                }
+                update.made.first = baseline;
+                update.made.place = update.place;
+                result = prepare_says(normalize, handle, row, path, type, current.base, update.place, baseline, true);
+                if (result != TSUCHI_OK) return result;
+            }
+            update.after = baseline;
+            if (last) {
+                result = game::copy_array(update.place, baseline, last->count, update.after);
+                if (result != TSUCHI_OK) return result;
+                update.allocated_after = true;
+            }
+            result = prepare_says(effective, handle, row, path, type, current.base, update.place, update.after, false);
+            if (result != TSUCHI_OK) return result;
+        }
+        return TSUCHI_OK;
+    }
+    void commit(bool active) {
+        normalize.commit(); effective.commit();
+        for (uint32_t i = 0; i < updates.count; ++i) {
+            auto& update = updates[i];
+            if (update.abandon) {
+                auto& copy = array_copies[update.index];
+                if (!copy.tainted) {
+                    // Another writer may own either old allocation now. Never
+                    // free uncertain shown storage or overwrite its header.
+                    if (copy.first.data != update.before.data) game::free_array(copy.place, copy.first);
+                    unpin_copy(copy); copy.first = {}; copy.shown = {}; copy.tainted = true;
+                }
+                continue;
+            }
+            game::put_array(update.place, update.after);
+            if (!update.native_first) game::free_array(update.place, update.before);
+            if (update.fresh) {
+                update.made.place = update.place; update.made.shown = update.after;
+                array_copies.add(update.made); update.made = {};
+            } else {
+                auto& copy = array_copies[update.index];
+                copy.place = update.place; copy.shown = update.after;
+                if (!active) { unpin_copy(copy); copy.finished = true; }
+            }
+        }
+        for (uint32_t i = array_copies.count; i--;) if (array_copies[i].finished) {
+            array_copies[i].path.clear(); array_copies.remove(&array_copies[i]);
+        }
+        committed = true;
+    }
+};
+
+// A row removed by the game cannot receive a table header. Restore surviving
+// native copies independently, then release their roots. Foreign headers remain.
+void end_missing_copies(uint64_t handle, uint64_t row, const char* path) {
+    const uint64_t table = game::from_handle(handle);
+    for (uint32_t i = array_copies.count; i--;) {
+        auto& copy = array_copies[i];
+        if (copy.table != handle || copy.row != row || !same_path(copy.path.get(), path) || copy.tainted) continue;
+        const auto current = game::from_handle(copy.owner) ? row_copies[copy.provider](table, row, copy.owner) : TableRowCopy{};
+        game::Place place{}; game::ArrayMemory now{};
+        const bool found = current.base && current.owner == copy.owner && game::live(copy.type) &&
+            game::find_place(copy.type, current.base, path, place) == TSUCHI_OK && game::array_of(place, now) == TSUCHI_OK;
+        if (found && equal_array(now, copy.shown) && game::put_array(place, copy.first) == TSUCHI_OK) {
+            game::free_array(place, now); unpin_copy(copy); copy.path.clear(); array_copies.remove(&copy);
+        } else {
+            if (copy.first.data != now.data) game::free_array(copy.place, copy.first);
+            unpin_copy(copy); copy.first = {}; copy.shown = {}; copy.tainted = true;
+        }
+    }
+}
+
+// The array a row holds now at an aside's path. False when the table, the row or the field is gone.
+bool array_in_row(const Aside& aside, uint64_t& type, game::Place& place, game::ArrayMemory& now) {
+    const uint64_t table = game::from_handle(aside.table);
+    type = table ? game::read_or<uint64_t>(table + t::data_table::row_struct) : 0;
+    const auto base = type && t::bound(t::fn::find_table_row) ? reinterpret_cast<uint64_t>(t::fn::find_table_row(reinterpret_cast<void*>(table), aside.row)) : 0;
+    return base && game::find_place(type, base, aside.path.get(), place) == TSUCHI_OK && game::array_of(place, now) == TSUCHI_OK;
+}
+
+// A stop that could not put in force what is left, for want of memory most likely, leaves its aside for a later
+// frame to try again. Nothing else leaves an array at another length than the one in force.
+bool lengths_unsettled = false;
+
+TSUCHI_Result put_length_in_force(uint64_t, uint64_t, const char*, const Length*, bool);
+void refresh_array_copies() {
+    for (uint32_t i = array_copies.count; i--;) {
+        const auto& copy = array_copies[i];
+        if (copy.tainted && (!game::from_handle(copy.table) || !game::from_handle(copy.owner))) {
+            array_copies[i].path.clear(); array_copies.remove(&array_copies[i]);
+        }
+    }
+    if (lengths_unsettled) {
+        lengths_unsettled = false;
+        for (uint32_t i = asides.count; i--;) {
+            const auto& aside = asides[i];
+            if (const auto* last = find_length(nullptr, aside.table, aside.row, aside.path.get())) {
+                uint64_t type; game::Place place; game::ArrayMemory now;
+                if (!array_in_row(aside, type, place, now)) {
+                    if (game::from_handle(aside.table)) lengths_unsettled = true; // the row may come back
+                    continue;
+                }
+                if (uint32_t(now.count) == last->count) continue; // this one is as it should be
+            }
+            const TSUCHI_Result result = put_length_in_force(aside.table, aside.row, aside.path.get(), nullptr, true);
+            if (result != TSUCHI_OK && result != TSUCHI_NOT_FOUND) lengths_unsettled = true;
+        }
+    }
+    // A copy the game makes after a length was set has that length in an array of the game's own making, which
+    // is replaced here. Only a build with such copies has any to look for, and the row is read only once one shows.
+    for (uint32_t i = row_copy_count ? asides.count : 0; i--;) {
+        const auto& aside = asides[i];
+        const uint64_t table = game::from_handle(aside.table);
+        bool needed = false;
+        for (uint32_t j = 0; table && j < row_copy_count; ++j) {
+            const auto copy = row_copies[j](table, aside.row, 0);
+            if (copy.base && copy_index(aside.table, aside.row, aside.path.get(), j, copy.owner) < 0) needed = true;
+        }
+        if (!needed) continue;
+        const auto* last = find_length(nullptr, aside.table, aside.row, aside.path.get());
+        uint64_t type; game::Place place; game::ArrayMemory now;
+        if (!last || !array_in_row(aside, type, place, now) || uint32_t(now.count) != last->count) continue;
+        CopyPlan plan;
+        if (plan.stage(aside.table, aside.row, aside.path.get(), type, place.address, aside.first, now, false, last, true) == TSUCHI_OK) plan.commit(true);
+    }
+}
+
 // Replacement storage, originals and element overrides are all ready before publication.
-TSUCHI_Result put_length_in_force(uint64_t handle, uint64_t row, const char* path, const Length* omitted = nullptr) {
+TSUCHI_Result put_length_in_force(uint64_t handle, uint64_t row, const char* path, const Length* omitted = nullptr, bool allow_displaced = false) {
     const Length* last = nullptr;
     for (uint32_t i = 0; i < lengths.count; ++i) {
         const Length& each = lengths[i];
@@ -430,7 +698,11 @@ TSUCHI_Result put_length_in_force(uint64_t handle, uint64_t row, const char* pat
     const auto base = table && t::bound(t::fn::find_table_row) ? reinterpret_cast<uint64_t>(t::fn::find_table_row(reinterpret_cast<void*>(table), row)) : 0;
     game::Place place;
     if (!type || !base || game::find_place(type, base, path, place) != TSUCHI_OK) {
-        if (!last && aside) { aside->path.clear(); asides.remove(aside); }
+        if (!last && aside) {
+            end_missing_copies(handle, row, path);
+            game::free_array(aside->place, aside->first);
+            aside->path.clear(); asides.remove(aside);
+        }
         return TSUCHI_NOT_FOUND;
     }
     if (!last && !aside) return TSUCHI_OK;
@@ -438,7 +710,7 @@ TSUCHI_Result put_length_in_force(uint64_t handle, uint64_t row, const char* pat
     game::ArrayMemory before;
     TSUCHI_Result result = game::array_of(place, before);
     if (result != TSUCHI_OK) return result;
-    Aside made{handle, row, {}, before};
+    Aside made{handle, row, {}, before, place};
     const bool first = last && !aside;
     if (first && (!made.path.set(path) || !asides.reserve(asides.count + 1))) {
         made.path.clear(); return TSUCHI_NO_MEMORY;
@@ -451,6 +723,9 @@ TSUCHI_Result put_length_in_force(uint64_t handle, uint64_t row, const char* pat
     game::WritePlan normalize, effective;
     if (first) result = prepare_says(normalize, handle, row, path, type, base, place, before, true);
     if (result == TSUCHI_OK) result = prepare_says(effective, handle, row, path, type, base, place, after, false);
+    CopyPlan copies;
+    if (result == TSUCHI_OK) result = copies.stage(handle, row, path, type, place.address, aside ? aside->first : before, before, first, last, allow_displaced);
+    if (result == TSUCHI_OK) result = academy_before_table_change(table);
     if (result != TSUCHI_OK) {
         if (copied) game::free_array(place, after);
         made.path.clear(); return result;
@@ -458,6 +733,7 @@ TSUCHI_Result put_length_in_force(uint64_t handle, uint64_t row, const char* pat
     normalize.commit();
     effective.commit();
     game::put_array(place, after);
+    copies.commit(last != nullptr);
     if (first) { asides.add(made); made.path = Text{}; }
     else {
         game::free_array(place, before);
@@ -473,7 +749,8 @@ void drop_length(Length* length) {
     Text path = length->path;
     length->path = Text{};
     lengths.remove(length);
-    put_length_in_force(table, row, path.get());
+    const TSUCHI_Result result = put_length_in_force(table, row, path.get(), nullptr, true);
+    if (result != TSUCHI_OK && result != TSUCHI_NOT_FOUND) lengths_unsettled = true;
     path.clear();
 }
 
@@ -534,7 +811,9 @@ TSUCHI_Result table_restore_length(TSUCHI_Mod* mod, TSUCHI_Object table, const c
     memcpy(&packed, &name, sizeof name);
     Length* mine = find_length(mod, table.id, packed, path);
     if (!mine) return TSUCHI_NOT_FOUND;
-    const TSUCHI_Result result = put_length_in_force(table.id, packed, path, mine);
+    // As when the mod stops: a copy another writer has taken over is left to that writer, and does not keep the
+    // mod from giving up its say.
+    const TSUCHI_Result result = put_length_in_force(table.id, packed, path, mine, true);
     if (result != TSUCHI_OK && result != TSUCHI_NOT_FOUND) return result;
     disown(mod, kLength, mine->id);
     mine->path.clear();
@@ -545,8 +824,12 @@ TSUCHI_Result table_restore_length(TSUCHI_Mod* mod, TSUCHI_Object table, const c
 void tables_start() {
     datatable::set_backend(&service);
     table_script_writer = script_override;
+    each_engine_frame(refresh_array_copies);
 }
 unsigned table_changes() { return changes.count; }
 unsigned table_lengths() { return lengths.count; }
+void add_row_copies(TableRowCopy (*copy_of)(uint64_t table, uint64_t row, uint64_t owner)) {
+    if (row_copy_count < kMostRowCopies) row_copies[row_copy_count++] = copy_of;
+}
 
 } // namespace tsuchi

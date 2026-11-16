@@ -42,6 +42,13 @@ bool channel_keep(const Hold&,ChannelKept&){return true;}
 void channel_restore(const Hold&,ChannelKept& kept,HoldEnd){machine.stop_channel(kept.subscription);}
 Holds<ChannelKept,ChannelWanted,channel_apply,channel_keep,channel_restore> channels{"session.channel",HoldOn::nothing,false};
 struct SessionKept {bool started;};
+wire::WireAddress wire_address(const TSUCHI_NetAddress& from){
+    wire::WireAddress to{};
+    to.size=sizeof(to);
+    to.port=uint16_t(from.port);
+    for(uint32_t i=0;i<4;++i)to.ip[i]=uint8_t(from.ipv4>>(24-i*8));
+    return to;
+}
 struct SessionWanted {bool host;uint32_t port,max_peers;const char* name;TSUCHI_NetAddress target;};
 TSUCHI_Result session_apply(const Hold& hold,SessionKept& kept,const SessionWanted& wanted,bool fresh){
     if(!fresh)return TSUCHI_BUSY;
@@ -49,7 +56,10 @@ TSUCHI_Result session_apply(const Hold& hold,SessionKept& kept,const SessionWant
     wire::WireOptions options{};options.size=sizeof(options);options.port=uint16_t(wanted.port);options.max_peers=uint16_t(wanted.max_peers);memcpy(options.name,wanted.name,strlen(wanted.name)+1);
     TSUCHI_Result result=TSUCHI_OK;
     if(wanted.host)result=machine.host(mod_id(hold.mod),&options,now());
-    else {wire::WireAddress host{};host.size=sizeof(host);host.port=uint16_t(wanted.target.port);for(uint32_t i=0;i<4;++i)host.ip[i]=uint8_t(wanted.target.ipv4>>(24-i*8));result=machine.join(mod_id(hold.mod),&host,&options,now());}
+    else {
+        const wire::WireAddress target=wire_address(wanted.target);
+        result=machine.join(mod_id(hold.mod),&target,&options,now());
+    }
     kept.started=result==TSUCHI_OK;return result;
 }
 bool session_keep(const Hold&,SessionKept&){return true;}
@@ -63,6 +73,40 @@ TSUCHI_Result join(TSUCHI_Mod* mod,const char* host,uint32_t port,const char* na
     if(!port||port>65535||strlen(name)>31)return TSUCHI_INVALID;
     TSUCHI_NetAddress address{};const TSUCHI_Result found=network_numeric_address(host,port,&address);if(found!=TSUCHI_OK)return found;
     return sessions.take(mod,0,0,{false,port,4,name,address});
+}
+// A numeric address for the session core, or the result that refused it.
+TSUCHI_Result wire_target(const char* address,uint32_t port,wire::WireAddress* out){
+    if(!port||port>65535)return TSUCHI_INVALID;
+    TSUCHI_NetAddress found{};
+    const TSUCHI_Result result=network_numeric_address(address,port,&found);
+    if(result!=TSUCHI_OK)return result;
+    *out=wire_address(found);
+    return TSUCHI_OK;
+}
+TSUCHI_Result discover(TSUCHI_Mod* mod,const char* server,uint32_t port){
+    wire::WireAddress at{};
+    if(const TSUCHI_Result result=wire_target(server,port,&at);result!=TSUCHI_OK)return result;
+    if(!sessions.find(mod,0,0))return TSUCHI_NOT_FOUND;
+    return machine.discover(mod_id(mod),&at,now());
+}
+TSUCHI_Result set_secret(TSUCHI_Mod* mod,const void* secret,uint64_t size){
+    if(size>wire::SESSION_SECRET_BYTES)return TSUCHI_INVALID;
+    return machine.set_secret(mod_id(mod),static_cast<const uint8_t*>(secret),uint32_t(size));
+}
+TSUCHI_Result public_address(TSUCHI_SessionAddress* out){
+    wire::WireAddress at{};
+    at.size=sizeof(at);
+    const TSUCHI_Result result=machine.public_address(&at);
+    if(result!=TSUCHI_OK)return result;
+    out->ipv4=(uint32_t(at.ip[0])<<24)|(uint32_t(at.ip[1])<<16)|(uint32_t(at.ip[2])<<8)|at.ip[3];
+    out->port=at.port;
+    return TSUCHI_OK;
+}
+TSUCHI_Result punch(TSUCHI_Mod* mod,const char* address,uint32_t port){
+    wire::WireAddress at{};
+    if(const TSUCHI_Result result=wire_target(address,port,&at);result!=TSUCHI_OK)return result;
+    if(!sessions.find(mod,0,0))return TSUCHI_NOT_FOUND;
+    return machine.punch(mod_id(mod),&at,now());
 }
 TSUCHI_Result leave(TSUCHI_Mod* mod){
     if(!sessions.find(mod,0,0))return TSUCHI_NOT_FOUND;
@@ -79,7 +123,7 @@ TSUCHI_Result read_message(TSUCHI_Mod* mod,void* buffer,uint64_t capacity,uint64
 // Every engine frame, also where the world does not step (menus, loading screens), with the game's own word
 // for whether it is about to hold its thread for a scene change or a save.
 void poll(){if(clock_now)machine.poll(now(),game::busy_with_saves_or_scenes());}
-const session::Backend service{host,join,leave,info,peer,version,open_channel,close_channel,send,read_message};
+const session::Backend service{host,join,leave,info,peer,version,open_channel,close_channel,send,read_message,set_secret,discover,public_address,punch};
 }
 namespace session_wire {
 bool session_owner_active(const char* id){

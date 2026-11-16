@@ -39,6 +39,24 @@ void take(uint32_t state[8], const uint8_t block[64]) {
 
 } // namespace
 
+void Sha256::add(const void* data, size_t size) {
+    const auto* at = static_cast<const uint8_t*>(data);
+    while (size) {
+        const size_t used = size_t(bytes % 64), room = 64 - used, count = size < room ? size : room;
+        memcpy(pending + used, at, count); bytes += count; at += count; size -= count;
+        if (bytes % 64 == 0) take(state, pending);
+    }
+}
+void Sha256::finish(uint8_t out[kSha256Bytes]) const {
+    Sha256 copy = *this;
+    uint8_t tail[128]{}; const size_t used = size_t(bytes % 64);
+    const size_t count = used < 56 ? 64 - used : 128 - used;
+    tail[0] = 0x80;
+    for (int i=0;i<8;++i) tail[count-1-i]=uint8_t((bytes*8)>>(8*i));
+    copy.add(tail,count);
+    for(int i=0;i<8;++i)for(int j=0;j<4;++j)out[4*i+j]=uint8_t(copy.state[i]>>(24-8*j));
+}
+
 void sha256(const void* data, size_t bytes, uint8_t out[kSha256Bytes]) {
     uint32_t state[8] = {0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};
     const auto* at = static_cast<const uint8_t*>(data);

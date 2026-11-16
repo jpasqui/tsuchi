@@ -1,0 +1,110 @@
+service: memory
+tutorials:
+  - {title: Use memory directly, path: /develop/memory/}
+layer: core
+acts_on: game
+lifetime: process
+brief: "Reserves memory, and reads and writes the game's memory at an address."
+description: |
+  This service works with addresses, as compiled code does. It checks that an
+  address is mapped and readable or writable before it reads or writes, so a
+  wrong address fails instead of stopping the game. It doesn't check what the
+  bytes mean. A write the game doesn't expect can still crash it or corrupt a
+  save, so use another service whenever one covers the job.
+
+  A block is memory your mod reserves. It comes from the game's own allocator,
+  so the game can free it like its own memory. A block belongs to your mod and
+  is freed when your mod stops, unless you ask for a lasting block. Ask for a
+  lasting block when the game keeps a pointer to it: freeing memory the game
+  still uses crashes it. A lasting block stays until the game closes, even after
+  your mod stops, so each mod has a limit on how much it can keep that way.
+
+  Addresses are 64-bit numbers. In Lua they are integers, and in JavaScript they
+  are BigInt. Bytes are strings in Lua and Uint8Array values in
+  JavaScript, so `string.pack` and `DataView` turn them into numbers.
+
+functions:
+  - name: main
+    in_hooks: true
+    doc: "The address where the game's code starts. Add an offset from the game table to it to get an address."
+    returns: {type: u64, doc: "The address."}
+    fails:
+      not_ready: "The game's code can't be found yet."
+    users: [population-cap, remote-inspector]
+
+  - name: allocate
+    doc: |
+      Reserves a block of memory, filled with zeros. It is freed when your mod
+      stops, unless it is lasting.
+    owns: true
+    params:
+      - {name: bytes, type: u64, doc: "The size, from 1 to 67,108,864 bytes."}
+      - {name: alignment, type: u32, doc: "What the address is a multiple of: 0 for the allocator's own, or a power of two up to 4096."}
+      - {name: lasting, type: bool, doc: "Whether the block stays until the game closes, for memory the game keeps a pointer to."}
+    returns: {type: handle<memory_block>, doc: "The block."}
+    fails:
+      invalid: "The size or the alignment is outside its range."
+      capacity: "Your mod already has 256 blocks or 64 MiB in blocks, or 64 MiB in lasting blocks since the game started."
+      not_ready: "The game's allocator isn't ready yet."
+      no_memory: "The game is out of memory."
+    users: [population-cap, remote-inspector]
+
+  - name: address
+    in_hooks: true
+    doc: "Where a block starts."
+    params:
+      - {name: block, type: handle<memory_block>, doc: "The block."}
+    returns: {type: u64, doc: "The address."}
+    fails:
+      not_found: "The block was freed."
+    users: [population-cap, remote-inspector]
+
+  - name: free
+    doc: |
+      Frees a block now. Free a lasting block only when the game no longer has a
+      pointer to it.
+    owns: true
+    params:
+      - {name: block, type: handle<memory_block>, doc: "The block."}
+    fails:
+      not_found: "The block was already freed."
+    users: [population-cap, remote-inspector]
+
+  - name: read
+    in_hooks: true
+    doc: "Reads bytes at an address. Either every byte is read, or the call fails and reads none."
+    params:
+      - {name: address, type: u64, doc: "Where to start."}
+    returns: {type: bytes, doc: "The bytes, as many as asked for, up to 1,048,576."}
+    fails:
+      invalid: "The range wraps past the end of the address space, or it is over 1,048,576 bytes."
+      not_found: "Part of the range isn't mapped or can't be read."
+    users: [population-cap, remote-inspector]
+
+  - name: read_name
+    in_hooks: true
+    doc: |
+      Reads one of the game's names at an address, as text. A name is the eight
+      bytes the game keeps in an object or passes to a function to name something,
+      such as a row of one of its tables.
+    params:
+      - {name: address, type: u64, doc: "Where the name is."}
+    returns: {type: text, doc: "The name, with its number as the game spells it, like `Thing_3`."}
+    fails:
+      not_found: "The address can't be read, or what is there isn't one of the game's names."
+    completes: read
+
+  - name: write
+    in_hooks: true
+    doc: |
+      Writes bytes at an address. Either every byte is written, or the call fails
+      and writes none. The game's code can't be written here: use
+      `hook.patch_instruction`, which checks the instruction and puts it back when
+      your mod stops.
+    params:
+      - {name: address, type: u64, doc: "Where to start."}
+      - {name: data, type: bytes, doc: "The bytes, up to 1,048,576."}
+    fails:
+      invalid: "The range wraps past the end of the address space, it is over 1,048,576 bytes, or it touches the game's code."
+      not_found: "Part of the range isn't mapped or can't be written."
+    users: [population-cap, remote-inspector]

@@ -23,4 +23,22 @@ struct EngineText {
     }
 };
 
+// An engine array as a function hands one back by value: its block, how many elements it holds, and how many it
+// has room for. The engine's array type has a destructor, so the caller says where it goes (x8); the destructor
+// here is what makes a C++ function returning this type do the same. The block is the engine's: whoever takes it
+// releases it with the engine's allocator.
+struct EngineArray {
+    void* data = nullptr;
+    int32_t count = 0;
+    int32_t max = 0;
+    ~EngineArray() {}
+};
+
+// A new element of one of the engine's sets, as the set's own add hands it back by value: the element's index and
+// where it is. The engine's type is plain data, so it comes back in two registers (x0, x1), as this one does.
+struct EngineSlot {
+    int32_t index;
+    void* place;
+};
+
 } // namespace tsuchi::game

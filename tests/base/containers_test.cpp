@@ -527,6 +527,51 @@ void unreadable_folders_fail() {
     tsuchi::forget_mods();
 }
 
+void single_partition_version_three() {
+    auto made = make_container(0xBAC, {{0xAA, "Carrot4/Content/Mods/leaf/T_A.uasset"}});
+    made.toc[16] = 3;
+    uint32_t partitions = 1;
+    uint64_t partition_size = UINT64_MAX;
+    std::memcpy(&made.toc[52], &partitions, 4);
+    std::memcpy(&made.toc[88], &partition_size, 8);
+    tsuchi::ContainerToc toc{}; const char* wrong = nullptr;
+    CHECK(tsuchi::read_container_toc(reinterpret_cast<const uint8_t*>(made.toc.data()), made.toc.size(), toc, wrong));
+    const uint64_t data_end = toc.data_bytes;
+    tsuchi::forget_container_toc(toc);
+    for (uint32_t count : {0u, 2u}) {
+        std::memcpy(&made.toc[52], &count, 4);
+        CHECK(!tsuchi::read_container_toc(reinterpret_cast<const uint8_t*>(made.toc.data()), made.toc.size(), toc, wrong));
+    }
+    std::memcpy(&made.toc[52], &partitions, 4);
+    for (uint64_t size : {uint64_t(0), uint64_t(1), data_end - 1}) {
+        std::memcpy(&made.toc[88], &size, 8);
+        CHECK(!tsuchi::read_container_toc(reinterpret_cast<const uint8_t*>(made.toc.data()), made.toc.size(), toc, wrong));
+    }
+    std::memcpy(&made.toc[88], &data_end, 8);
+    CHECK(tsuchi::read_container_toc(reinterpret_cast<const uint8_t*>(made.toc.data()), made.toc.size(), toc, wrong));
+    tsuchi::forget_container_toc(toc);
+}
+
+void source_header_id_in_startup_patch() {
+    const auto made = make_container(0xBAC, {{0xAA, "Carrot4/Content/Mods/leaf/T_A.uasset"}});
+    auto data = made.cas;
+    const uint64_t source_id = 0x123456;
+    std::memcpy(&data[0], &source_id, 8);
+    files["sd:/header-id.ucas"] = data;
+    tsuchi::ContainerToc toc{}; const char* wrong = nullptr;
+    CHECK(tsuchi::read_container_toc(reinterpret_cast<const uint8_t*>(made.toc.data()), made.toc.size(), toc, wrong));
+    tsuchi::List<uint64_t> claims;
+    CHECK(tsuchi::read_startup_container_claims(toc, "sd:/header-id.ucas", claims) == TSUCHI_OK && claims.count >= 1);
+    claims.clear();
+    // A source ID never excuses a header whose package set differs from its TOC.
+    const uint32_t wrong_count = 2;
+    std::memcpy(&data[8], &wrong_count, 4);
+    files["sd:/header-id.ucas"] = data;
+    CHECK(tsuchi::read_startup_container_claims(toc, "sd:/header-id.ucas", claims) == TSUCHI_INVALID);
+    claims.clear(); tsuchi::forget_container_toc(toc);
+    files.erase("sd:/header-id.ucas");
+}
+
 void blocked_mods_mount_nothing() {
     files.clear();
     install("app.lost", manifest("app.lost", ", \"requires\": {\"app.gone\": \"*\"}"), "Lost", make_container(0xB3, {{0xA4, "Carrot4/Content/Mods/lost/T_A.uasset"}}));
@@ -540,7 +585,7 @@ void blocked_mods_mount_nothing() {
     install("app.loose", manifest("app.loose"));
     files["rom:/tsuchi/mods/app.loose/Loose.utoc"] = make_container(0xB8, {}).toc;
     install("app.odd", manifest("app.odd"), "Odd name", make_container(0xB9, {}));
-    install("app.old", manifest("app.old"), "Old", make_container(0xBA, {}, {}, false, 3));
+    install("app.old", manifest("app.old"), "Old", make_container(0xBA, {}, {}, false, 4));
     begin();
     CHECK(mounts.empty());
     CHECK(blocked_with("app.lost", "app.gone") && blocked_with("app.broken", "mod.json"));
@@ -892,6 +937,27 @@ Made bundle_with_bulk(uint64_t id, uint64_t package, uint64_t bulk_owner, const 
     return made;
 }
 
+void late_downloaded_assets() {
+    files.clear();install("app.owner",manifest("app.owner"));
+    const auto stock=make_container(0xC0,{});
+    files["rom:/StandIn/Content/Paks/StandIn-Main.pak"]="pak";
+    files["rom:/StandIn/Content/Paks/StandIn-Main.utoc"]=stock.toc;
+    files["rom:/StandIn/Content/Paks/StandIn-Main.ucas"]=stock.cas;
+    begin();
+    const auto made=make_container(0xD123,{{0xA321,"Carrot4/Content/Maps/CaveTest.umap"}});
+    const std::string folder="tsuchisd:/tsuchi/downloads/test/mods/external.test";
+    files[folder+"/Map_P.pak"]="pak";files[folder+"/Map_P.utoc"]=made.toc;files[folder+"/Map_P.ucas"]=made.cas;
+    tsuchi::Text problem;
+    CHECK(tsuchi::validate_downloaded_assets("external.test",folder.c_str(),problem)==TSUCHI_OK);
+    CHECK(tsuchi::mount_downloaded_assets("external.test",folder.c_str(),problem)==TSUCHI_OK);
+    CHECK(mounts.size()==1&&mounts.back().path==folder+"/Map_P.pak");
+    CHECK(tsuchi::container_mounted_for("external.test"));
+    CHECK(tsuchi::container_mounted_from("tsuchisd:/tsuchi/downloads/test/")&&!tsuchi::container_mounted_from("tsuchisd:/tsuchi/downloads/other/"));
+    CHECK(tsuchi::mount_downloaded_assets("external.test",folder.c_str(),problem)==TSUCHI_OK&&mounts.size()==1);
+    CHECK(tsuchi::mount_downloaded_assets("external.test","tsuchisd:/another/version",problem)==TSUCHI_BUSY);
+    problem.clear();
+}
+
 void new_asset_bundles() {
     files.clear();
     const Made game = mixed_header(0xC0, kGameTexture, "Carrot4/Content/Carrot4/T_Icon.uasset");
@@ -1212,6 +1278,8 @@ int main(int argc, char** argv) {
     tsuchi::set_log_sink(sink);
     if (argc == 6 && !std::strcmp(argv[1], "--admit")) return admit_real(argv);
     reads_a_table_of_contents();
+    single_partition_version_three();
+    source_header_id_in_startup_patch();
     startup_compressed_claims();
     orders_names_raise();
     mounts_in_order();
@@ -1221,6 +1289,7 @@ int main(int argc, char** argv) {
     names_are_told_apart();
     common_packages_are_told();
     replacement_store_follows_mount_order();
+    late_downloaded_assets();
     new_asset_bundles();
     libraries_are_opened();
     blocked_as_it_starts(); // last, as the kind of mod it adds stays

@@ -32,7 +32,11 @@ description: |
 
   Your mod reads and changes its own settings by key. To read another mod's
   public setting, use `<mod id>:<key>`. You can't change another mod's
-  settings.
+  saved preferences. A mod can instead declare `settings_overrides` for its
+  required dependencies. Visible settings allow overrides by default; `hidden:
+  true` marks internal settings, and `overridable: false` opts a visible setting
+  out. Reads return the effective value. Controlled settings refuse direct writes
+  and resets, and the player's saved preference remains underneath the override.
 
 functions:
   - name: toggle
@@ -105,7 +109,7 @@ functions:
     fails:
       not_found: "Your mod has no setting with that key."
       invalid: "The setting is a different kind."
-      denied: "The setting belongs to another mod."
+      denied: "The setting belongs to another mod, or an enabled mod controls its value."
     users: [groink, online-coop]
 
   - name: set_integer
@@ -117,7 +121,7 @@ functions:
     fails:
       not_found: "Your mod has no setting with that key."
       invalid: "The setting is a different kind, or the value is below its `min` or above its `max`."
-      denied: "The setting belongs to another mod."
+      denied: "The setting belongs to another mod, or an enabled mod controls its value."
     users: [groink, online-coop]
 
   - name: set_number
@@ -129,7 +133,7 @@ functions:
     fails:
       not_found: "Your mod has no setting with that key."
       invalid: "The setting is a different kind, or the value is below its `min` or above its `max`."
-      denied: "The setting belongs to another mod."
+      denied: "The setting belongs to another mod, or an enabled mod controls its value."
     users: [groink, online-coop]
 
   - name: set_text
@@ -142,7 +146,7 @@ functions:
       not_found: "Your mod has no setting with that key."
       invalid: "The setting is a different kind, the text is longer than its `max_length`, or the word isn't one of its choices."
       no_memory: "The game is out of memory."
-      denied: "The setting belongs to another mod."
+      denied: "The setting belongs to another mod, or an enabled mod controls its value."
     users: [groink, online-coop]
 
   - name: set_has
@@ -155,7 +159,7 @@ functions:
     fails:
       not_found: "Your mod has no setting with that key."
       invalid: "The setting is a different kind, or the word isn't one of its choices."
-      denied: "The setting belongs to another mod."
+      denied: "The setting belongs to another mod, or an enabled mod controls its value."
     users: [groink, online-coop]
 
   - name: reset
@@ -166,14 +170,98 @@ functions:
     fails:
       not_found: "Your mod has no setting with that key."
       no_memory: "The game is out of memory."
-      denied: "The setting belongs to another mod."
+      denied: "The setting belongs to another mod, or an enabled mod controls its value."
     users: [groink, online-coop]
+
+  - name: controllers
+    completes: reset
+    doc: |
+      Returns the IDs of mods controlling a setting, separated by comma and space,
+      in mod ID order. An empty text means the player's preference is in use.
+      The caller may inspect its own settings and other mods' public settings.
+      Custom forms should show this text and disable editing while it is nonempty.
+    owns: true
+    params:
+      - {name: key, type: text, doc: "The setting's key, or mod ID and key separated by a colon."}
+    returns: {type: text, doc: "The controlling mod IDs, or empty text."}
+    fails:
+      not_found: "The setting or running mod does not exist."
+      denied: "The setting belongs to another mod and is not public."
+
+
+  - name: set_integer_range
+    completes: set_integer
+    doc: |
+      Narrows your integer setting's manifest range for this running mod. Reads
+      and generated settings controls clamp the effective value to this range;
+      the saved preference and any controlling override remain unchanged. New
+      writes must fit both ranges. Changes emit changed, including a range change
+      that keeps the same effective value. Calling again replaces the range.
+      The range ends when your mod stops. Reset restores the declared preference
+      within the current range. Bounds cannot extend beyond manifest bounds.
+    owns: true
+    params:
+      - {name: key, type: text, doc: "Your integer setting's key."}
+      - {name: minimum, type: i64, doc: "Inclusive lower bound."}
+      - {name: maximum, type: i64, doc: "Inclusive upper bound."}
+    fails:
+      not_found: "Your mod has no setting with that key."
+      invalid: "The setting is not an integer, the range is reversed, or it exceeds manifest bounds."
+      denied: "The setting belongs to another mod."
+      busy: "An enclosing content transaction cannot replace an older owned range."
+      no_memory: "The range ownership could not be recorded."
+
+  - name: hold
+    completes: set_integer
+    doc: |
+      Holds a scalar setting at a runtime value without changing its saved
+      preference. The target must be your own setting or belong to a direct
+      required dependency, and must be visible and overridable. Only one runtime
+      hold may control a setting. Manifest overrides retain priority; acquisition
+      and updates report busy while they control it. A hold ends on release or
+      when its owner stops. Integer runtime bounds still clamp effective reads.
+    owns: true
+    params:
+      - {name: key, type: text, doc: "The key, or dependency ID and key separated by a colon."}
+      - {name: value, type: value, doc: "A boolean, integer, or finite number matching the scalar setting."}
+    returns: {type: handle<setting_hold>, doc: "The owned runtime override."}
+    fails:
+      not_found: "The setting or running target does not exist."
+      denied: "The target is not a required dependency, or the setting is hidden or not overridable."
+      invalid: "The value has the wrong kind or exceeds its manifest bounds."
+      busy: "A manifest override or another runtime hold controls the setting."
+      no_memory: "The hold could not be recorded."
+
+  - name: update_hold
+    completes: set_integer
+    doc: "Changes your runtime setting hold. The saved preference remains unchanged."
+    owns: true
+    params:
+      - {name: hold, type: handle<setting_hold>, doc: "Your hold."}
+      - {name: value, type: value, doc: "The new matching scalar value."}
+    fails:
+      not_found: "The hold ended."
+      denied: "Another mod owns the hold."
+      invalid: "The value has the wrong kind or exceeds its manifest bounds."
+      busy: "A manifest override controls the setting, or a transaction cannot replace an older hold."
+
+  - name: release_hold
+    completes: set_integer
+    doc: "Ends your runtime hold and reveals the underlying setting. Also happens when your mod stops."
+    owns: true
+    params:
+      - {name: hold, type: handle<setting_hold>, doc: "Your hold."}
+    fails:
+      not_found: "The hold ended."
+      denied: "Another mod owns the hold."
+      busy: "A transaction cannot release an older hold."
 
 events:
   - name: changed
     doc: |
       Emitted when a setting's value has changed, either from a call or because the
-      value in the save data arrived after your mod started. Setting a value to what
+      value in the save data arrived after your mod started, or an override was
+      applied or released. A change of controlling mods also emits this event. Setting a value to what
       it already is doesn't change anything. Your handler is called at the start of
       the next world step. Every listener receives every mod's changes, so use `mod` to
       check which mod the setting belongs to.

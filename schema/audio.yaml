@@ -6,7 +6,7 @@ tutorials:
 layer: game
 acts_on: game
 lifetime: process
-brief: "Plays actor sounds and owns global audio game parameters."
+brief: "Plays actor sounds and owns audio parameters and bus volumes."
 description: |
   The game plays its sounds by key. Each kind of actor has its own keys. For
   example, a captain has `Whistle_Charge`, and Pikmin and creatures have
@@ -81,5 +81,42 @@ functions:
       capacity: "The name exceeds 127 bytes."
       not_found: "The mod has no hold for that parameter."
       denied: "A different name has the same engine ID."
+      busy: "The mod is applying an isolated declaration update."
+    users: [better-settings, audio-channel-checks]
+  - name: hold_bus_volume
+    owns: true
+    doc: |
+      Multiplies a Wwise bus's outgoing volume by a linear gain from zero to one.
+      One leaves the game's mix unchanged; zero mutes the bus. The hold persists
+      across worlds and ends on release, mod stop or replacement of the audio
+      engine. It does not require a replacement sound bank. A successful call
+      registers the native callback; it does not prove that the bus is playing.
+      At most 64 buses can be active or await cleanup. A bus's native volume
+      callback must be free. The framework never replaces another callback.
+      A private neutral bus-volume curve keeps flattened buses in the native
+      mixing graph. Releasing the hold removes that curve and its callback.
+    params:
+      - {name: bus, type: u32, doc: "The nonzero Wwise bus short ID, from the bank's bus hierarchy."}
+      - {name: volume, type: f32, doc: "Linear gain from zero to one. It multiplies the game's own gain."}
+    fails:
+      invalid: "The bus ID is zero, or volume is outside zero to one or is not finite."
+      busy: "Another mod owns the bus, a native callback is already registered, or cleanup is pending."
+      capacity: "All 64 bus records are in use."
+      not_found: "The bus is not loaded in the sound engine."
+      not_ready: "The audio engine or its checked teardown observer is unavailable."
+      no_memory: "The framework or sound engine cannot retain the callback."
+    users: [better-settings, audio-channel-checks]
+
+  - name: release_bus_volume
+    owns: true
+    doc: |
+      Ends this mod's bus gain hold. Its callback becomes neutral immediately
+      and is removed when the same engine is available. Another native writer's
+      callback is preserved. No saved bank or bus property is changed.
+    params:
+      - {name: bus, type: u32, doc: "The bus short ID passed to hold_bus_volume."}
+    fails:
+      invalid: "The bus ID is zero."
+      not_found: "This mod has no active volume hold for the bus."
       busy: "The mod is applying an isolated declaration update."
     users: [better-settings, audio-channel-checks]

@@ -18,7 +18,8 @@ class ModManagerTests(unittest.TestCase):
         command = [shutil.which('clang++'), '-std=c++17', '-Wall', '-Wextra', '-Werror',
                    '-I', str(gen / 'include'), '-I', str(ROOT / 'framework/core'),
                    '-I', str(ROOT / 'framework/base'), str(ROOT / 'framework/core/registry.cpp'),
-                   str(ROOT / 'framework/core/text.cpp'), str(ROOT / 'framework/base/mod_choices.cpp'),
+                   str(ROOT / 'framework/core/text.cpp'), str(ROOT / 'framework/core/texts.cpp'),
+                   str(ROOT / 'framework/core/json.cpp'), str(ROOT / 'framework/base/settings.cpp'), str(ROOT / 'framework/base/mod_choices.cpp'),
                    str(ROOT / 'framework/base/mod_manager.cpp'), str(ROOT / 'tests/base/mod_manager_test.cpp'),
                    '-o', str(binary)]
         compiled = subprocess.run(command, capture_output=True, text=True, encoding='utf-8')

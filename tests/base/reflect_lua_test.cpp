@@ -7,6 +7,7 @@
 #include "objects.h"
 #include "tsuchi_lua.h"
 #include "reflect_world.h"
+#include "memory_backend.h"
 #include "reflection.h"
 #include "registry.h"
 
@@ -32,6 +33,7 @@ int main(int argc, char** argv) {
     if (argc != 2) return 2;
     build_world();
     tsuchi::reflect_start();
+    tsuchi::memory_start();
     TSUCHI_Mod* mod = tsuchi::mod_create("reflection.script");
     lua_State* L = luaL_newstate();
     luaL_openlibs(L);

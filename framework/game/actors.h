@@ -49,6 +49,10 @@ void request_velocity(uint64_t actor, const float velocity[3]);
 void halt(uint64_t actor);
 // Drops the velocity requests the actor's own movement has made this frame.
 void drop_velocity_requests(uint64_t actor);
+// Gives the actor's body this velocity across the ground at the next world update, as halt brings it to rest:
+// its own movement's requests of this frame are dropped and its fall is left to gravity. False, and nothing asked,
+// when it has no awake body of its own that a request moves.
+bool request_ground_velocity(uint64_t actor, const float velocity[3]);
 bool body_awake(uint64_t actor);
 uint32_t air_steps(uint64_t actor); // physics steps since any contact, including walls and ceilings
 // Keeps the actor's physics running, or lets go of one such hold. The game
@@ -113,6 +117,8 @@ struct Message {
     float amount;    // damage: how much. knock: the damage that comes with it
     uint32_t attack; // damage: the game's number for the kind of hit
     float vector[3]; // damage: where it came from. knock: the velocity to be thrown with
+    bool press;      // a thrown Pikmin's direct hit: its landing presses the target
+    float point[3];  // a thrown Pikmin's direct hit: where it touched the target
 };
 // Takes every message waiting for the actor, as its own decisions would, and
 // lets each go the game's way afterward. Returns how many there were.

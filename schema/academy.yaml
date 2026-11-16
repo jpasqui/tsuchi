@@ -1,0 +1,382 @@
+service: academy
+tutorials:
+  - {title: Read Academy progress and events, path: /develop/academy-progress/}
+  - {title: Set the Academy's exam schedule, path: /develop/exam-schedule/}
+  - {title: Supply an Academy scoreboard, path: /develop/academy-boards/}
+layer: game
+acts_on: game
+lifetime: process
+brief: "Reads Academy progress and supplies schedules, unlock rules, and native scoreboards."
+description: |
+  Inspect the Switch 2 Edition's Academy, own a schedule or scoreboard, and
+  subscribe to its events. Exam course IDs are 0 to 71: multiply the period
+  number, 0 to 11, by 6 and add the course number, 0 to 5. Training course
+  IDs are 0 to 2. Scores, practice results, and local records stay separate.
+
+  Set course fields with the tables service. The Academy uses the changed
+  fields in its live course copies. A level's game rule sets its play clock;
+  a course's Timer sets the time shown on the course screen and title card.
+
+  Dates are whole seconds since 1970-01-01 UTC. Calls fail with unsupported
+  on builds that have no supported Academy.
+
+enums:
+  AcademyStatus:
+    open: false
+    doc: "The game's exam-window decision, using the console's network clock."
+    values:
+      - {name: between_exams, value: 0, doc: "The period has started and no exam window is open."}
+      - {name: open, value: 1, doc: "An exam window is open."}
+      - {name: ended, value: 2, doc: "The service has ended."}
+      - {name: upcoming, value: 3, doc: "The current delivery has not started."}
+      - {name: unavailable, value: 4, doc: "The clock or loaded schedule is unavailable."}
+  AcademyPeriodList:
+    open: false
+    doc: "Which exam periods to inspect. Period numbers are 0 to 11."
+    values:
+      - {name: scheduled, value: 0, doc: "The schedule's full delivery order, including future periods."}
+      - {name: delivered, value: 1, doc: "The periods delivered to the player's Academy save."}
+      - {name: unlocked, value: 2, doc: "The periods the player has opened."}
+  AcademyMedal:
+    open: false
+    doc: "A course's recorded medal."
+    values:
+      - {name: none, value: 0, doc: "The native zero rank, shown as the Participant Medal after a finished attempt. A missing result is reported separately."}
+      - {name: copper, value: 1, doc: "Copper."}
+      - {name: silver, value: 2, doc: "Silver."}
+      - {name: gold, value: 3, doc: "Gold."}
+      - {name: platinum, value: 4, doc: "Platinum."}
+      - {name: king, value: 5, doc: "The black medal."}
+
+structs:
+  AcademyBoardState:
+    doc: "A mod's board and what the game took of it."
+    fields:
+      - {name: entries, type: u32, doc: "The number of supplied entries, from 0 to 64."}
+      - {name: rendered, type: u32, doc: "The number of entries the game took the last time it asked for this course's board."}
+      - {name: pending, type: bool, doc: "If true, the game has not asked for this course's board since you supplied these entries."}
+      - {name: failure, type: text, doc: "The result name of the last request the game had to make itself, or an empty string."}
+  AcademyState:
+    doc: "The loaded schedule and the player's Academy progress."
+    fields:
+      - {name: schedule_loaded, type: bool, doc: "If true, the game has a parsed schedule."}
+      - {name: status, type: enum<AcademyStatus>, doc: "The game's exam-window decision."}
+      - {name: mod_schedule, type: bool, doc: "If true, a mod supplies the schedule."}
+      - {name: uploads_blocked, type: bool, doc: "If true, Nintendo score uploads are blocked until the game closes."}
+      - {name: service_ended, type: bool, doc: "If true, the save records the end of the service."}
+      - {name: latest_stage, type: u32, doc: "The latest period's delivery count, from 1, or 0 without a schedule."}
+      - {name: scheduled_count, type: u32, doc: "The number of periods in the full schedule, from 0 to 64."}
+      - {name: delivered_count, type: u32, doc: "The number of delivered periods, from 0 to 64."}
+      - {name: unlocked_count, type: u32, doc: "The number of opened periods, from 0 to 12."}
+      - {name: redo_passes, type: i32, doc: "The player's remaining Redo Passes."}
+      - {name: reserve_passes, type: i32, doc: "The player's reserve Redo Passes."}
+      - {name: dandori_points, type: i32, doc: "The player's total Dandori Points."}
+      - {name: dandori_rank, type: i32, doc: "The game's number for the player's Dandori rank."}
+      - {name: card_rank, type: i32, doc: "The game's number for the player's card rank."}
+  AcademyPeriod:
+    doc: "The Latest or Prev record from the loaded schedule."
+    fields:
+      - {name: stage, type: u32, doc: "How many periods of the schedule have been delivered, from 1 to 64."}
+      - {name: delivery, type: i64, doc: "The delivery date, in seconds since 1970 UTC."}
+      - {name: window_count, type: u32, doc: "The number of exam windows, from 0 to 64."}
+      - {name: redo_passes, type: i32, doc: "The number of Redo Passes supplied by this period, from 0 to 99."}
+      - {name: ticket_limit, type: bool, doc: "If true, the Redo Pass limit applies."}
+      - {name: closed, type: bool, doc: "If true, this period records the end of the service."}
+  AcademyWindow:
+    doc: "One period's exam window, in seconds since 1970 UTC."
+    fields:
+      - {name: start, type: i64, doc: "The start of the window."}
+      - {name: finish, type: i64, doc: "The end of the window."}
+  AcademyExamResult:
+    doc: "The independent records for one exam course. Times are seconds."
+    fields:
+      - {name: practice_high_score, type: i32, doc: "The practice high score."}
+      - {name: high_score, type: i32, doc: "The exam high score."}
+      - {name: local_high_score, type: i32, doc: "The local exam high score."}
+      - {name: practice_clear_time, type: f32, doc: "The best saved practice timed result, in remaining seconds."}
+      - {name: clear_time, type: f32, doc: "The best saved exam timed result, in remaining seconds."}
+      - {name: local_clear_time, type: f32, doc: "The best saved local exam timed result, in remaining seconds."}
+      - {name: practice_play_count, type: i32, doc: "The number of practice attempts."}
+      - {name: play_count, type: i32, doc: "The number of exam attempts."}
+      - {name: medal, type: enum<AcademyMedal>, doc: "The exam medal."}
+      - {name: viewed_medal, type: enum<AcademyMedal>, doc: "The exam medal shown on the board."}
+      - {name: local_medal, type: enum<AcademyMedal>, doc: "The local medal shown on the board."}
+      - {name: practice_medal, type: enum<AcademyMedal>, doc: "The practice medal."}
+      - {name: practice_cleared, type: bool, doc: "The native completed-practice flag. Includes timed-out attempts; it does not mean the goal was passed."}
+      - {name: exam_cleared, type: bool, doc: "The native completed-exam flag. Includes timed-out attempts; it does not mean the goal was passed. The per-attempt finish event reports goal success."}
+      - {name: stamp_rank, type: i32, doc: "The game's number for the result stamp's rank."}
+      - {name: stamp_x, type: f32, doc: "The stamp's horizontal position in the game's board coordinates."}
+      - {name: stamp_y, type: f32, doc: "The stamp's vertical position in the game's board coordinates."}
+      - {name: stamp_rotation, type: f32, doc: "The stamp's angle, in degrees."}
+  AcademyTrainingResult:
+    doc: "The player's record for one training course."
+    fields:
+      - {name: play_count, type: i32, doc: "The number of attempts."}
+      - {name: high_score, type: i32, doc: "The high score."}
+      - {name: medal, type: enum<AcademyMedal>, doc: "The recorded medal."}
+      - {name: cleared, type: bool, doc: "The native completed-training flag. Includes timed-out attempts below the course's medal goal."}
+
+functions:
+  - name: hold_board
+    users: [academy-community-board, academy-ghost-board]
+    owns: true
+    doc: |
+      Supplies the other players' entries for one exam course's scoreboard.
+      The JSON is an object with `entries`, a list of up to 64 entries. Each
+      entry has id, nickname, score, sticker_type, and sticker_color, and can
+      have king_count, which defaults to zero. IDs have 1 to 64 ASCII letters,
+      digits, dots, underscores, or hyphens, and each ID appears once.
+      Nicknames have 1 to 40 Unicode characters. Sticker indexes must exist in
+      the game's loaded tables, and sticker_type selects a mask sticker.
+      The game takes the entries the next time it asks for that course's
+      board. Tsuchi stores them where the game keeps a downloaded board and
+      answers the request, so the game makes no request to Nintendo and
+      places, filters, and draws the entries itself. The game saves the
+      entries it shows in the player's Academy save data, as it does with
+      downloaded entries, until it next downloads that course's board.
+      Medal lines are not part of the board. Inspect board_state to see
+      whether the game has asked. An invalid request preserves the preceding
+      request. One mod owns each course's board. Nintendo score uploads stay
+      blocked until the game closes.
+    params:
+      - {name: course, type: u32, doc: "The exam course ID, from 0 to 71."}
+      - {name: json, type: text, doc: "The scoreboard JSON, from 1 to 65536 UTF-8 bytes."}
+    fails:
+      invalid: "The course, JSON, or entries are outside their limits."
+      busy: "Another mod owns the course's board, ownership is isolated, or an upload is finishing."
+      not_ready: "The game's board request or the Nintendo upload guard is unavailable."
+      no_memory: "The request or ownership record could not be allocated."
+  - name: release_board
+    users: [academy-community-board, academy-ghost-board]
+    owns: true
+    doc: "Releases your mod's board for one course. The game makes its own request the next time it asks for that course's board. Entries the game has already shown stay in the Academy save data until the game next downloads that board. Nintendo uploads stay blocked until the game closes."
+    params:
+      - {name: course, type: u32, doc: "The exam course ID, from 0 to 71."}
+    fails:
+      invalid: "The course ID is above 71."
+      not_found: "No mod owns the course's board."
+      denied: "Another mod owns the course's board."
+      busy: "The ownership record is isolated."
+  - name: board_state
+    users: [academy-community-board, academy-ghost-board]
+    owns: true
+    doc: "Reads your mod's board and what the game took of it the last time it asked for that course's board."
+    params:
+      - {name: course, type: u32, doc: "The exam course ID, from 0 to 71."}
+    returns: {type: struct<AcademyBoardState>, doc: "The board's state."}
+    fails:
+      invalid: "The course ID is above 71."
+      not_found: "No mod owns the course's board."
+      denied: "Another mod owns the course's board."
+  - name: state
+    users: [academy-open-exams, academy-community-board]
+    doc: "Reads the loaded schedule, delivered and unlocked counts, ranks, points, and Redo Passes."
+    returns: {type: struct<AcademyState>, doc: "The current state."}
+    fails:
+      not_ready: "The Academy save or one of its lists cannot be read."
+  - name: period
+    users: [academy-open-exams, academy-community-board]
+    doc: "Reads a period's delivery date, exam-window count, and Redo Pass rules."
+    params:
+      - {name: previous, type: bool, doc: "If true, reads Prev. If false, reads Latest."}
+    returns: {type: struct<AcademyPeriod>, doc: "The period."}
+    fails:
+      not_ready: "No valid schedule can be read."
+      not_found: "The first period has no Prev record."
+  - name: window
+    users: [academy-open-exams, academy-community-board]
+    doc: "Reads one exam window from a period."
+    params:
+      - {name: previous, type: bool, doc: "If true, reads Prev. If false, reads Latest."}
+      - {name: index, type: u32, doc: "The window's index, from 0 to 63."}
+    returns: {type: struct<AcademyWindow>, doc: "The window."}
+    fails:
+      invalid: "The index is above 63."
+      not_ready: "The schedule or its windows cannot be read."
+      not_found: "The window or Prev record does not exist."
+  - name: period_at
+    users: [academy-open-exams, academy-community-board]
+    doc: "Reads a period number by its position in a saved or scheduled list. Repeated scheduled periods keep their positions."
+    params:
+      - {name: list, type: enum<AcademyPeriodList>, doc: "The list to read."}
+      - {name: index, type: u32, doc: "The position in the list, from 0 to 63."}
+    returns: {type: u32, doc: "The period number, from 0 to 11."}
+    fails:
+      not_ready: "The schedule, save, or selected list cannot be read."
+      invalid: "The index is above 63."
+      not_found: "The selected list has no entry at that position."
+  - name: exam_result
+    users: [academy-open-exams, academy-community-board]
+    doc: "Reads exam, practice, and local records without changing the save."
+    params:
+      - {name: course, type: u32, doc: "The exam course ID, from 0 to 71."}
+    returns: {type: struct<AcademyExamResult>, doc: "The recorded results."}
+    fails:
+      invalid: "The course ID is above 71."
+      not_found: "The save has no result for the course."
+      not_ready: "The save or result map cannot be read."
+  - name: training_result
+    users: [academy-open-exams, academy-community-board]
+    doc: "Reads a training course's recorded score, medal, attempts, and clear flag."
+    params:
+      - {name: course, type: u32, doc: "The training course ID, from 0 to 2."}
+    returns: {type: struct<AcademyTrainingResult>, doc: "The recorded result."}
+    fails:
+      invalid: "The course ID is above 2."
+      not_found: "The save has no result for the course."
+      not_ready: "The save or result map cannot be read."
+
+  - name: hold_schedule
+    users: [academy-open-exams, academy-community-board]
+    owns: true
+    doc: |
+      Supplies a schedule as JSON in the same shape as academy_schedule's file.
+      The request applies on the next available engine frame. One mod owns the
+      schedule at a time, including a schedule from the manifest. The owner can
+      replace its request. An invalid request keeps the previous schedule.
+      Nintendo score uploads stay blocked until the game closes, including
+      after release or mod stop. A delivery reaches the player's Academy save.
+    params:
+      - {name: json, type: text, doc: "The schedule JSON, from 1 to 65536 UTF-8 bytes."}
+    fails:
+      invalid: "The JSON is too long or does not describe a valid schedule."
+      busy: "Another mod owns the schedule, a native upload is finishing, or the ownership record is isolated."
+      not_ready: "The native score-upload guard is unavailable."
+      no_memory: "The parser or ownership record could not be allocated."
+  - name: release_schedule
+    users: [academy-open-exams, academy-community-board]
+    owns: true
+    doc: "Releases your mod's schedule and invalidates its last native record. Delivered progress remains in the save, and Nintendo uploads stay blocked until the game closes."
+    fails:
+      not_found: "Your mod does not own the schedule."
+      busy: "The ownership record is isolated by a content transaction."
+
+  - name: hold_unlocked_periods
+    users: [academy-open-exams, academy-community-board]
+    owns: true
+    doc: |
+      Lists every delivered period without requiring a clear in the previous
+      period. Reopen the Exams tab to rebuild its list. This changes the menu's
+      unlock check, without writing unlocks or results into the save. The
+      Demo's content limit remains. Release the returned hold with
+      reflection.release_field; mod stop also restores the check if no other
+      writer changed it. Nintendo uploads stay blocked until the game closes.
+    returns: {type: handle<field_hold>, doc: "The owned scalar hold."}
+    fails:
+      not_ready: "The configuration or native score-upload guard is unavailable."
+      not_found: "The configuration or its unlock-check field does not exist."
+      busy: "Another hold owns the unlock check, or a native upload is finishing."
+      unsupported: "The configuration does not expose the expected scalar field."
+      invalid: "The configuration's field does not accept a boolean."
+      no_memory: "The hold could not be recorded."
+      capacity: "The scalar field-hold limit has been reached."
+
+  - name: open_board
+    users: [academy-community-board, academy-ghost-board]
+    owns: true
+    doc: |
+      Opens your supplied board from the matching exam's course details. Hold
+      the board first and open that course in the Academy. This uses the native
+      chart and its controls with the loaded mod schedule, without changing
+      Nintendo account membership. The game keeps its course and exam-window
+      checks. Read board_state to see whether the game took the board.
+      Nintendo uploads stay blocked until the game closes.
+    params:
+      - {name: course, type: u32, doc: "The currently selected exam course, from 0 to 71."}
+    fails:
+      invalid: "The course is above 71."
+      not_found: "Your mod has not supplied this board."
+      denied: "Another mod owns this board."
+      not_ready: "The matching course details or a valid open mod schedule are unavailable."
+      busy: "The course screen is handling another action, or an upload is finishing."
+
+  - name: hold_score_submissions
+    users: [academy-community-board, academy-json-results]
+    owns: true
+    doc: |
+      Routes one exam course's native score submissions to your mod instead
+      of Nintendo. The game's ranking key and encoded score reach your
+      score_submission_requested handler unchanged. Your handler writes or
+      accepts them and calls complete_score_submission before returning.
+      Tsuchi supplies the game's native completion afterward. A handler that
+      does not complete, loses ownership, stops, or changes saves fails the
+      request. One mod owns each course. Nintendo uploads stay blocked until
+      the game closes, including after release or mod stop.
+    params:
+      - {name: course, type: u32, doc: "The exam course ID, from 0 to 71."}
+    fails:
+      invalid: "The course is above 71."
+      busy: "Another mod owns this course, ownership is isolated, or a native upload is finishing."
+      not_ready: "The native score request or upload interception is unavailable."
+      no_memory: "The ownership record could not be allocated."
+  - name: release_score_submissions
+    users: [academy-community-board, academy-json-results]
+    owns: true
+    doc: "Releases your mod's score-submission route. An active request loses permission to succeed. Nintendo uploads stay blocked until the game closes."
+    params:
+      - {name: course, type: u32, doc: "The exam course ID, from 0 to 71."}
+    fails:
+      invalid: "The course is above 71."
+      not_found: "No mod owns this course's score submissions."
+      denied: "Another mod owns these submissions."
+      busy: "The ownership record is isolated."
+  - name: complete_score_submission
+    users: [academy-community-board, academy-json-results]
+    owns: true
+    doc: |
+      Completes your mod's active native score request. Call from its
+      score_submission_requested handler before returning. Pass true only
+      after your backend has accepted the submission; for a JSON file, after
+      storage.write succeeds. Completion is recorded once and reaches the
+      original native callback after the handler returns. The request expires
+      on return, so it cannot be completed asynchronously. Tsuchi does not
+      serialize data or access storage on this path.
+    params:
+      - {name: request, type: 'handle<academy_submission>', doc: "The request from your active submission event."}
+      - {name: succeeded, type: bool, doc: "Whether your mod's backend accepted the native submission."}
+    fails:
+      not_found: "The request has expired or does not exist."
+      denied: "Another mod owns the request."
+      busy: "This request has already been completed."
+      not_ready: "Ownership or the active save changed during the handler."
+
+events:
+  - name: score_submission_requested
+    users: [academy-community-board, academy-json-results]
+    doc: "Delivered synchronously on the engine thread only to the mod that owns this course's score submissions. Complete the request before the handler returns. The score is the game's submitted record, including its time encoding, rather than every attempt."
+    fields:
+      - {name: request, type: 'handle<academy_submission>', doc: "Your request, valid only during this handler."}
+      - {name: course, type: u32, doc: "The exam course ID, from 0 to 71."}
+      - {name: board_key, type: u32, doc: "The game's unmodified ranking board key."}
+      - {name: score, type: i32, doc: "The exact native submitted score, including native time encoding."}
+  - name: opened
+    users: [academy-open-exams, academy-community-board]
+    doc: "Emitted on the engine frame after the Academy's menu appears in the viewport. Hiding and reopening the same menu emits another event."
+    fields:
+      - {name: widget, type: handle<object>, doc: "The Academy's root UserWidget, usable with reflection while it remains live."}
+  - name: period_delivered
+    users: [academy-open-exams, academy-community-board]
+    doc: "Emitted when a period appears in the observed delivered list. Loading a save does not replay its existing deliveries."
+    fields:
+      - {name: period, type: u32, doc: "The delivered period number, from 0 to 11."}
+  - name: period_unlocked
+    users: [academy-open-exams, academy-community-board]
+    doc: "Emitted when the game adds a period to the observed unlocked list. Loading a save does not replay its existing unlocks."
+    fields:
+      - {name: period, type: u32, doc: "The unlocked period number, from 0 to 11."}
+  - name: exam_finished
+    users: [academy-open-exams, academy-community-board]
+    doc: "Emitted on the engine frame after the game calculates an exam attempt's medal. Reports the attempt even when it does not beat a saved record. Practice and training do not emit this event. Changing saves before that frame discards the pending event."
+    fields:
+      - {name: course, type: u32, doc: "The exam course ID, from 0 to 71."}
+      - {name: score, type: i32, doc: "The attempt's native score. For a timed course, the game records whole remaining seconds here."}
+      - {name: elapsed, type: f32, doc: "The native timed result's remaining seconds, despite this field's legacy name. Zero for a points result, which has no clock field."}
+      - {name: timed, type: bool, doc: "If true, the course ranks remaining time instead of points."}
+      - {name: medal, type: enum<AcademyMedal>, doc: "The medal the game calculated for this attempt."}
+      - {name: cleared, type: bool, doc: "If true, the attempt's native result records success."}
+  - name: exam_started
+    users: [academy-open-exams, academy-community-board]
+    doc: "Emitted on the engine frame after the game enters an exam's play stage. The countdown may still be visible. Retrying emits another start; cancelling course selection, practice, and training do not. Starts and finishes retain their native order. Changing saves before that frame discards pending events."
+    fields:
+      - {name: course, type: u32, doc: "The exam course ID, from 0 to 71."}
+      - {name: timed, type: bool, doc: "If true, the course ranks remaining time instead of points."}

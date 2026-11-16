@@ -1,0 +1,91 @@
+service: voice
+layer: engine
+acts_on: game
+lifetime: process
+brief: "Captures the microphone as Opus packets and plays other players' voices."
+description: |
+  Capture records the system's microphone in 20 ms Opus packets for your mod
+  to send, with the loudness of each. Playback takes packets that arrived from
+  other players on up to four streams, each with its own volume, and plays
+  them mixed beside the game's own sound. The service does no networking: send
+  the packets yourself, for example over a session.
+
+  Both run on a thread of the framework's, away from the game's frames. One
+  mod captures at a time; capture and streams end when your mod stops. In
+  Eden, the microphone is the computer's input device; with none, capture is
+  unsupported.
+
+functions:
+  - name: start_capture
+    owns: true
+    doc: |
+      Starts recording the microphone. Packets collect until you read them; a
+      second of them is kept, and older ones are dropped.
+    fails:
+      unsupported: "There is no microphone, or this build of the game has no audio input."
+      busy: "Another mod is capturing."
+      not_ready: "The microphone could not be opened."
+    users: [online-coop, voice-commands]
+
+  - name: stop_capture
+    owns: true
+    doc: "Stops recording and drops the packets that were not read."
+    fails:
+      not_found: "Your mod is not capturing."
+    completes: start_capture
+
+  - name: read_packet
+    owns: true
+    doc: "Returns the oldest recorded packet: 20 ms of the microphone as Opus, at most 512 bytes."
+    returns: {type: bytes, doc: "One packet, in the form that play_packet takes."}
+    fails:
+      not_found: "Your mod is not capturing."
+      not_ready: "No packet waits."
+    completes: start_capture
+
+  - name: level
+    owns: true
+    doc: |
+      Returns how loud the latest recorded 20 ms was, from 0 for silence to 1.
+      Speech is usually above 0.02.
+    returns: {type: f32, doc: "The loudness of the latest frame, as its root mean square."}
+    fails:
+      not_found: "Your mod is not capturing."
+    completes: start_capture
+
+  - name: play_packet
+    owns: true
+    doc: |
+      Queues a packet on one of four playback streams. A stream starts once it
+      holds 60 ms of voice, which absorbs uneven arrival; a missing packet
+      plays as silence.
+    params:
+      - {name: stream, type: u32, doc: "The stream, from 0 to 3: one per other player."}
+      - {name: packet, type: bytes, doc: "A packet from read_packet on any machine."}
+    fails:
+      invalid: "The stream is above 3, or the packet is empty or longer than 512 bytes."
+      unsupported: "This build of the game has no audio output for voices."
+      busy: "Another mod plays on that stream."
+      not_ready: "The voice output could not be opened."
+    users: [online-coop, voice-commands]
+
+  - name: set_volume
+    owns: true
+    doc: "Sets a stream's volume, from 0 for silent to 1 for as recorded, up to 2."
+    params:
+      - {name: stream, type: u32, doc: "Your stream, from 0 to 3."}
+      - {name: volume, type: f32, doc: "The volume, from 0 to 2."}
+    fails:
+      invalid: "The stream is above 3, or the volume is outside 0 to 2."
+      not_found: "Your mod has nothing on that stream."
+    completes: play_packet
+
+  - name: stop_stream
+    owns: true
+    doc: "Stops a stream and drops what it still held."
+    params:
+      - {name: stream, type: u32, doc: "Your stream, from 0 to 3."}
+    fails:
+      invalid: "The stream is above 3."
+      not_found: "Your mod has nothing on that stream."
+    completes: play_packet

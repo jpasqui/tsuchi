@@ -33,7 +33,7 @@ struct Body {
     uint64_t fs() { return reinterpret_cast<uint64_t>(formation.data()); }
 };
 Body captain, rival, member;
-std::array<uint8_t, 0x1000> framework{}, ui{}, hud{}, icon{}, material{}, atlas{};
+std::array<uint8_t, 0x1000> framework{}, ui{}, hud{}, icon{}, material{}, atlas{}, access{};
 std::array<uint8_t, 0x1000> wrong_texture{};
 std::array<uint8_t, 0xe010> globals{};
 uint64_t texture = reinterpret_cast<uint64_t>(atlas.data());
@@ -63,6 +63,16 @@ Body* body(uint64_t at) {
         if (object->alive && (at == object->at() || at == object->brain() || at == object->fs())) return object;
     return nullptr;
 }
+// Stock types: the type the game says a formation has selected, and the member whose type it was asked to pick.
+int32_t stock_color = 2;
+uint64_t picked_formation = 0, picked_member = 0, follows = 0;
+bool pikmin_member = false;
+int32_t selected_color(void* formation) { return reinterpret_cast<uint64_t>(formation) == captain.fs() ? stock_color : -1; }
+void select_of(void* formation, void* pikmin) {
+    picked_formation = reinterpret_cast<uint64_t>(formation), picked_member = reinterpret_cast<uint64_t>(pikmin);
+    stock_color = 5;
+}
+void* leader_of(void*) { return nullptr; }
 uint64_t ask_formation(void* part) { auto* object = body(reinterpret_cast<uint64_t>(part)); return object ? object->fs() : 0; }
 void rotate(void* formation) {
     const uint64_t fs = reinterpret_cast<uint64_t>(formation), sentinel = fs + t::squad_formation::list;
@@ -83,7 +93,11 @@ void initialize(Body& object, bool leader) {
     put(stock, sentinel), put(stock + 8, sentinel), put(stock + t::squad_node::kind, int32_t(0));
     put(object.fs() + t::squad_formation::count, int32_t(1));
 }
-void stock_hud(void*) {}
+// The captain the game's HUD update found in the UIActorAccessMgr, as it binds the HUD to it.
+uint64_t hud_bound = 0;
+void stock_hud(void*) {
+    hud_bound = get<uint64_t>(reinterpret_cast<uint64_t>(access.data()) + t::ui_actor_access::captain);
+}
 void stock_cursor(void*, void*, float) {}
 uint64_t stock_grab(void*, uint64_t) { ++stock_grabs; return 17; }
 void start_throw(void*, void* actor, void*) { auto* object = body(reinterpret_cast<uint64_t>(actor)); assert(object); object->launchable = false; }
@@ -165,7 +179,8 @@ bool pikmin_hud_icon_owned(uint64_t) { return false; }
 void pikmin_hud_icon_guard(bool (*)(uint64_t)) {}
 bool live(uint64_t at) {
     return body(at) || at == texture || at == reinterpret_cast<uint64_t>(wrong_texture.data()) ||
-        at == reinterpret_cast<uint64_t>(icon.data()) || at == reinterpret_cast<uint64_t>(material.data());
+        at == reinterpret_cast<uint64_t>(icon.data()) || at == reinterpret_cast<uint64_t>(material.data()) ||
+        at == reinterpret_cast<uint64_t>(ui.data()) || at == reinterpret_cast<uint64_t>(access.data());
 }
 bool is_a(uint64_t object, ClassRef& kind) { assert(!strcmp(kind.name, "Texture2D")); return object == texture; }
 uint64_t to_handle(uint64_t at) {
@@ -181,7 +196,8 @@ uint64_t from_handle(uint64_t handle) {
 uint64_t game_framework() { return reinterpret_cast<uint64_t>(framework.data()); }
 bool is_game_actor(uint64_t actor) { return body(actor) && actor == body(actor)->at(); }
 bool is_leader(uint64_t actor) { return body(actor) && body(actor)->leader; }
-bool is_pikmin(uint64_t) { return false; }
+bool is_pikmin(uint64_t actor) { return pikmin_member && actor == member.at(); }
+uint64_t pikmin_leader(uint64_t pikmin) { return pikmin == member.at() ? follows : 0; }
 void each_pikmin(bool (*)(void*, uint64_t), void*) {}
 void release_engine_memory(void* memory) { assert(memory == native_path.data()); ++freed_paths; }
 uint64_t ai_component(uint64_t actor) { auto* object = body(actor); return object ? object->brain() : 0; }
@@ -229,6 +245,7 @@ int main() {
     initialize(captain, true), initialize(rival, true), initialize(member, false);
     put(tsuchi::game::main_base() + t::data::content_icon_size, uint64_t(77));
     t::fn::squad_select_next = rotate, t::fn::start_throw = start_throw;
+    t::fn::squad_selected = selected_color, t::fn::squad_select_of = select_of, t::fn::pikmin_leader = leader_of;
     t::fn::squad_throw_trajectory = solve;
     t::fn::pikmin_scatter_cos = std::cos, t::fn::pikmin_scatter_sin = std::sin;
     t::fn::throw_toggle_for_color = toggle, t::fn::icon_texture = image, t::fn::icon_index = index;
@@ -295,6 +312,20 @@ int main() {
     assert(api.type_name(mod, "test.other:first", picked, sizeof picked, &bytes) == TSUCHI_NOT_FOUND);
     assert(api.type_name(mod, "test.other:wrong", picked, sizeof picked, &bytes) == TSUCHI_NOT_FOUND);
     assert(api.selected(mod, leader, picked, sizeof picked, &bytes) == TSUCHI_OK && !*picked);
+    // A stock type: the game's own answer for the formation, named as pikmin.info names it.
+    assert(api.selected_pikmin_type(mod, leader, picked, sizeof picked, &bytes) == TSUCHI_OK && !strcmp(picked, "yellow"));
+    assert(api.selected_pikmin_type(mod, leader, picked, 3, &bytes) == TSUCHI_CAPACITY && bytes == 7);
+    assert(api.selected_pikmin_type(mod, target, picked, sizeof picked, &bytes) == TSUCHI_NOT_FOUND);
+    assert(api.selected_pikmin_type(mod, second, picked, sizeof picked, &bytes) == TSUCHI_NOT_READY);
+    // Picking a member's type goes to the game's own function, for a Pikmin that follows the leader only.
+    assert(api.select_type_of(mod, leader, target) == TSUCHI_NOT_FOUND && !picked_member);
+    pikmin_member = true;
+    assert(api.select_type_of(mod, leader, target) == TSUCHI_INVALID && !picked_member);
+    follows = captain.at();
+    assert(api.select_type_of(mod, leader, target) == TSUCHI_OK && picked_formation == captain.fs() && picked_member == member.at());
+    assert(api.selected_pikmin_type(mod, leader, picked, sizeof picked, &bytes) == TSUCHI_OK && !strcmp(picked, "purple"));
+    assert(api.select_type_of(mod, second, target) == TSUCHI_INVALID);
+    pikmin_member = false, follows = 0, stock_color = 2;
     step();
     assert(get<int32_t>(captain.fs() + t::squad_formation::count) == 2);
     const uint64_t hud_at = reinterpret_cast<uint64_t>(hud.data()), icon_at = reinterpret_cast<uint64_t>(icon.data());
@@ -318,6 +349,26 @@ int main() {
     assert(get<uint64_t>(material_at) == texture && get<int32_t>(material_at + 8) == 0);
     assert(get<float>(material_at + 12) == 1.f);
     assert(get<int32_t>(icon_at + t::squad_icon::count) == 1 && get<uint8_t>(icon_at + t::squad_icon::kind) == 16);
+    // A held HUD leader: the game's update binds the HUD to it, and the captain is back after.
+    const uint64_t access_at = reinterpret_cast<uint64_t>(access.data());
+    put(reinterpret_cast<uint64_t>(ui.data()) + t::ui_manager::actor_access, access_at);
+    put(access_at + t::ui_actor_access::captain, captain.at());
+    hud_hook(hud.data());
+    assert(hud_bound == captain.at());
+    assert(api.hold_hud_leader(mod, target) == TSUCHI_NOT_FOUND);
+    assert(api.hold_hud_leader(mod, second) == TSUCHI_OK);
+    assert(api.hold_hud_leader(other, leader) == TSUCHI_BUSY);
+    hud_hook(hud.data());
+    assert(hud_bound == rival.at() && get<uint64_t>(access_at + t::ui_actor_access::captain) == captain.at());
+    assert(api.release_hud_leader(other) == TSUCHI_NOT_FOUND);
+    assert(api.release_hud_leader(mod) == TSUCHI_OK);
+    hud_hook(hud.data());
+    assert(hud_bound == captain.at());
+    auto* hud_mod = tsuchi::mod_create("test.hud");
+    assert(api.hold_hud_leader(hud_mod, second) == TSUCHI_OK);
+    tsuchi::mod_stop(hud_mod);
+    hud_hook(hud.data());
+    assert(hud_bound == captain.at());
     assert(api.hold_selection(mod, leader, "test.squad:groink") == TSUCHI_OK);
     assert(api.hold_selection(other, leader, "test.squad:groink") == TSUCHI_BUSY);
     assert(api.selected(mod, leader, picked, sizeof picked, &bytes) == TSUCHI_OK && !strcmp(picked, "test.squad:groink"));

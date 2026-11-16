@@ -1,0 +1,153 @@
+---
+title: Supply an Academy scoreboard
+description: Show your own entries on an Academy exam's scoreboard.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+Use [`academy.hold_board`](/reference/academy/#hold_board) to supply the other
+players' entries on an exam course's scoreboard in the Switch 2 Edition. The
+entries can come from a file in your mod, recorded attempts, or a server. The
+game shows them the same way it shows a board it downloaded, so it places the
+stickers and applies its filters itself.
+
+## Describe the board
+
+Exam course IDs are `period * 6 + course`, with periods `0` to `11` and courses
+`0` to `5`. For example, period 1's third course has ID `8`.
+
+A board is JSON with up to 64 entries. Each entry has an ID, a nickname, a
+score, a sticker index, and a color index. Nicknames have up to 40 Unicode
+characters. IDs have up to 64 ASCII letters, digits, dots, underscores, or
+hyphens, and each ID can appear once. `king_count` defaults to zero.
+
+```json
+{
+  "entries": [
+    {"id": "creator-target", "nickname": "Course creator", "score": 450,
+     "sticker_type": 0, "sticker_color": 0},
+    {"id": "best-run", "nickname": "Best run", "score": 350,
+     "sticker_type": 1, "sticker_color": 2, "king_count": 3}
+  ]
+}
+```
+
+For a time course, an entry's score is the whole number of remaining seconds,
+as the game records it; higher is better. The sticker and color indexes must exist in the game's
+loaded tables, and `sticker_type` selects a mask sticker.
+
+The medal lines are not part of the board. The game draws them from its own
+data, as it does for a downloaded board.
+
+## Hold the board
+
+For example, put one entry on course 8's scoreboard:
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua title="main.lua"
+local json = [[{"entries":[{"id":"target","nickname":"Course creator",
+"score":450,"sticker_type":0,"sticker_color":0}]}]]
+local ok, why = academy.hold_board(8, json)
+if not ok then mod.log(why) end
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript title="main.js"
+const board = {
+    entries: [{id: "target", nickname: "Course creator", score: 450,
+               sticker_type: 0, sticker_color: 0}]
+};
+academy.hold_board(8, JSON.stringify(board));
+```
+
+</TabItem>
+<TabItem label="C">
+
+```c title="main.c"
+#include "tsuchi/tsuchi.h"
+
+TSUCHI_Result tsuchi_mod_start(const TSUCHI_Host *host, TSUCHI_Mod *self) {
+    const char *json = "{\"entries\":[{\"id\":\"target\","
+        "\"nickname\":\"Course creator\",\"score\":450,"
+        "\"sticker_type\":0,\"sticker_color\":0}]}";
+    return host->academy->hold_board(self, 8, json);
+}
+```
+
+</TabItem>
+</Tabs>
+
+The game takes your entries the next time it asks for that course's board.
+Tsuchi answers that request, so the game doesn't ask Nintendo for the board. If
+you change the entries while the board is open, the game shows the new ones the
+next time it opens the board.
+
+Use `academy.board_state(8)` to read the entry count, how many entries the game
+took, and whether the game has asked yet. If the sticker tables are still
+loading or an index is out of range, the game makes its normal request instead,
+and `failure` names the reason. Hold a corrected board or reopen the board to
+try again.
+
+The game saves the entries it shows in the player's Academy save data, as it
+does with entries it downloads. They stay there after you release the board,
+until the game next downloads that course's board.
+
+To open the board from a mod's button or input action, have the player open
+the matching exam's course details, then call
+[`academy.open_board`](/reference/academy/#open_board). An open mod schedule and
+an idle course screen are required. The native chart supplies its usual controls,
+and Nintendo account membership is unchanged.
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua
+local ok, why = academy.open_board(8)
+if not ok then mod.log(why) end
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript
+academy.open_board(8);
+```
+
+</TabItem>
+<TabItem label="C">
+
+```c
+TSUCHI_Result result = host->academy->open_board(self, 8);
+```
+
+</TabItem>
+</Tabs>
+
+One mod owns each course's board. The owner can replace its entries, and another
+mod receives `busy`. Release with `academy.release_board(8)`. After a release or
+mod stop, the game makes its own request the next time it opens the board.
+Nintendo score uploads remain blocked until the game closes.
+
+## Community boards
+
+To show a server's results, convert its response to the board JSON and pass it
+to `hold_board`. Use a board identity on your server that includes the mod ID,
+custom course ID, and content revision, so a changed course gets a separate
+leaderboard. Keep the native exam course ID as the course you hold the board for.
+
+[`academy.exam_finished`](/reference/academy/#exam_finished) reports each
+exam attempt's score, medal, and success flag. Its legacy `elapsed` field holds
+fractional remaining seconds for a timed course and zero for a points course. It also
+reports attempts that do not improve a saved record. Practice and training do
+not emit that event. Use the attempt event when submitting runs, since the saved
+high score can describe a different attempt.
+
+Send JSON with [`net.request`](/develop/network/#send-json-or-binary-data),
+including the community token in an Authorization header. Save each attempt
+and a unique nonce in mod storage before sending it, and keep that nonce on
+retries. Read the response and release the request in its completion handler.
+Validate the returned mod, course, and revision before replacing a board.

@@ -29,7 +29,7 @@ std::map<uint64_t, uint64_t> context_worlds;
 uint64_t thread = 1, loaded = 0, engine = 0;
 uint64_t changing_context = 0, changed_world = 0;
 uint64_t meta, widget_type, user_type, tree_type, panel_type, button_type, actor_type;
-uint64_t slot_type, cooked_type, abstract_type, unrelated_type, methods;
+uint64_t slot_type, canvas_slot_type, cooked_type, abstract_type, unrelated_type, methods;
 uint64_t rich_type = 0;
 uint64_t last_created = 0, last_tree = 0, last_constructed = 0;
 unsigned factory_calls = 0, construct_calls = 0, attach_calls = 0, viewport_calls = 0;
@@ -246,6 +246,105 @@ TSUCHI_Subscription subscribe(TSUCHI_Mod* mod, Events& events) {
     assert(ui::table.on_button_event(mod, receive, &events, &subscription) == TSUCHI_OK);
     return subscription;
 }
+// What the presenter's markers were asked to hang (presenter_markers.h), and the slot calls the hold makes.
+struct HungCall { uint64_t actor, controller; float offset[3]; };
+std::map<uint64_t, HungCall> hung;
+bool hang_full = false, hung_lost = false;
+uint64_t game_frame = 0, controllers[4] = {};
+float slot_anchors[4] = {-1, -1, -1, -1}, slot_alignment[2] = {-1, -1};
+void* controller_of(void* frame, int32_t player) {
+    assert(reinterpret_cast<uint64_t>(frame) == game_frame && player >= 0 && player < 4);
+    return reinterpret_cast<void*>(controllers[player]);
+}
+void set_anchors(void*, float a, float b, float c, float d) { slot_anchors[0] = a, slot_anchors[1] = b, slot_anchors[2] = c, slot_anchors[3] = d; }
+void set_alignment(void*, float x, float y) { slot_alignment[0] = x, slot_alignment[1] = y; }
+void test_hung_marks() {
+    auto* owner = make_mod(); auto* other = make_mod();
+    const TSUCHI_Object root = create(owner), canvas = construct(owner, root, panel_type);
+    const TSUCHI_Object label = construct(owner, root, button_type), loose = construct(owner, root, button_type);
+    const TSUCHI_Object foreign = create(other);
+    const uint64_t saved_slot_type = slot_type;
+    slot_type = canvas_slot_type;
+    TSUCHI_Object slot{};
+    assert(ui_add_child(owner, canvas, label, &slot) == TSUCHI_OK);
+    slot_type = saved_slot_type;
+    const TSUCHI_Object panel_child = construct(owner, root, button_type);
+    TSUCHI_Object panel_slot{};
+    assert(ui_add_child(owner, canvas, panel_child, &panel_slot) == TSUCHI_OK); // a slot of another kind
+    const uint64_t partner = object(u"Partner", actor_type), second = object(u"Second", actor_type);
+    const TSUCHI_Actor partner_handle{handle(partner).id}, second_handle{handle(second).id};
+    game_frame = object(u"GameFramework", unrelated_type);
+    fake::put<uint64_t>(fake::main_image() + t::data::game_framework, game_frame);
+    for (uint64_t& made : controllers) made = object(u"Controller", unrelated_type);
+    t::fn::camera_controller = controller_of;
+    t::fn::ui_slot_anchors = set_anchors, t::fn::ui_slot_alignment = set_alignment;
+    const TSUCHI_Vec3 over{0, 0, 150}, higher{0, 20, 200}, nowhere{0, 0, NAN};
+    // What is refused leaves nothing hung.
+    assert(ui_hold_mark(owner, label, partner_handle, 4, &over, 0.5f, 1) == TSUCHI_INVALID);
+    assert(ui_hold_mark(owner, label, partner_handle, 0, &nowhere, 0.5f, 1) == TSUCHI_INVALID);
+    assert(ui_hold_mark(owner, label, partner_handle, 0, &over, INFINITY, 1) == TSUCHI_INVALID);
+    assert(ui_hold_mark(owner, label, partner_handle, 0, nullptr, 0.5f, 1) == TSUCHI_INVALID);
+    assert(ui_hold_mark(owner, loose, partner_handle, 0, &over, 0.5f, 1) == TSUCHI_INVALID);       // in no canvas
+    assert(ui_hold_mark(owner, panel_child, partner_handle, 0, &over, 0.5f, 1) == TSUCHI_INVALID); // not a canvas slot
+    assert(ui_hold_mark(other, label, partner_handle, 0, &over, 0.5f, 1) == TSUCHI_DENIED);
+    assert(ui_hold_mark(owner, foreign, partner_handle, 0, &over, 0.5f, 1) == TSUCHI_DENIED);
+    assert(ui_hold_mark(owner, label, TSUCHI_Actor{}, 0, &over, 0.5f, 1) == TSUCHI_NOT_FOUND);
+    controllers[2] = 0;
+    assert(ui_hold_mark(owner, label, partner_handle, 2, &over, 0.5f, 1) == TSUCHI_NOT_READY);
+    t::fn::ui_slot_alignment = nullptr;
+    assert(ui_hold_mark(owner, label, partner_handle, 0, &over, 0.5f, 1) == TSUCHI_NOT_READY);
+    t::fn::ui_slot_alignment = set_alignment;
+    hang_full = true;
+    assert(ui_hold_mark(owner, label, partner_handle, 0, &over, 0.5f, 1) == TSUCHI_CAPACITY);
+    hang_full = false;
+    assert(hung.empty() && ui_release_mark(owner, label) == TSUCHI_NOT_FOUND);
+    // Hung by the widget: the presenter is given its slot, the actor, the player's controller and the offset, and
+    // the slot is anchored at the top left and aligned as asked.
+    assert(ui_hold_mark(owner, label, partner_handle, 1, &over, 0.5f, 1) == TSUCHI_OK);
+    const uint64_t slot_object = raw(slot);
+    assert(hung.size() == 1 && hung.count(slot_object) && hung[slot_object].actor == partner && hung[slot_object].controller == controllers[1]);
+    assert(hung[slot_object].offset[2] == 150 && slot_anchors[0] == 0 && slot_anchors[3] == 0 && slot_alignment[0] == 0.5f && slot_alignment[1] == 1);
+    // Held again by its slot, it takes the new offset and alignment; another actor moves the hold to it.
+    assert(ui_hold_mark(owner, slot, partner_handle, 1, &higher, 0, 0.5f) == TSUCHI_OK);
+    assert(hung.size() == 1 && hung[slot_object].offset[1] == 20 && hung[slot_object].offset[2] == 200 && slot_alignment[1] == 0.5f);
+    assert(ui_hold_mark(owner, label, second_handle, 0, &over, 0.5f, 1) == TSUCHI_OK);
+    assert(hung.size() == 1 && hung[slot_object].actor == second && hung[slot_object].controller == controllers[0]);
+    // Only its owner lets it go.
+    assert(ui_release_mark(other, label) == TSUCHI_DENIED);
+    assert(ui_release_mark(owner, slot) == TSUCHI_OK && hung.empty());
+    assert(ui_release_mark(owner, label) == TSUCHI_NOT_FOUND);
+    // The presenter let it go (its slot or controller gone): the hold ends at the next step.
+    assert(ui_hold_mark(owner, label, partner_handle, 0, &over, 0.5f, 1) == TSUCHI_OK);
+    hung_lost = true;
+    step();
+    hung_lost = false;
+    assert(hung.empty() && ui_release_mark(owner, label) == TSUCHI_NOT_FOUND);
+    // Its actor gone, the hold ends.
+    assert(ui_hold_mark(owner, label, second_handle, 0, &over, 0.5f, 1) == TSUCHI_OK);
+    fake::destroy(second);
+    step();
+    assert(hung.empty() && ui_release_mark(owner, label) == TSUCHI_NOT_FOUND);
+    // Its widget's root destroyed, the hold ends.
+    const TSUCHI_Object other_root = create(owner), other_canvas = construct(owner, other_root, panel_type);
+    const TSUCHI_Object other_label = construct(owner, other_root, button_type);
+    slot_type = canvas_slot_type;
+    TSUCHI_Object other_slot{};
+    assert(ui_add_child(owner, other_canvas, other_label, &other_slot) == TSUCHI_OK);
+    slot_type = saved_slot_type;
+    const uint64_t other_slot_object = raw(other_slot);
+    assert(ui_hold_mark(owner, other_label, partner_handle, 0, &over, 0.5f, 1) == TSUCHI_OK && hung.count(other_slot_object));
+    step();
+    assert(hung.count(other_slot_object));
+    assert(ui_destroy_widget(owner, other_root) == TSUCHI_OK);
+    step();
+    assert(!hung.count(other_slot_object));
+    // Its mod stopped, the hold ends.
+    assert(ui_hold_mark(owner, label, partner_handle, 0, &over, 0.5f, 1) == TSUCHI_OK && hung.size() == 1);
+    mod_stop(owner);
+    assert(hung.empty());
+    mod_stop(other); step(); no_pins();
+    t::fn::camera_controller = nullptr, t::fn::ui_slot_anchors = nullptr, t::fn::ui_slot_alignment = nullptr;
+}
 void test_construction_and_ownership() {
     auto* owner = make_mod(); auto* other = make_mod();
     TSUCHI_Object result{777};
@@ -288,8 +387,36 @@ void test_construction_and_ownership() {
     const TSUCHI_Object nested_panel = construct(owner, second_root, panel_type);
     assert(ui_add_child(owner, second_panel, nested_panel, &result) == TSUCHI_OK);
     assert(ui_add_child(owner, nested_panel, second_panel, &result) == TSUCHI_INVALID);
+    // Another UserWidget of the same mod goes into a panel whole. It is parented like any child, cannot go in
+    // twice or into the viewport meanwhile, and nothing of this tree can go inside it in turn.
+    const TSUCHI_Object part_root = create(owner), part_panel = construct(owner, part_root, panel_type);
+    assert(ui_set_root_widget(owner, part_root, part_panel) == TSUCHI_OK);
+    TSUCHI_Object part_slot{};
+    assert(ui_add_child(owner, nested_panel, part_root, &part_slot) == TSUCHI_OK && part_slot.id);
+    assert(fake::get<uint64_t>(raw(part_root) + t::ui_mod_list_tab::slot) == raw(part_slot));
+    assert(ui_add_child(owner, second_panel, part_root, &result) == TSUCHI_BUSY);
+    assert(ui_add_child(owner, part_panel, second_root, &result) == TSUCHI_INVALID);
+    assert(ui_hold_widget(owner, part_root, 0) == TSUCHI_BUSY);
+    // Its own parts stay its own: they do not go into the outer tree's panels.
+    const TSUCHI_Object part_button = construct(owner, part_root, button_type);
+    assert(ui_add_child(owner, second_panel, part_button, &result) == TSUCHI_DENIED);
+    assert(ui_add_child(owner, part_panel, part_button, &result) == TSUCHI_OK);
+    // Destroyed, it comes out of the panel; the outer widget stays.
+    assert(ui_destroy_widget(owner, part_root) == TSUCHI_OK);
+    assert(!fake::get<uint64_t>(raw(part_root) + t::ui_mod_list_tab::slot));
+    assert(ui_find_widget(owner, second_root, "Missing", &result) == TSUCHI_OK);
+    // The outer one destroyed first: the inner one comes out and is still the mod's.
+    const TSUCHI_Object outer_root = create(owner), outer_panel = construct(owner, outer_root, panel_type);
+    const TSUCHI_Object inner_root = create(owner);
+    assert(ui_add_child(owner, outer_panel, inner_root, &result) == TSUCHI_OK);
+    assert(ui_destroy_widget(owner, outer_root) == TSUCHI_OK);
+    assert(!fake::get<uint64_t>(raw(inner_root) + t::ui_mod_list_tab::slot));
+    assert(ui_hold_widget(owner, inner_root, 0) == TSUCHI_OK && ui_release_widget(owner, inner_root) == TSUCHI_OK);
+    assert(ui_destroy_widget(owner, inner_root) == TSUCHI_OK);
     const TSUCHI_Object foreign_root = create(other), foreign_button = construct(other, foreign_root, button_type);
     assert(ui_add_child(owner, panel, foreign_button, &result) == TSUCHI_DENIED);
+    // Another mod's UserWidget does not go in.
+    assert(ui_add_child(owner, panel, foreign_root, &result) == TSUCHI_DENIED);
     fake::put(raw(button) + t::object::name, fake::name(u"Apply"));
     assert(ui_find_widget(owner, root, "Apply", &result) == TSUCHI_OK && result.id == button.id);
     assert(ui_find_widget(owner, root, "Missing", &result) == TSUCHI_OK && result.id == 0);
@@ -303,11 +430,14 @@ void test_construction_and_ownership() {
     add_child(reinterpret_cast<void*>(raw(panel)), reinterpret_cast<void*>(nested_user));
     assert(ui_find_widget(owner, root, "NestedMenu", &result) == TSUCHI_OK && result.id == handle(nested_user).id);
     assert(ui_find_widget(owner, root, "PrivateButton", &result) == TSUCHI_OK && result.id == 0);
+    assert(ui_find_widget(owner, handle(nested_user), "PrivateButton", &result) == TSUCHI_OK && result.id == handle(private_button).id);
+    assert(ui_find_widget(other, handle(nested_user), "PrivateButton", &result) == TSUCHI_DENIED);
+    assert(ui_find_widget(owner, button, "Missing", &result) == TSUCHI_INVALID);
     const unsigned before_private = attach_calls, before_private_hook = hook_calls;
     result.id = 777;
-    assert(ui_add_child(owner, panel, handle(private_button), &result) == TSUCHI_NOT_FOUND && result.id == 777);
+    assert(ui_add_child(owner, panel, handle(private_button), &result) == TSUCHI_BUSY && result.id == 777);
     assert(attach_calls == before_private);
-    assert(ui_hold_button_events(owner, handle(private_button)) == TSUCHI_NOT_FOUND && hook_calls == before_private_hook);
+    assert(ui_hold_button_events(other, handle(private_button)) == TSUCHI_DENIED && hook_calls == before_private_hook);
     assert(fake::get<uint64_t>(private_tree + t::ui_widget_tree::root) == private_button);
     // A separately created UserWidget retains its own owner even when the
     // native factory places it under the context widget's tree.
@@ -319,6 +449,8 @@ void test_construction_and_ownership() {
     assert(ui_add_child(owner, panel, contextual_root, &result) == TSUCHI_DENIED && attach_calls == before_contextual);
     const TSUCHI_Object contextual_panel = construct(other, contextual_root, panel_type);
     assert(ui_set_root_widget(other, contextual_root, contextual_panel) == TSUCHI_OK);
+    assert(ui_find_widget(owner, contextual_root, "Missing", &result) == TSUCHI_DENIED);
+    assert(ui_add_child(owner, panel, contextual_panel, &result) == TSUCHI_DENIED);
     assert(ui_destroy_widget(owner, contextual_root) == TSUCHI_DENIED);
     const TSUCHI_Object loose = construct(owner, second_root, button_type);
     fail_attach = true; result.id = 777;
@@ -484,6 +616,15 @@ void test_owned_widget_text() {
     auto* owner = make_mod(); auto* other = make_mod();
     const TSUCHI_Object root = create(owner), label = construct(owner, root, rich_type);
     const uint64_t widget = raw(label), tree = last_tree;
+    const uint64_t authored_part = object(u"AuthoredTextPart", cooked_type, tree);
+    const uint64_t authored_tree = object(u"WidgetTree", tree_type, authored_part);
+    const uint64_t authored_text = object(u"Caption", rich_type, authored_tree);
+    fake::put<uint64_t>(authored_part + t::ui_user_widget::tree, authored_tree);
+    fake::put<uint64_t>(authored_tree + t::ui_widget_tree::root, authored_text);
+    TSUCHI_Object caption{};
+    assert(ui_find_widget(owner, handle(authored_part), "Caption", &caption) == TSUCHI_OK && caption.id == handle(authored_text).id);
+    assert(ui_set_widget_text(owner, caption, "Stock caption") == TSUCHI_OK && shown_text(authored_text) == u"Stock caption");
+    assert(ui_set_widget_text(other, caption, "Foreign") == TSUCHI_DENIED);
     const unsigned conversions = text_conversions, drops = text_drops;
     assert(ui::table.set_widget_text(owner, label, "Ready") == TSUCHI_OK);
     assert(shown_text(widget) == u"Ready" && text_conversions == conversions + 1 && text_drops == drops + 1);
@@ -502,10 +643,11 @@ void test_owned_widget_text() {
     const std::string astral = std::string(636, 'a') + "\xf0\x9f\x8c\xbf";
     assert(ui_set_widget_text(owner, label, astral.c_str()) == TSUCHI_OK);
     assert(shown_text(widget) == std::u16string(636, u'a') + u"\U0001f33f");
+    assert(ui_set_widget_text(owner, label, "Line\nTwo") == TSUCHI_OK && shown_text(widget) == u"Line\nTwo");
     assert(ui_set_widget_text(owner, label, "") == TSUCHI_OK && shown_text(widget).empty());
     const unsigned before_invalid = text_sets, before_invalid_conversion = text_conversions;
-    const char* invalid[] = {"[", "]", "[Unknown/]", "Line\nTwo", "Tab\tTwo", "DEL\x7f",
-        "[PictureFont:IconData key=\"A_Button\" scale=\"1.0\"/]", "[PictureFont:IconData key=\"ZL_Button\" scale=\"0.76\"/]",
+    const char* invalid[] = {"[", "]", "[Unknown/]", "Line\r\nTwo", "Tab\tTwo", "DEL\x7f",
+        "[PictureFont:IconData key=\"A_Button\" scale=\"1.0\"/]",
         "\xc0\xaf", "\x80", "\xe2\x82", "\xed\xa0\x80", "\xf4\x90\x80\x80", "\xf8\x90\x80\x80"};
     for (const auto text : invalid) assert(ui_set_widget_text(owner, label, text) == TSUCHI_INVALID);
     const std::string oversized = std::string(639, 'a') + "\xc3\xa9";
@@ -568,6 +710,14 @@ void test_widget_text_native_reentry() {
 namespace tsuchi {
 ui::Backend& ui_screen_backend() { static ui::Backend backend{}; return backend; }
 bool each_frame(void (*work)()) { steps.push_back(work); return true; }
+bool markers_hang(uint64_t slot, uint64_t actor, uint64_t controller, const float offset[3]) {
+    if (hang_full && !hung.count(slot)) return false;
+    hung[slot] = {actor, controller, {offset[0], offset[1], offset[2]}};
+    return true;
+}
+bool markers_unhang(uint64_t slot) { return hung.erase(slot) != 0; }
+bool markers_hung(uint64_t slot) { return hung.count(slot) && !hung_lost; }
+void markers_cut(uint64_t) {}
 bool on_actor_left(void (*)(uint64_t, uint64_t, ActorLeft)) { return true; }
 void ordinary_lifecycle_listener(void (*)(uint64_t, uint64_t, bool)) {}
 TSUCHI_Result ordinary_lifecycle_watch(uint64_t) { return TSUCHI_OK; }
@@ -627,6 +777,7 @@ int main() {
     rich_type = make_type(t::name::ui_footer_text_class, widget_type);
     actor_type = make_type(t::name::engine_actor_class);
     slot_type = make_type("PanelSlot"); unrelated_type = make_type("Unrelated");
+    canvas_slot_type = make_type(t::name::ui_mod_list_slot_class);
     cooked_type = make_type("CookedMenu_C", user_type);
     abstract_type = make_type("AbstractMenu_C", user_type);
     fake::put<uint32_t>(abstract_type + t::ui_widget_class_flags::flags, t::constant::ui_widget_abstract);
@@ -644,6 +795,7 @@ int main() {
     test_button_delivery();
     test_owned_widget_text();
     test_widget_text_native_reentry();
+    test_hung_marks();
     mod_stop(framework); no_pins();
-    std::puts("owned widgets: construction, ownership, viewport, queued native events and reentry passed");
+    std::puts("owned widgets: construction, ownership, viewport, queued native events, reentry and hung marks passed");
 }
