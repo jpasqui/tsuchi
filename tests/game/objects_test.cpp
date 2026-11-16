@@ -5193,7 +5193,10 @@ void tabling() {
     copied_row = fake::memory(kRowBytes);
     std::memcpy(reinterpret_cast<void*>(copied_row), reinterpret_cast<void*>(dwarf), kRowBytes);
     copied_table = creatures, copied_name = row_name(u"KOCHAPPY");
-    tsuchi::add_row_copies([](uint64_t table, uint64_t row) { return table == copied_table && row == copied_name ? copied_row : uint64_t(0); });
+    tsuchi::add_row_copies([](uint64_t table, uint64_t row, uint64_t owner) -> tsuchi::TableRowCopy {
+        const auto handle=tsuchi::game::to_handle(copied_table);
+        return table==copied_table&&row==copied_name&&(!owner||owner==handle)?tsuchi::TableRowCopy{copied_row,handle}:tsuchi::TableRowCopy{};
+    });
     CHECK(sheet.override(mod, sheet_of, "KOCHAPPY", "MaxLife", &more) == TSUCHI_OK && life(dwarf) == 200 && life(copied_row) == 200);
     CHECK(sheet.override(mod, sheet_of, "CHAPPY", "MaxLife", &most) == TSUCHI_OK && life(big) == 300 && life(copied_row) == 200);
     CHECK(sheet.override_text(mod, sheet_of, "KOCHAPPY", "Species", "OOCHAPPY") == TSUCHI_OK && fake::get<uint64_t>(copied_row + 0x8) == row_name(u"OOCHAPPY"));

@@ -44,12 +44,12 @@ KEYWORDS = {'class', 'struct', 'union', 'enum', 'namespace', 'template', 'this',
 C_TYPES = {'void': 'void', 'bool': 'bool', 'u8': 'uint8_t', 'i32': 'int32_t', 'u32': 'uint32_t', 'i64': 'int64_t', 'u64': 'uint64_t',
            'f32': 'float', 'f64': 'double', 'pointer': 'void*', 'const_pointer': 'const void*',
            'engine_text': '::tsuchi::game::EngineText', 'physics_pose': '::tsuchi::game::PhysicsPose',
-           'engine_array': '::tsuchi::game::EngineArray',
+           'engine_array': '::tsuchi::game::EngineArray', 'engine_slot': '::tsuchi::game::EngineSlot',
            'text': 'const char*', 'text16': 'const char16_t*'}
 SIGNED = {'returns', 'args'}
 ABSENT = 'absent'                    # how a build file writes an entry that build does not have
 ABSENT_VALUE = 0x0FFF0000FFFF0000    # the number of one: added to an address, it is an address nothing can read, and cut to 32 bits it is not 0
-BY_VALUE = {'engine_text', 'physics_pose', 'engine_array'}  # returned by value: a missing function is null, not a stand-in
+BY_VALUE = {'engine_text', 'physics_pose', 'engine_array', 'engine_slot'}  # returned by value: a missing function is null, not a stand-in
 BUILD_KEY = re.compile(r'[a-z0-9][a-z0-9.-]{0,23}')
 MOST_FAMILIES = 64
 
@@ -878,7 +878,7 @@ def generate(path, source=None):
     def cell(entry):
         return f'{{{index[entry]}}}'
 
-    out = [BANNER.format(source=source or Path(path).as_posix()), '#pragma once\n#include <stdint.h>\n\nnamespace tsuchi::game { struct EngineText; struct PhysicsPose; struct EngineArray; }\n\n',
+    out = [BANNER.format(source=source or Path(path).as_posix()), '#pragma once\n#include <stdint.h>\n\nnamespace tsuchi::game { struct EngineText; struct PhysicsPose; struct EngineArray; struct EngineSlot; }\n\n',
            'namespace tsuchi::game::table {\n\n',
            f'constexpr const char* game = "{table["game"]}";\n\n']
     out.append('// How to tell a build of the game from any other: the 16 bytes at each offset hash (FNV-1a, 64-bit) to the value.\n'

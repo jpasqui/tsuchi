@@ -46,6 +46,10 @@ class JavaScript(unittest.TestCase):
         for program in self.programs.values():
             self.assertIn('camera world targets passed', run([program, ROOT / 'tests/javascript/camera-look.js']).stdout)
 
+    def test_https_request_bytes_methods_and_awaited_completion(self):
+        for program in self.programs.values():
+            self.assertIn('HTTPS request bindings passed', run([program, ROOT / 'tests/javascript/network.js']).stdout)
+
     def test_bytes_come_back_whole_and_handles_are_bounded(self):
         # Every bytes return was empty while the typed array was made with one argument.
         for program in self.programs.values():

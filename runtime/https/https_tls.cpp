@@ -26,6 +26,7 @@ char lower(char c){return c>='A'&&c<='Z'?char(c+32):c;}
 bool equals(const char* a,const char* b){while(*a&&lower(*a)==lower(*b)){++a;++b;}return !*a&&!*b;}
 bool number(const char* s,uint64_t* out){if(!*s)return false;uint64_t n=0;for(;*s;++s){if(*s<'0'||*s>'9'||n>(UINT64_MAX-uint32_t(*s-'0'))/10)return false;n=n*10+uint32_t(*s-'0');}*out=n;return true;}
 struct Url {char host[256]{},authority[272]{},path[HTTPS_URL_BYTES]{};uint16_t port=443;};
+bool same_origin(const Url& a,const Url& b){return a.port==b.port&&equals(a.host,b.host);}
 bool parse_url(const char* s,Url& u){
     if(!prefix(s,"https://"))return false;const char* a=s+8;uint32_t n=0;
     while(a[n]&&a[n]!='/'&&a[n]!='?'){const unsigned char c=a[n];if(n+1>=sizeof u.authority||c<=32||c>=127||c=='@'||c=='#'||c=='\\')return false;u.authority[n]=a[n];++n;}
@@ -232,11 +233,19 @@ uint64_t https_tls_diagnostic(uint32_t i){return i<4?diagnostics[i].load():0;}
 void https_tls_run(HttpsJob& j){
     if(!platform){https_finish(j,HTTPS_ERROR_TLS);return;}
     if(j.kind==HTTPS_FILE&&(!platform->file_open||!platform->file_write||!platform->file_commit||!platform->file_abort)){https_finish(j,HTTPS_ERROR_STORAGE);return;}
+    uint32_t header_bytes=0;
+    if(!https_request_valid(j.method,j.headers,j.upload,j.upload_bytes,&header_bytes)){https_finish(j,HTTPS_ERROR_PROTOCOL);return;}
     const uint64_t deadline=platform->milliseconds()+j.timeout_ms;char url[HTTPS_URL_BYTES]{};copy(url,sizeof url,j.url);void* file=nullptr;uint32_t error=0;int transport=0;bool complete=false;
     for(unsigned hop=0;hop<=5&&!https_stopped(j);++hop){
         Url target;if(!parse_url(url,target)){error=HTTPS_ERROR_PROTOCOL;break;}
-        char request[HTTPS_URL_BYTES+512]{};uint32_t n=0;auto append=[&](const char* text){while(*text&&n+1<sizeof request)request[n++]=*text++;request[n]=0;return !*text;};
-        const bool ok=append("GET ")&&append(target.path)&&append(" HTTP/1.1\r\nHost: ")&&append(target.authority)&&append("\r\nUser-Agent: Tsuchi/net\r\nAccept: */*\r\nAccept-Encoding: identity\r\n\r\n");
+        char request[HTTPS_URL_BYTES+HTTPS_HEADERS_LIMIT+512]{};uint32_t n=0;auto append=[&](const char* text){while(*text&&n+1<sizeof request)request[n++]=*text++;request[n]=0;return !*text;};
+        bool ok=append(https_method_name(j.method))&&append(" ")&&append(target.path)&&append(" HTTP/1.1\r\nHost: ")&&append(target.authority)&&append("\r\nUser-Agent: Tsuchi/net\r\nAccept: */*\r\nAccept-Encoding: identity\r\n")&&append(j.headers);
+        if(j.method!=HTTPS_GET){
+            char size[24]{};uint32_t used=sizeof size-1,value=j.upload_bytes;
+            do{size[--used]=char('0'+value%10);value/=10;}while(value);
+            ok=ok&&append("Content-Length: ")&&append(size+used)&&append("\r\n");
+        }
+        ok=ok&&append("\r\n");
         char next[HTTPS_URL_BYTES]{};bool redirect=false;
         {
             void* storage=platform->allocate(sizeof(Session));if(!storage){error=HTTPS_ERROR_STORAGE;break;}
@@ -245,9 +254,16 @@ void https_tls_run(HttpsJob& j){
 
             Headers h;redirect=false;
             if(!ok)s->error=HTTPS_ERROR_PROTOCOL;
-            else if(s->connect(target)&&s->write_all(request,n)&&headers(*s,h)){
+            else if(s->connect(target)&&s->write_all(request,n)&&s->write_all(static_cast<const char*>(j.upload),j.upload_bytes)&&headers(*s,h)){
                 redirect=h.status==301||h.status==302||h.status==303||h.status==307||h.status==308;
-                if(redirect){if(hop==5||!redirect_url(target,h.location,next))s->error=HTTPS_ERROR_PROTOCOL;}
+                if(redirect){
+                    if(j.method!=HTTPS_GET&&h.status!=307&&h.status!=308)s->error=HTTPS_ERROR_HTTP;
+                    else if(hop==5||!redirect_url(target,h.location,next))s->error=HTTPS_ERROR_PROTOCOL;
+                    else if(j.same_origin_redirects||header_bytes||j.upload_bytes||j.method!=HTTPS_GET){
+                        Url destination;
+                        if(!parse_url(next,destination)||!same_origin(target,destination))s->error=HTTPS_ERROR_HTTP;
+                    }
+                }
                 else if(h.status<200||h.status>=300)s->error=HTTPS_ERROR_HTTP;
                 else if(h.status==206)s->error=HTTPS_ERROR_PROTOCOL;
                 else {

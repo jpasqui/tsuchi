@@ -15,6 +15,25 @@ tutorials:
 - title: Send network messages
   path: /develop/network/
 enums:
+  HttpMethod:
+    open: false
+    doc: An HTTPS request method.
+    values:
+    - name: get
+      value: 0
+      doc: Reads a resource. The body must be empty.
+    - name: post
+      value: 1
+      doc: Sends data to a resource.
+    - name: put
+      value: 2
+      doc: Replaces a resource.
+    - name: patch
+      value: 3
+      doc: Changes part of a resource.
+    - name: remove
+      value: 4
+      doc: Removes a resource.
   RequestState:
     open: false
     doc: The progress of an HTTPS request.
@@ -309,6 +328,50 @@ functions:
   returns:
     type: struct<NetAddress>
     doc: The address, and port 0.
+- name: request
+  doc: Starts a verified HTTPS request. Copies headers and body before returning, within the shared
+    HTTPS memory budget. The copies stay alive until release or until a cancelled worker finishes.
+    Follows up to five same-origin redirects. GET follows 301, 302, 303, 307, and 308; other methods
+    follow 307 and 308 with their method and body preserved. Other redirects fail with io and keep
+    the HTTP status. It never retries a write after a transport failure. Use a server-side nonce
+    when retrying an upload, since a failed response does not prove the server rejected the write.
+  params:
+  - name: method
+    type: enum<HttpMethod>
+    doc: The request method.
+  - name: url
+    type: text
+    doc: An ASCII HTTPS URL without credentials or a fragment, at most 1023 bytes.
+  - name: headers
+    type: text
+    doc: Up to 32 HTTP header lines and 8192 bytes, excluding the terminating NUL. Each line ends
+      with CRLF; an empty string sends no custom headers. Names must be unique, ignoring case.
+      Values contain printable ASCII or tabs. Host, Content-Length, Transfer-Encoding, Connection,
+      Expect, Upgrade, Trailer, TE, Proxy-Authorization, Proxy-Connection, Accept-Encoding,
+      User-Agent, and Accept are reserved. Authorization and Content-Type are permitted.
+  - name: body
+    type: bytes
+    doc: Up to 65536 bytes, copied before returning. GET requires an empty body.
+  - name: max_bytes
+    type: u64
+    doc: The response limit from 1 to 4194304 bytes.
+  - name: timeout_ms
+    type: u32
+    doc: The overall timeout from 1 to 300000 milliseconds.
+  fails:
+    invalid: An argument is outside its documented range.
+    unsupported: This target has no network transport.
+    io: The system refused the network operation.
+    capacity: Your mod already has 8 requests or all 64 worker slots are occupied.
+    no_memory: The request could not be allocated within the HTTPS memory budget.
+  users:
+  - academy-community-board
+  - online-coop
+  owns: true
+  returns:
+    type: handle<request>
+    doc: Your request handle.
+  waits: completed
 events:
 - name: completed
   doc: Emitted when your HTTPS request succeeds, fails, or is cancelled. Read its status and release

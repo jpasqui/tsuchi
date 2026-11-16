@@ -37,3 +37,4 @@ handles:
   - {name: setting_hold, doc: "An owned runtime scalar setting override, until release or mod stop."}
   - {name: package_install, doc: "A package install started by your mod, readable until another install starts or your mod stops."}
   - {name: memory_block, doc: "A block of memory reserved by your mod, freed when you free it or your mod stops, unless it is lasting."}
+  - {name: academy_submission, doc: "A native Academy score request owned by your mod, valid only during its submission handler."}

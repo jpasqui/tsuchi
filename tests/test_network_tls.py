@@ -15,9 +15,29 @@ OPENSSL=find_openssl()
 class Handler(http.server.BaseHTTPRequestHandler):
  protocol_version='HTTP/1.1'
  def log_message(self,*args):pass
+ def do_POST(self):self.upload()
+ def do_PUT(self):self.upload()
+ def do_PATCH(self):self.upload()
+ def do_DELETE(self):self.upload()
+ def upload(self):
+  data=self.rfile.read(int(self.headers.get('Content-Length','0')))
+  self.server.seen.append((self.command,self.path,dict(self.headers),data))
+  if self.path=='/drop':self.close_connection=True;return
+  if self.path.startswith('/write-redirect-'):
+   status=int(self.path.rsplit('-',1)[1]);self.send_response(status);self.send_header('Location','/echo');self.send_header('Content-Length','0');self.end_headers();return
+  if self.path=='/write-cross':
+   self.send_response(307);self.send_header('Location',self.server.foreign+'/echo');self.send_header('Content-Length','0');self.end_headers();return
+  if self.path=='/echo' and self.headers.get('Authorization')=='Bearer academy-test' and self.headers.get('Content-Type')=='application/octet-stream':
+   self.send_response(200);self.send_header('Content-Length',str(len(data)));self.end_headers();self.wfile.write(data);return
+  self.send_response(403);self.send_header('Content-Length','0');self.end_headers()
  def do_GET(self):
+  self.server.seen.append((self.command,self.path,dict(self.headers),b''))
   try:
-   if self.path=='/large':
+   if self.path.startswith('/get-redirect-'):
+    status=int(self.path.rsplit('-',1)[1]);self.send_response(status);self.send_header('Location','/small');self.send_header('Content-Length','0');self.end_headers()
+   elif self.path=='/get-cross':
+    self.send_response(302);self.send_header('Location',self.server.foreign+'/small');self.send_header('Content-Length','0');self.end_headers()
+   elif self.path=='/large':
     self.send_response(200);self.send_header('Content-Length',str(4*1024*1024));self.end_headers()
     data=bytes(range(256))*256
     for _ in range(64):self.wfile.write(data)
@@ -53,10 +73,12 @@ class NetworkTLS(unittest.TestCase):
    else:
     command('x509','-req','-in',f'{name}.csr','-CA','root.pem','-CAkey','root.key','-CAcreateserial','-days',days,'-extfile',f'{name}.ext','-out',f'{name}.pem')
   command('req','-x509','-newkey','rsa:2048','-nodes','-subj','/CN=localhost','-days','2','-keyout','untrusted.key','-out','untrusted.pem','-addext','subjectAltName=DNS:localhost')
-  for name in ('trusted','wrong','expired','untrusted'):
+  for name in ('trusted','wrong','expired','untrusted','trusted'):
    server=http.server.ThreadingHTTPServer(('127.0.0.1',0),Handler);server.daemon_threads=True
+   server.seen=[]
    context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER);context.minimum_version=ssl.TLSVersion.TLSv1_2;context.load_cert_chain(out/f'{name}.pem',out/f'{name}.key');server.socket=context.wrap_socket(server.socket,server_side=True)
    threading.Thread(target=server.serve_forever,daemon=True).start();servers.append(server)
+  for server in servers:server.foreign=f'https://localhost:{servers[-1].server_port}'
   try:
    (out/'roots.pem').write_bytes((ROOT/'third_party/mbedtls-3.6.7/cacert.pem').read_bytes()+b'\n'+(out/'root.pem').read_bytes())
    clang=shutil.which('clang');objects=[]
@@ -70,6 +92,17 @@ class NetworkTLS(unittest.TestCase):
    self.assertEqual(result.returncode,0,result.stdout+result.stderr)
    result=subprocess.run([str(exe),str(out/'roots.pem'),*[f'https://localhost:{server.server_port}' for server in servers]],capture_output=True,text=True,timeout=180)
    self.assertEqual(result.returncode,0,result.stdout+result.stderr);self.assertIn('PASS independent TLS',result.stdout)
+   writes=[row for row in servers[0].seen if row[0]!='GET']
+   self.assertEqual(sum(path=='/drop' for _,path,_,_ in writes),1,'a failed write must not retry itself')
+   echoes=[row for row in writes if row[1]=='/echo']
+   self.assertEqual(len(echoes),6,'four direct methods and two preserved redirects')
+   for method,path,headers,data in echoes:
+    self.assertEqual(headers['Authorization'],'Bearer academy-test')
+    self.assertEqual(headers['Content-Type'],'application/octet-stream')
+    self.assertEqual(int(headers['Content-Length']),len(data))
+    self.assertNotIn('Transfer-Encoding',headers)
+   self.assertEqual([(method,path) for method,path,_,_ in servers[-1].seen],[('GET','/small')],
+                    'only the legacy credential-free GET may cross origins')
    (out/'memory-results.txt').write_text(result.stdout,encoding='utf-8')
   finally:
    for server in servers:server.shutdown();server.server_close()

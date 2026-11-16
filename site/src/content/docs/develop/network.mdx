@@ -97,6 +97,84 @@ for response payloads. A request can fail with `no_memory` when other requests
 use that budget. Release successful requests after reading them. Failed and
 cancelled requests free their response storage before their completion event.
 
+### Send JSON or binary data
+
+Use `net.request` for POST, PUT, PATCH, DELETE, or a GET with custom headers.
+Scripts use `"remove"` for the DELETE method, since `delete` is a language
+keyword. Supply each custom header as `Name: value\r\n`, including the final
+CRLF. The framework supplies Host, Content-Length, and connection headers.
+Authorization and Content-Type are permitted. See the
+[request reference](/reference/net/#request) for the reserved names.
+
+For example, send a JSON object:
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua title="main.lua"
+local pending
+net.on_completed(function(event)
+    if event.request ~= pending then return end
+    local info = net.request_info(event.request)
+    mod.log("Upload HTTP status: " .. tostring(info.http_status))
+    net.release_request(event.request)
+    pending = nil
+end)
+pending = net.request("post", "https://example.com/api/runs",
+    "Content-Type: application/json\r\n", '{"score":450}', 65536, 30000)
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript title="main.js"
+async function upload() {
+    const json = '{"score":450}';
+    const body = Uint8Array.from(json, c => c.charCodeAt(0));
+    const event = await net.request("post", "https://example.com/api/runs",
+        "Content-Type: application/json\r\n", body, 65536n, 30000);
+    try {
+        const info = net.request_info(event.request);
+        mod.log("Upload HTTP status: " + info.http_status);
+    } finally {
+        net.release_request(event.request);
+    }
+}
+upload().catch(error => mod.log(error.name));
+```
+
+</TabItem>
+<TabItem label="C">
+
+```c title="upload.c"
+#include "tsuchi/tsuchi.h"
+
+TSUCHI_Result upload(const TSUCHI_Host *host, TSUCHI_Mod *self,
+                     TSUCHI_Request *request) {
+    const char body[] = "{\"score\":450}";
+    return host->net->request(self, TSUCHI_HTTP_METHOD_POST,
+        "https://example.com/api/runs", "Content-Type: application/json\r\n",
+        body, sizeof(body) - 1, 65536, 30000, request);
+}
+```
+
+</TabItem>
+</Tabs>
+
+Headers can hold up to 8192 bytes across 32 unique names. Bodies can hold up to
+65536 bytes, including binary zeroes. GET requires an empty body. Tsuchi copies
+headers and body before returning, so compiled mods can release their input
+buffers. These copies count toward the shared HTTPS memory budget and remain
+alive while a cancelled worker drains.
+
+The new request API follows redirects only within the original host and port.
+GET follows 301, 302, 303, 307, and 308. Other methods follow 307 and 308 with
+their body and method preserved. Other redirects fail with `io`; read
+`http_status` for the response code. The existing `net.get` keeps its HTTPS
+redirect behavior. A failed write never retries itself. When a server supports
+attempt nonces, keep the same nonce on retries, since a missing response can
+follow a successful server write.
+
 ## Sessions
 
 Use [`session`](/reference/session/) when several machines need ordered messages

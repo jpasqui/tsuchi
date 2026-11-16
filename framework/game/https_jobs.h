@@ -1,6 +1,7 @@
 #pragma once
 #include <stdint.h>
 #include "https_body.h"
+#include "https_request.h"
 namespace tsuchi::https {
 constexpr uint32_t HTTPS_ID_BYTES=48, HTTPS_URL_BYTES=2048;
 constexpr uint32_t HTTPS_MEMORY=1,HTTPS_FILE=2;
@@ -22,6 +23,11 @@ struct HttpsJob {
  char url[HTTPS_URL_BYTES]{};
  uint32_t kind=HTTPS_MEMORY,connect_timeout_ms=0,timeout_ms=0;
  uint64_t max_bytes=0;
+ uint32_t method=HTTPS_GET;
+ const char* headers="";
+ const void* upload=nullptr;
+ uint32_t upload_bytes=0;
+ bool same_origin_redirects=false;
  HttpsAtomic<uint32_t> state{},cancelled{},error{},http_status{},transport_error{};
  HttpsAtomic<uint64_t> received{},total{};
  HttpsBody body{};
@@ -33,7 +39,7 @@ inline void https_finish(HttpsJob& j,uint32_t error,int32_t transport=0,void(*re
 HttpsJob* https_take_job();
 // One framework-owned streaming job. The caller retains it until terminal state.
 bool https_queue_file(HttpsJob*);
-struct WorkerBackend {bool(*start)();void(*dispose)(HttpsJob*);void(*wake)();};
+struct WorkerBackend {bool(*start)();void(*dispose)(HttpsJob*);void(*wake)();void*(*allocate)(uint64_t);void(*free)(void*);};
 void set_worker_backend(const WorkerBackend*);
 void https_native_start();
 }

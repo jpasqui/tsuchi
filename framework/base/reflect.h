@@ -179,6 +179,8 @@ void* engine_memory(uint64_t bytes);
 void* engine_memory_aligned(uint64_t bytes, uint32_t alignment);
 // Whether the engine's allocator can be reached yet.
 bool engine_memory_available();
+// True after the game has published its allocator and both allocation methods.
+bool engine_allocator_ready();
 void release_engine_memory(void* block);
 
 // Memory for a function's arguments and results, set up as the engine expects.

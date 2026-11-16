@@ -26,7 +26,7 @@ bool start(){
 }
 void dispose(HttpsJob* job){https_body_free(job->body,platform::response_free);}
 void wake(){work.notify(platform::wake_for_work);}
-const WorkerBackend service{start,dispose,wake};
+const WorkerBackend service{start,dispose,wake,platform::allocate,platform::free};
 }
 void https_native_start(){if(set_https_tls_platform(&transport))set_worker_backend(&service);}
 }

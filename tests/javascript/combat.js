@@ -37,6 +37,18 @@ test.deprecated("combat.on_old_event",4,"combat.new_event"); check(test.logged()
 globalThis.handler_calls = 0; combat.on("damaged", () => ++handler_calls);
 check(combat.damage(louie,1) && handler_calls === 1);
 globalThis.frames_seen = 0; globalThis.pictures_seen = 0; globalThis.steps_at_last_frame = 0; globalThis.last_frame_number = 0n;
+let academyOrder = "";
+const academyOpen = academy.on("opened", e => { check(e.widget !== null); academyOrder += "O"; });
+const academyDelivered = academy.on("period_delivered", e => { check(e.period === 11); academyOrder += "D"; });
+const academyUnlocked = academy.on("period_unlocked", e => { check(e.period === 10); academyOrder += "U"; });
+academy.on("exam_started", e => { check(e.course === 71 && e.timed === true); academyOrder += "S"; });
+const academyFinish = academy.on("exam_finished", e => {
+    check(e.course === 71 && e.score === 12 && e.elapsed === 12.75 && e.timed === true);
+    check(e.medal === "king" && e.cleared === false); academyOrder += "F";
+});
+test.academy_events(); check(academyOrder === "ODUSF");
+academyOpen.cancel(); academyDelivered.cancel(); academyUnlocked.cancel(); academyFinish.cancel();
+test.academy_events(); check(academyOrder === "ODUSFS");
 time.on("step", step => { check(pictures_seen === frames_seen && step.seconds === undefined); ++frames_seen; steps_at_last_frame = test.steps(); last_frame_number = step.number; });
 time.on("presented", picture => { ++pictures_seen; check(pictures_seen === frames_seen && picture.seconds === 0.5 && picture.fraction === 1); });
 // A handler exhausted in its own call is reported once and disabled on later frames.

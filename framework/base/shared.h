@@ -34,4 +34,11 @@ struct EngineArray {
     ~EngineArray() {}
 };
 
+// A new element of one of the engine's sets, as the set's own add hands it back by value: the element's index and
+// where it is. The engine's type is plain data, so it comes back in two registers (x0, x1), as this one does.
+struct EngineSlot {
+    int32_t index;
+    void* place;
+};
+
 } // namespace tsuchi::game

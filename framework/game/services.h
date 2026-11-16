@@ -35,6 +35,7 @@ void text_start();
 void declared_start();
 // The manifest's "academy_schedule": the Dandori Academy exam schedule a mod supplies. After `mods_start`.
 void academy_start();
+void academy_hooks_start(TSUCHI_Mod* self);
 // The manifest's "maps": a mod's levels loaded into the game's maps, and the game's actors there removed,
 // moved, or given other values. After `mods_start`.
 void maps_start();
@@ -149,8 +150,12 @@ SaveCounts save_counts();
 // How many fields of table rows mods have changed now.
 unsigned table_changes();
 // Tells the tables service of a copy the game keeps of rows of a table: `copy_of` gives, for a table and a row's name,
-// where that row's copy is, or 0. Fields written into the row are then written into the copy too.
-void add_row_copies(uint64_t (*copy_of)(uint64_t table, uint64_t row));
+// where that row's copy is, or 0. With owner=0 the provider selects the current
+// owner; otherwise it resolves a retained owner's copy, including relocated rows.
+// `owner` is an object handle, not a native pointer. Fields and primitive-array
+// lengths are mirrored. A table and its copy own separate array storage.
+struct TableRowCopy { uint64_t base = 0, owner = 0; };
+void add_row_copies(TableRowCopy (*copy_of)(uint64_t table, uint64_t row, uint64_t owner));
 // How many texts mods have replaced now.
 unsigned text_replacements();
 // How many pauses mods hold now.

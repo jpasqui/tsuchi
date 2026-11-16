@@ -55,6 +55,8 @@ const sidebars = {
         { label: 'Add a creature', slug: 'develop/add-a-creature' },
         { label: 'Add shader sets', slug: 'develop/add-shaders', badge: { text: 'WIP', variant: 'caution' } },
         { label: 'Set the exam schedule', slug: 'develop/exam-schedule', badge: { text: 'WIP', variant: 'caution' } },
+        { label: 'Read Academy progress', slug: 'develop/academy-progress', badge: { text: 'WIP', variant: 'caution' } },
+        { label: 'Supply an Academy scoreboard', slug: 'develop/academy-boards', badge: { text: 'WIP', variant: 'caution' } },
       ],
     },
     {

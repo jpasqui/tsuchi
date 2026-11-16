@@ -243,7 +243,7 @@ class SchemaRules(unittest.TestCase):
 
     def test_the_schema_loads(self):
         schema = load(ROOT / 'schema')
-        self.assertEqual([s.name for s in schema.services], ['actor', 'animation', 'asset', 'audio', 'battle', 'behavior', 'camera', 'captain', 'carry', 'character', 'collision', 'combat', 'component', 'content', 'creature', 'datatable', 'dialog', 'effects', 'entity', 'file', 'game', 'gimmicks', 'hook', 'howlout', 'hud', 'input', 'memory', 'mod', 'net', 'packages', 'pikmin', 'player', 'reflection', 'save', 'session', 'settings', 'squad', 'storage', 'story', 'text', 'time', 'ui', 'voice', 'world'])
+        self.assertEqual([s.name for s in schema.services], ['academy', 'actor', 'animation', 'asset', 'audio', 'battle', 'behavior', 'camera', 'captain', 'carry', 'character', 'collision', 'combat', 'component', 'content', 'creature', 'datatable', 'dialog', 'effects', 'entity', 'file', 'game', 'gimmicks', 'hook', 'howlout', 'hud', 'input', 'memory', 'mod', 'net', 'packages', 'pikmin', 'player', 'reflection', 'save', 'session', 'settings', 'squad', 'storage', 'story', 'text', 'time', 'ui', 'voice', 'world'])
 
     def test_engine_and_game_actor_contracts_are_distinct(self):
         schema = load(ROOT / 'schema')

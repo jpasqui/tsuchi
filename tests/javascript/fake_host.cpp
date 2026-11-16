@@ -20,6 +20,8 @@
 #include <sstream>
 #include <cstring>
 #include "registry.h"
+#include "../host/network_request_fixture.h"
+#include "../host/academy_event_fixture.h"
 
 
 namespace {
@@ -119,6 +121,11 @@ TSUCHI_Result file_size(TSUCHI_Mod*, const char* path, uint64_t* out) {
 }
 const tsuchi::file::Backend file_backend{read_file, file_size, nullptr, nullptr};
 JSValue test_handles(JSContext* c, JSValueConst, int, JSValueConst*) { return JS_NewInt64(c, tsuchi_js::handles_held(c)); }
+JSValue test_request_done(JSContext* c, JSValueConst, int n, JSValueConst* a) {
+    const auto id=tsuchi_js::handle(c,tsuchi_js::arg(n,a,0),"request",false);
+    if(JS_HasException(c))return JS_EXCEPTION;
+    return JS_NewBool(c,network_request_fixture::finish(tsuchi_js::mod(c),id));
+}
 int log_lines = 0; std::string last_line;
 TSUCHI_Result log_line(TSUCHI_Mod*, const char* text) { ++log_lines; last_line = text; std::puts(text); return TSUCHI_OK; }
 JSValue test_logged(JSContext* c, JSValueConst, int, JSValueConst*) { return JS_NewInt32(c, log_lines); }
@@ -145,6 +152,7 @@ int main(int argc, char** argv) {
     actors[1] = {100,100,0,0}; actors[2] = {100,100,20,20}; actors[3] = {500,500,0,0};
     tsuchi::combat::set_backend(&backend); tsuchi::precision::set_backend(&precision_backend); tsuchi::dialog::set_backend(&dialog_backend);
     tsuchi::file::set_backend(&file_backend);
+    network_request_fixture::start();
     static tsuchi::camera::Backend camera_backend{};
     camera_backend.hold_look = hold_look;
     tsuchi::camera::set_backend(&camera_backend);
@@ -160,6 +168,10 @@ int main(int argc, char** argv) {
     function(ctx,test,"steps",test_steps,0); function(ctx,test,"subscriptions",test_subscriptions,0); function(ctx,test,"captured",test_captured,0);
     function(ctx,test,"emit",test_emit,1); function(ctx,test,"answer",test_answer,2); function(ctx,test,"logged",test_logged,0); function(ctx,test,"deprecated",test_deprecated,3);
     function(ctx,test,"handles",test_handles,0);
+    function(ctx,test,"request_done",test_request_done,1);
+    function(ctx,test,"academy_events",+[](JSContext*, JSValueConst, int, JSValueConst*) -> JSValue {
+        academy_event_fixture::emit(); return JS_UNDEFINED;
+    },0);
     JS_SetPropertyStr(ctx,global,"test",test.take());
     std::ifstream file(argv[1], std::ios::binary); std::ostringstream source; source << file.rdbuf();
     if (!execute(ctx,source.str())) { tsuchi_js::report(ctx); return fail("script failed"); }
@@ -179,6 +191,7 @@ int main(int argc, char** argv) {
         damage({2},1,0,{0});
         if (!execute(ctx,"check(handler_calls === 1);")) return fail("handler ran after stop");
     } else tsuchi::mod_stop(mod);
+    if (academy_event_fixture::wanted()) return fail("Academy subscription outlived mod");
     // Drop C++ values before the state, which owns their context.
     JS_FreeValue(ctx,global.take());
     tsuchi_js::destroy(state);
