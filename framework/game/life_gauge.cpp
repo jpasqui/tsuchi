@@ -8,6 +8,11 @@
 // Below full health the update asks the creature's AI whether to show the gauge (TekiAI vt+0x7B0: 1 show, 2 hide)
 // unless Pikmin cling to it (its StickComponent's flag at +0x2A1), which shows it. A held creature's AI keeps the
 // state it was held in, often asleep, which hides the gauge; `show` holds that flag on for the one update.
+//
+// The gauge's update has one caller, the life part's own update (0x1ADDAE0), which the creature's main update runs.
+// That update first steps the creature's cold, shock and damage mitigation, and last runs itself for a life part
+// linked to this one. The Switch 2 Edition inlines the gauge's update into it, so there the gauge is updated
+// through the life part's update with the rest held still for the call (DESIGN.md, "Several builds of the game").
 #include "actors.h"
 #include "families.h"
 #include "game.h"
@@ -43,11 +48,49 @@ bool short_list(uint64_t life, uint64_t field, uint64_t stride) {
 }
 
 bool finite(float value) { return value == value && value - value == 0; }
+
+// The life part's own update can stand in for the gauge's on this build.
+bool through_update() {
+    namespace l = t::life_component;
+    return t::bound(t::fn::life_update) && t::present(l::linked) && t::present(l::mitigation) && t::present(l::frozen) &&
+        t::present(l::cold_clock) && t::present(l::cold_limit) && t::present(l::shocked);
+}
+
+// What the life part's update acts on besides the gauge, as it was before the call.
+struct Rest { uint8_t frozen, shocked, mitigation; uint64_t linked; float clock, limit; };
+bool read_rest(uint64_t life, Rest& rest) {
+    namespace l = t::life_component;
+    return read(life + l::frozen, rest.frozen) && read(life + l::shocked, rest.shocked) && read(life + l::mitigation, rest.mitigation) &&
+        read(life + l::linked, rest.linked) && read(life + l::cold_clock, rest.clock) && read(life + l::cold_limit, rest.limit);
+}
+
+// One update of the life part with only its gauge moving. Frozen, shocked and mitigation read as off, so their
+// steps are passed over, and the link reads as none. The cold keeps its amount, which the gauge shows: its fade is
+// given no limit for the call, so the update only moves the cold's clock on, and the clock is put back. The life
+// part is an object of the engine, which frees none inside a frame, so it is written after the call even when the
+// update took its creature away.
+void update_gauge_only(uint64_t life, float seconds, const Rest& rest) {
+    namespace l = t::life_component;
+    if (rest.frozen) write(life + l::frozen, uint8_t(0));
+    if (rest.shocked) write(life + l::shocked, uint8_t(0));
+    if (rest.mitigation) write(life + l::mitigation, uint8_t(0));
+    if (rest.linked) write(life + l::linked, uint64_t(0));
+    if (rest.limit != 0) write(life + l::cold_limit, 0.0f);
+    t::fn::life_update(reinterpret_cast<void*>(life), seconds);
+    if (rest.frozen) write(life + l::frozen, rest.frozen);
+    if (rest.shocked) write(life + l::shocked, rest.shocked);
+    if (rest.mitigation) write(life + l::mitigation, rest.mitigation);
+    if (rest.linked) write(life + l::linked, rest.linked);
+    if (rest.limit != 0) write(life + l::cold_limit, rest.limit);
+    write(life + l::cold_clock, rest.clock);
+}
 } // namespace
 
 TSUCHI_Result refresh_gauge(uint64_t actor, float seconds, bool show) {
     namespace l = t::life_component;
     if (family_absent(t::family::life_gauge)) return TSUCHI_UNSUPPORTED; // a build without the fields above
+    const bool own = t::bound(t::fn::life_refresh_gauge);
+    if (!own && !through_update()) return TSUCHI_UNSUPPORTED;            // or with no update to run
     if (!finite(seconds) || seconds < 0 || seconds > 1) return TSUCHI_INVALID;
     if (!game_framework()) return TSUCHI_NOT_READY;
     if (!is_creature(actor)) return TSUCHI_UNSUPPORTED;
@@ -71,14 +114,16 @@ TSUCHI_Result refresh_gauge(uint64_t actor, float seconds, bool show) {
         if (!own_part(actor, field)) return TSUCHI_NOT_READY;
     // A collection of targets calls each entry's own functions from the update, which nothing here can check.
     if (read_or<uint32_t>(actor + t::game_actor::state_flags) & t::constant::state_target_collection) return TSUCHI_UNSUPPORTED;
-    if (!t::bound(t::fn::life_refresh_gauge)) return TSUCHI_NOT_READY;
+    Rest rest{};
+    if (!own && !read_rest(life, rest)) return TSUCHI_NOT_READY;
     const uint64_t handle = to_handle(actor);
     if (!handle) return TSUCHI_NOT_FOUND;
     // The creature's StickComponent, checked above as its own; its flag is put back after the update.
     const uint64_t stick = show && health < read_or<float>(life + l::max) ? read_or<uint64_t>(actor + t::gauge_actor::part_2) : 0;
     uint8_t clung = 0;
     const bool held_on = stick && read(stick + t::gauge_stick::clung, clung) && !clung && write(stick + t::gauge_stick::clung, uint8_t(1));
-    t::fn::life_refresh_gauge(reinterpret_cast<void*>(life), seconds);
+    if (own) t::fn::life_refresh_gauge(reinterpret_cast<void*>(life), seconds);
+    else update_gauge_only(life, seconds, rest);
     // Making or removing the gauge's widget can call back into the game, which may take the creature away.
     const bool kept = from_handle(handle) == actor && life_component(actor) == life;
     if (held_on && kept && read_or<uint64_t>(actor + t::gauge_actor::part_2) == stick) write(stick + t::gauge_stick::clung, uint8_t(0));

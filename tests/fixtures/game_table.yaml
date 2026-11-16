@@ -847,7 +847,7 @@ structs:
     fields: {child: 0x8, name: 0x10, stopped: 0x20, status: 0x24, pending: 0x28}
   game_instance:
     fields: {scene_manager: 0x18, pause_manager: 0x20, config_save: 0x28, story_save: 0x30, controllers: 0x38, fade: 0x40, saves: 0x28,
-             academy_save: absent}
+             academy_save: absent, title_extra: 0x40}
   config_save:
     fields: {play_mode: 0x4, slot: 0x8, difficulty: 0x10, difficulty_count: 0x18, difficulty_set: 0x20, difficulty_set_count: 0x28}
   story_save:
@@ -1067,7 +1067,8 @@ structs:
     fields: {classify_child: 0x9E4, messages: 0x48, actions: 0x50}
   life_component:
     fields: {max: 0x40, current: 0x48, extra: 0x44, max_extra: 0x4C, actor: 0x50, gauge_enabled: 0x58, gauge_views: 0x5C,
-             gauge_list_1: 0x70, gauge_list_2: 0x80, gauge_list_3: 0x90, gauge_full: 0xA0}
+             gauge_list_1: 0x70, gauge_list_2: 0x80, gauge_list_3: 0x90, gauge_full: 0xA0,
+             linked: 0x68, mitigation: 0x59, frozen: 0x5A, cold_clock: 0xA4, cold_limit: 0xA8, shocked: 0x5B}
   gauge_actor:                      # past the end of the made-up game's 0x110-byte actors: a creature needs room
     fields: {part_1: 0x110, part_2: 0x118}
   gauge_stick:
@@ -1605,6 +1606,7 @@ functions:
   kill_record_destroy: {address: 0x2B00, returns: void, args: [pointer]}
   set_life: {address: 0x2E00, returns: void, args: [pointer, bool, u64, f32]}
   life_refresh_gauge: {address: 0x4D80, returns: void, args: [pointer, f32]}
+  life_update: {address: 0x4DC0, returns: void, args: [pointer, f32]}
   pause_change: {address: 0x2F40, returns: void, args: [pointer, u32, bool]}
   start_whistle: {address: 0x2140, returns: void, args: [pointer, bool]}
   end_whistle: {address: 0x2180, returns: void, args: [pointer]}

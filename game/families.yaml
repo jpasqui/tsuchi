@@ -35,6 +35,15 @@ optional:
   - structs.dialog_widget.kind
   - structs.ui_manager.open_dialog
   - structs.game_actor.physics_place # send_to_work then aims every target at its root
+  - structs.game_instance.title_extra # ui_title.cpp asks t::present: without it the hidden entry's index is the field's own number
+  - functions.life_refresh_gauge     # life_gauge.cpp asks t::bound: a build that inlines it is served through life_update,
+  - functions.life_update            # and a build with neither has no combat.refresh_gauge
+  - structs.life_component.linked
+  - structs.life_component.mitigation
+  - structs.life_component.frozen
+  - structs.life_component.cold_clock
+  - structs.life_component.cold_limit
+  - structs.life_component.shocked
   - functions.world_follow_request_move  # the self-check build's world-follow check then fails as unavailable at its start
   - structs.world_follow_ai.fsm
   - structs.world_follow_mover.root
