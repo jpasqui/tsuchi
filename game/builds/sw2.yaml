@@ -311,7 +311,7 @@ structs:
   dialog_result: {size: absent, fields: {self: absent, header: absent, message: absent, dialog_kind: absent, as_flow: absent}}
   title_presenter: {fields: {cursor: 0x80, view: 0x88, input: 0xA8, state: 0xB0}}
   title_view: {fields: {description: 0x570, buttons: 0x578, count: 0x580, room: 0x584, hidden_select: 0x5EB, hide: 0x5EC, hidden: 0x5F0, hidden_other: 0x5F4}}
-  title_button: {fields: {id: 0x300, label: absent, mark: absent}}
+  title_button: {fields: {id: 0x300, label: 0x528, mark: 0x540}}
   title_input: {fields: {data: 0xC8, count: 0xD0, capacity: 0xD4}}
   title_handler: {fields: {key: 0x0, instance: 0x8, kind: 0x10, presenter_index: 0x18, presenter_serial: 0x1C, function: 0x20, zero: 0x28}}
   academy_schedule:
@@ -861,6 +861,7 @@ structs:
       fade: 1128
       saves: 496
       academy_save: 552
+      title_extra: 1800
   config_save:
     fields:
       play_mode: 128
@@ -1378,6 +1379,12 @@ structs:
       gauge_list_2: 648
       gauge_list_3: 664
       gauge_full: 1340
+      linked: 712
+      mitigation: 928
+      frozen: 1024
+      cold_clock: 1044
+      cold_limit: 1048
+      shocked: 1088
   gauge_actor:
     fields:
       part_1: 928
@@ -2047,6 +2054,7 @@ functions:
   return_to_title: 4187328
   set_life: 14096384
   life_refresh_gauge: absent
+  life_update: 1960208
   damage_message: 7310976
   knock_message: 11146336
   post_message: 5833888

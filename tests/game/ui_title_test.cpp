@@ -12,10 +12,12 @@
 #include "frame.h"
 #include "mods.h"
 #include "objects.h"
+#include "shared.h"
 #include "ui_rich_text.h"
 #include "tsuchi/input.h"
 #include <cassert>
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -29,7 +31,7 @@ bool hosted_screen = false;                      // a screen is open in the host
 const UiRenderer* title_renderer = nullptr;
 int stock_confirms = 0, stock_backs = 0, stock_ways = 0, options_confirms = 0, options_ways = 0;
 std::vector<std::string> chosen;
-uint64_t root_class, button_class, slot_class, box_class, input_class;
+uint64_t root_class, button_class, slot_class, box_class, input_class, title_class;
 using Tick = void (*)(void*, float);
 Tick title_tick = nullptr, options_tick = nullptr;
 using Update = void (*)(void*, float);
@@ -38,6 +40,18 @@ Update flow_update = nullptr;
 bool stock_confirm(void*) { ++stock_confirms; return true; }
 bool stock_back(void*) { ++stock_backs; return true; }
 bool stock_direction(void*, int32_t) { ++stock_ways; return true; }
+bool other_key(void*) { return true; }   // a key of the game's own that no mod entry touches
+// The engine's text for a string, and a text block taking one: what was last made, and each text put on a widget.
+std::u16string made_text;
+std::vector<std::pair<uint64_t, std::u16string>> texts;
+game::EngineText text_from_string(const void* string) {
+    const auto* bytes = static_cast<const uint8_t*>(string);
+    uint64_t data = 0; int32_t count = 0;
+    std::memcpy(&data, bytes + t::array::data, 8), std::memcpy(&count, bytes + t::array::count, 4);
+    made_text.assign(reinterpret_cast<const char16_t*>(data), size_t(count > 0 ? count - 1 : 0));
+    return {};
+}
+void rich_text_set(void* block, void*) { texts.push_back({reinterpret_cast<uint64_t>(block), made_text}); }
 bool options_confirm(void*) { ++options_confirms; return true; }
 bool options_direction(void*, bool) { ++options_ways; return true; }
 bool options_gate(void*) { return true; }
@@ -131,7 +145,7 @@ ButtonList list_of(uint64_t widget, uint64_t buttons, uint64_t count, uint64_t r
 void on_chosen(void*, const TSUCHI_UiEntryChosen* event) { chosen.push_back(event->entry); }
 
 void title_menu() {
-    const uint64_t view_class = class_named(u"TitleView");
+    const uint64_t view_class = title_class = class_named(u"TitleView");
     const uint64_t presenter = fake::object(u"Presenter", class_named(u"TitlePresenter"), 0x200), widget = fake::object(u"Title", view_class, 0x800);
     std::vector<uint64_t> instances;
     const uint64_t input = input_map(input_class, {{uint32_t(t::constant::title_confirm_key), {t::data::title_input_delegate_table, reinterpret_cast<uint64_t>(&stock_confirm)}},
@@ -229,6 +243,112 @@ void title_menu() {
     assert(direction(reinterpret_cast<void*>(presenter), 1) && stock_ways == ways_before + 1);
     ui_title_cover(nullptr);
     tsuchi::cancel(mod, subscription);
+    mod_stop(mod);
+    frame();
+}
+
+// A menu whose last entry the game hides. On a build whose menu lists one more entry of the game's own while a byte
+// of the game instance is set, the game adds that byte to the hidden entry's number wherever it uses it.
+void title_extra_entry() {
+    const uint64_t slot = fake::main_image() + t::data::game_instance, before = fake::get<uint64_t>(slot);
+    const uint64_t instance = fake::memory(0x100);
+    fake::put(slot, instance);
+    for (int extra = 0; extra < 2; ++extra) {
+        fake::put<uint8_t>(instance + t::game_instance::title_extra, uint8_t(extra));
+        const uint64_t presenter = fake::object(u"Presenter", class_named(u"TitlePresenter"), 0x200), widget = fake::object(u"Title", title_class, 0x800);
+        std::vector<uint64_t> instances;
+        // That build's presenter also has two more keys in its input map, six entries where the others have four.
+        std::vector<std::pair<uint32_t, std::pair<uint64_t, uint64_t>>> keys{
+            {uint32_t(t::constant::title_confirm_key), {t::data::title_input_delegate_table, reinterpret_cast<uint64_t>(&stock_confirm)}},
+            {uint32_t(t::constant::title_back_key), {t::data::title_input_delegate_table, reinterpret_cast<uint64_t>(&stock_back)}},
+            {0, {t::data::title_direction_delegate_table, reinterpret_cast<uint64_t>(&stock_direction)}},
+            {1, {t::data::title_direction_delegate_table, reinterpret_cast<uint64_t>(&stock_direction)}}};
+        if (extra) keys.push_back({7, {t::data::title_input_delegate_table, reinterpret_cast<uint64_t>(&other_key)}}), keys.push_back({6, {t::data::title_input_delegate_table, reinterpret_cast<uint64_t>(&other_key)}});
+        const uint64_t input = input_map(input_class, keys, instances);
+        fake::put(presenter + t::title_presenter::view, widget);
+        fake::put(presenter + t::title_presenter::input, input);
+        fake::put<int32_t>(presenter + t::title_presenter::state, int32_t(t::constant::title_menu_state));
+        box_in(widget);
+        // Four entries the game shows and one it hides, last. With the byte set the list holds one more.
+        const int stock = 5 + extra;
+        const uint64_t buttons = fake::memory(8 * 8);
+        std::vector<uint64_t> made;
+        for (int i = 0; i < stock; ++i) { made.push_back(fake::object(u"Stock", button_class, 0x600)); fake::put(buttons + 8 * i, made.back()); }
+        const uint64_t hidden = made.back();
+        fake::put(widget + t::title_view::buttons, buttons);
+        fake::put<int32_t>(widget + t::title_view::count, stock);
+        fake::put<int32_t>(widget + t::title_view::room, 8);
+        fake::put<uint8_t>(widget + t::title_view::hide, 1);
+        fake::put<uint8_t>(widget + t::title_view::hidden_select, 0);
+        fake::put<int32_t>(widget + t::title_view::hidden, 4);   // the game's own number, without the byte
+        fake::put<int32_t>(widget + t::title_view::hidden_other, -1);
+        TSUCHI_Mod* mod = mod_create(extra ? "extra.mod" : "hidden.mod");
+        auto& backend = ui_screen_backend();
+        assert(backend.hold_menu_entry(mod, TSUCHI_MENU_TITLE, "entry", "Entry", "") == TSUCHI_OK);
+        title_tick(reinterpret_cast<void*>(presenter), 0.f);
+        // The mod's entry is in front of the hidden one, which stays last, and the game's number still names it.
+        ButtonList list = list_of(widget, t::title_view::buttons, t::title_view::count, t::title_view::room);
+        assert(list.count == stock + 1 && fake::get<uint64_t>(list.data + 8 * stock) == hidden);
+        const uint64_t ours = fake::get<uint64_t>(list.data + 8 * (stock - 1));
+        for (uint64_t button : made) assert(button != ours);
+        assert(fake::get<int32_t>(widget + t::title_view::hidden) == 5);
+        assert(handler_function(instances[0]) != reinterpret_cast<uint64_t>(&stock_confirm) && handler_function(instances[2]) != reinterpret_cast<uint64_t>(&stock_direction));
+        for (size_t i = 4; i < instances.size(); ++i) assert(handler_function(instances[i]) == reinterpret_cast<uint64_t>(&other_key));
+        // The game builds its list again and writes its own number: the entry goes back in front of the hidden one.
+        for (int i = 0; i < stock; ++i) fake::put(buttons + 8 * i, made[size_t(i)]);
+        fake::put<int32_t>(widget + t::title_view::count, stock);
+        fake::put<int32_t>(widget + t::title_view::hidden, 4);
+        title_tick(reinterpret_cast<void*>(presenter), 0.f);
+        list = list_of(widget, t::title_view::buttons, t::title_view::count, t::title_view::room);
+        assert(list.count == stock + 1 && fake::get<uint64_t>(list.data + 8 * stock) == hidden && fake::get<uint64_t>(list.data + 8 * (stock - 1)) == ours);
+        assert(fake::get<int32_t>(widget + t::title_view::hidden) == 5);
+        mod_stop(mod);
+        frame();
+    }
+    fake::put(slot, before);
+}
+
+// The line under the menu shows the description of the mod entry the cursor is on, and follows the cursor from one
+// mod entry straight to the next, where the game itself writes an empty line.
+void title_descriptions() {
+    const uint64_t presenter = fake::object(u"Presenter", class_named(u"TitlePresenter"), 0x200), widget = fake::object(u"Title", title_class, 0x800);
+    std::vector<uint64_t> instances;
+    const uint64_t input = input_map(input_class, {{uint32_t(t::constant::title_confirm_key), {t::data::title_input_delegate_table, reinterpret_cast<uint64_t>(&stock_confirm)}},
+                                                   {uint32_t(t::constant::title_back_key), {t::data::title_input_delegate_table, reinterpret_cast<uint64_t>(&stock_back)}},
+                                                   {0, {t::data::title_direction_delegate_table, reinterpret_cast<uint64_t>(&stock_direction)}},
+                                                   {1, {t::data::title_direction_delegate_table, reinterpret_cast<uint64_t>(&stock_direction)}}}, instances);
+    fake::put(presenter + t::title_presenter::view, widget);
+    fake::put(presenter + t::title_presenter::input, input);
+    fake::put<int32_t>(presenter + t::title_presenter::state, int32_t(t::constant::title_menu_state));
+    box_in(widget);
+    const uint64_t buttons = fake::memory(8 * 8), line = fake::object(u"Description", class_named(u"RichText"), 0x100);
+    for (int i = 0; i < 2; ++i) fake::put(buttons + 8 * i, fake::object(u"Stock", button_class, 0x600));
+    fake::put(widget + t::title_view::buttons, buttons);
+    fake::put<int32_t>(widget + t::title_view::count, 2);
+    fake::put<int32_t>(widget + t::title_view::room, 8);
+    fake::put<int32_t>(widget + t::title_view::hidden, -1);
+    fake::put<int32_t>(widget + t::title_view::hidden_other, -1);
+    fake::put(widget + t::title_view::description, line);
+    TSUCHI_Mod* mod = mod_create("lines.mod");
+    auto& backend = ui_screen_backend();
+    assert(backend.hold_menu_entry(mod, TSUCHI_MENU_TITLE, "first", "First", "The first one") == TSUCHI_OK);
+    assert(backend.hold_menu_entry(mod, TSUCHI_MENU_TITLE, "second", "Second", "The second one") == TSUCHI_OK);
+    const auto shown = [&] { std::vector<std::u16string> out; for (auto& put : texts) if (put.first == line) out.push_back(put.second); return out; };
+    texts.clear();
+    title_tick(reinterpret_cast<void*>(presenter), 0.f);   // both entries go in: stock, stock, first, second
+    assert(fake::get<int32_t>(widget + t::title_view::count) == 4 && shown().empty());
+    fake::put<int32_t>(presenter + t::title_presenter::cursor, 2);
+    title_tick(reinterpret_cast<void*>(presenter), 0.f);
+    title_tick(reinterpret_cast<void*>(presenter), 0.f);   // written once while the cursor stays
+    assert(shown() == std::vector<std::u16string>{u"The first one"});
+    fake::put<int32_t>(presenter + t::title_presenter::cursor, 3);
+    title_tick(reinterpret_cast<void*>(presenter), 0.f);
+    assert((shown() == std::vector<std::u16string>{u"The first one", u"The second one"}));
+    fake::put<int32_t>(presenter + t::title_presenter::cursor, 0);   // an entry of the game's own: the line is the game's
+    title_tick(reinterpret_cast<void*>(presenter), 0.f);
+    fake::put<int32_t>(presenter + t::title_presenter::cursor, 3);
+    title_tick(reinterpret_cast<void*>(presenter), 0.f);
+    assert(shown().size() == 3 && shown().back() == u"The second one");
     mod_stop(mod);
     frame();
 }
@@ -371,11 +491,14 @@ int main() {
     t::fn::ui_create_widget = create_widget; t::fn::ui_add_child = add_child; t::fn::ui_vertical_slot_sync = slot_sync;
     t::fn::title_list_grow = list_grow; t::fn::options_list_grow = list_grow; t::fn::ui_remove_child_at = remove_child_at;
     t::fn::options_button_highlight = highlight;
+    t::fn::text_from_string = text_from_string; t::fn::rich_text_set = rich_text_set;
     TSUCHI_Mod* framework = mod_create("tsuchi.self");
     ui_title_start(framework);
     player_choice_start(framework);
     assert(title_tick && options_tick && flow_update);
     title_menu();
+    title_extra_entry();
+    title_descriptions();
     options_menu();
     player_choice();
     keyboard();

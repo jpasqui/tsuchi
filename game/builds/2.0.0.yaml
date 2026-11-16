@@ -861,6 +861,7 @@ structs:
       fade: 1128
       saves: 496
       academy_save: absent
+      title_extra: absent
   config_save:
     fields:
       play_mode: 128
@@ -1378,6 +1379,12 @@ structs:
       gauge_list_2: 648
       gauge_list_3: 664
       gauge_full: 1340
+      linked: 712
+      mitigation: 928
+      frozen: 1024
+      cold_clock: 1044
+      cold_limit: 1048
+      shocked: 1088
   gauge_actor:
     fields:
       part_1: 928
@@ -2047,6 +2054,7 @@ functions:
   return_to_title: 32373712
   set_life: 28363104
   life_refresh_gauge: 28333840
+  life_update: 28329040
   damage_message: 28786928
   knock_message: 28787808
   post_message: 29050512

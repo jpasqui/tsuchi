@@ -960,7 +960,8 @@ structs:
     fields: {scene_manager: 0x1B0, config_save: 0x1F0, story_save: 0x1F8, controllers: 0x2E8, pause_manager: 0x538,
              fade: 0x450,                # the fade manager that outlasts a level: its fade to black is the loading screen
              saves: 0x1F0,               # CarrotSaveGames: one object pointer for each of the save_kinds, config first
-             academy_save: absent}       # Switch 2 Edition: pointer to the Dandori Academy's save (CarrotSaveGames.DDK)
+             academy_save: absent,       # Switch 2 Edition: pointer to the Dandori Academy's save (CarrotSaveGames.DDK)
+             title_extra: absent}        # Switch 2 Edition: u8, 1 while the title menu lists one more entry of the game's own; the game adds it to title_view's hidden and hidden_other
   config_save:
     fields: {play_mode: 0x80, slot: 0x98, difficulty: 0x2D8, difficulty_count: 0x2E0, difficulty_set: 0x2E8, difficulty_set_count: 0x2F0}  # see the play_mode_ constants; one byte for each slot in the two difficulty arrays
   story_save:
@@ -1274,7 +1275,15 @@ structs:
              gauge_list_1: 0x248,     # three lists the gauge's update walks: pointers in the first, bytes in the others
              gauge_list_2: 0x288,
              gauge_list_3: 0x298,
-             gauge_full: 0x53C}       # the full health the gauge measures against; the last field the update reads
+             gauge_full: 0x53C,       # the full health the gauge measures against; the last field the update reads
+             # What the life part's own update (life_update) acts on besides the gauge. A build that inlines the gauge's
+             # update is served through that update, with these held still for the call.
+             linked: 0x2C8,           # another life part, when set: the update ends by running itself for that part
+             mitigation: 0x3A0,       # u8, the first byte of DamageMitigation: set, the update steps the mitigation
+             frozen: 0x400,           # u8 in FreezeCondition: set while the creature is frozen, and the update counts the time
+             cold_clock: 0x414,       # f32: seconds since the creature's cold last grew, counted while it has any
+             cold_limit: 0x418,       # f32: above 0, the cold is dropped once cold_clock passes it
+             shocked: 0x440}          # u8 in ThunderStopCondition: set while the creature is shocked still
   gauge_actor:                      # what of a creature the life gauge's update (0x1ADEDA0) reads besides its root and physics parts
     fields: {part_1: 0x3A0, part_2: 0x4B0}  # two more of its own parts, when set; part_2 is its StickComponent
   gauge_stick:                      # the creature's StickComponent (gauge_actor part_2), as the gauge's update reads it
@@ -1822,6 +1831,9 @@ functions:
   # the part that keeps life, jump the gauge to it, who did it (an object's number and serial), the new life
   set_life: {address: 0x1AE5FC0, returns: void, args: [pointer, bool, u64, f32]}
   life_refresh_gauge: {address: 0x1ADEDA0, returns: void, args: [pointer, f32]}     # (life, seconds): only the gauge's update, which the creature's own update calls
+  # (life, seconds): the life part's own update and life_refresh_gauge's only caller. It steps the creature's cold,
+  # shock and damage mitigation, runs the gauge's update, then runs itself for a linked life part.
+  life_update: {address: 0x1ADDAE0, returns: void, args: [pointer, f32]}
   damage_message: {address: 0x1B4B370, returns: void, args: [pointer, pointer]}          # makes one in the memory given: (memory, attacker or null)
   knock_message: {address: 0x1B4B6E0, returns: void, args: [pointer, pointer]}           # the same for a knock
   post_message: {address: 0x1B8B8D0, returns: bool, args: [pointer, pointer]}            # (actor, message): the actor's queue takes it, or it is freed

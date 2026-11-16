@@ -3165,6 +3165,17 @@ void game_refresh_gauge(void* life, float seconds) {
     gauge_calls.push_back({reinterpret_cast<uint64_t>(life), seconds, gauge_stick ? fake::get<uint8_t>(gauge_stick + t::gauge_stick::clung) : uint8_t(0)});
     if (gauge_takes_away) fake::destroy(gauge_takes_away), gauge_takes_away = 0;
 }
+// The life part's own update on a build that holds the gauge's update inside it. It notes what it would act on
+// besides the gauge, and moves the cold's clock on as the game does while the creature has any cold.
+struct UpdateCall { uint64_t life; float seconds; uint8_t frozen, shocked, mitigation, clung; uint64_t linked; float limit; };
+std::vector<UpdateCall> update_calls;
+void game_life_update(void* at, float seconds) {
+    namespace l = t::life_component;
+    const uint64_t life = reinterpret_cast<uint64_t>(at);
+    update_calls.push_back({life, seconds, fake::get<uint8_t>(life + l::frozen), fake::get<uint8_t>(life + l::shocked), fake::get<uint8_t>(life + l::mitigation),
+        gauge_stick ? fake::get<uint8_t>(gauge_stick + t::gauge_stick::clung) : uint8_t(0), fake::get<uint64_t>(life + l::linked), fake::get<float>(life + l::cold_limit)});
+    fake::put(life + l::cold_clock, fake::get<float>(life + l::cold_clock) + seconds);
+}
 
 // A creature whose own update is held gets one update of its gauge, after its parts are checked as the update reads them.
 void gauges(const TSUCHI_CombatService& fight) {
@@ -3241,10 +3252,31 @@ void gauges(const TSUCHI_CombatService& fight) {
     CHECK(fight.refresh_gauge(mod, handle(beast), 0.1f, false) == TSUCHI_NOT_READY);
     fake::put(beast + t::game_actor::life, life);
     CHECK(gauge_calls.size() == 5);
-    // Without the game's update; and a creature that the update itself takes away.
-    t::fn::life_refresh_gauge = nullptr;
-    CHECK(fight.refresh_gauge(mod, handle(beast), 0.1f, false) == TSUCHI_NOT_READY);
-    t::fn::life_refresh_gauge = game_refresh_gauge;
+    // A build with neither update has no such call.
+    t::fn::life_refresh_gauge = nullptr, t::fn::life_update = nullptr;
+    CHECK(fight.refresh_gauge(mod, handle(beast), 0.1f, false) == TSUCHI_UNSUPPORTED);
+    // A build that inlines the gauge's update: the life part's own update runs with its other steps held still.
+    // Frozen, shocked and mitigation read as off for the call, the linked part as none, and the cold's fade as
+    // without a limit. Afterwards each is as it was, and the cold's clock has not moved.
+    t::fn::life_update = game_life_update;
+    const uint64_t other_life = fake::object(u"OtherLife", life_class, 0xB0);
+    fake::put<uint8_t>(life + l::frozen, 1), fake::put<uint8_t>(life + l::shocked, 1), fake::put<uint8_t>(life + l::mitigation, 1);
+    fake::put(life + l::linked, other_life), fake::put(life + l::cold_clock, 2.0f), fake::put(life + l::cold_limit, 5.0f);
+    CHECK(fight.refresh_gauge(mod, handle(beast), 0.25f, false) == TSUCHI_OK && update_calls.size() == 1 && gauge_calls.size() == 5);
+    CHECK(update_calls[0].life == life && update_calls[0].seconds == 0.25f && !update_calls[0].frozen && !update_calls[0].shocked &&
+        !update_calls[0].mitigation && !update_calls[0].linked && update_calls[0].limit == 0);
+    CHECK(fake::get<uint8_t>(life + l::frozen) == 1 && fake::get<uint8_t>(life + l::shocked) == 1 && fake::get<uint8_t>(life + l::mitigation) == 1 &&
+        fake::get<uint64_t>(life + l::linked) == other_life && fake::get<float>(life + l::cold_clock) == 2.0f && fake::get<float>(life + l::cold_limit) == 5.0f);
+    // With nothing to hold still only the clock is written, and `show` holds the cling flag on as on any build.
+    fake::put<uint8_t>(life + l::frozen, 0), fake::put<uint8_t>(life + l::shocked, 0), fake::put<uint8_t>(life + l::mitigation, 0);
+    fake::put<uint64_t>(life + l::linked, 0), fake::put(life + l::cold_limit, 0.0f);
+    const uint64_t cling = component(0, 0, 0, 0);
+    fake::put(cling + t::scene_component::owner, beast), fake::put(beast + t::gauge_actor::part_2, cling), gauge_stick = cling;
+    CHECK(fight.refresh_gauge(mod, handle(beast), 0.5f, true) == TSUCHI_OK && update_calls.size() == 2 && update_calls[1].clung == 1 &&
+        fake::get<uint8_t>(cling + t::gauge_stick::clung) == 0 && fake::get<float>(life + l::cold_clock) == 2.0f);
+    fake::put<uint64_t>(beast + t::gauge_actor::part_2, 0), gauge_stick = 0;
+    // The gauge's own update again; and a creature that the update itself takes away.
+    t::fn::life_update = nullptr, t::fn::life_refresh_gauge = game_refresh_gauge;
     const TSUCHI_Actor doomed_handle = handle(beast);
     gauge_takes_away = beast;
     CHECK(fight.refresh_gauge(mod, doomed_handle, 0.1f, false) == TSUCHI_NOT_FOUND && gauge_calls.size() == 6 && !gauge_takes_away);
