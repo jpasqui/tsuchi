@@ -31,6 +31,7 @@ optional:
   - structs.dialog_widget.kind
   - structs.ui_manager.open_dialog
   - structs.game_actor.physics_place # send_to_work then aims every target at its root
+  - structs.game_instance.title_extra # ui_title.cpp asks t::present: without it the hidden entry's index is the field's own number
   - functions.world_follow_request_move  # the self-check build's world-follow check then fails as unavailable at its start
   - structs.world_follow_ai.fsm
   - structs.world_follow_mover.root

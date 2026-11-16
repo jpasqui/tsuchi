@@ -42,7 +42,8 @@ List<Entry> entries;
 List<Chosen> chosen;
 uint64_t presenter = 0, view = 0;    // handles of the title presenter and widget the entries are in
 uint64_t hidden_buttons[2]{};       // stock identities survive the game's resetting its menu indices
-bool patched = false, described = false, listed = false;
+bool patched = false, listed = false;
+uint64_t described = 0;             // the entry whose description the line under the menu shows, by its button's handle
 List<TSUCHI_Mod*> lockers;
 bool dimmed = false;
 uint64_t button_class = 0;
@@ -152,18 +153,34 @@ bool buttons_of(uint64_t widget, Buttons& out) {
         game::writable(reinterpret_cast<uint64_t>(out.data), uint64_t(out.room) * 8);
 }
 
+// The Switch 2 Edition's menu lists one more entry of the game's own while a byte of the game instance is set, and
+// the game adds that byte to hidden and hidden_other wherever it uses them (DESIGN.md, "Several builds of the
+// game"). So a hidden entry's place in the list is its field plus this; a build without the byte adds nothing.
+int32_t extra_entries() {
+    if (!t::present(t::game_instance::title_extra)) return 0;
+    const uint64_t instance = game::global<uint64_t>(t::data::game_instance);
+    return instance ? int32_t(game::read_or<uint8_t>(instance + t::game_instance::title_extra)) : 0;
+}
+// The place in the list of the entry a hidden field names, or -1.
+int32_t hidden_place(uint64_t widget, uint64_t field) {
+    const int32_t index = game::read_or<int32_t>(widget + field, -1);
+    return index < 0 ? -1 : index + extra_entries();
+}
+
 void repair_hidden_indices(uint64_t widget) {
     Buttons list{};
     if (!buttons_of(widget, list)) return;
     const uint64_t fields[] = {t::title_view::hidden, t::title_view::hidden_other};
+    const int32_t extra = extra_entries();
     for (uint32_t k = 0; k < 2; ++k) {
         const uint64_t stock = live(hidden_buttons[k]);
-        for (int32_t i = 0; stock && i < list.count; ++i)
-            if (list.data[i] == stock) { game::write<int32_t>(widget + fields[k], i); break; }
+        for (int32_t i = extra; stock && i < list.count; ++i)
+            if (list.data[i] == stock) { game::write<int32_t>(widget + fields[k], i - extra); break; }
     }
 }
 
-// The presenter's handler for a key, when its map is the stock one of four entries.
+// The presenter's handler for a key, when its map is a short one of the game's own: four entries on the Switch
+// builds, six on the Switch 2 Edition. A handler is known by its key, its kind and its delegate table.
 uint64_t handler(uint64_t object, uint32_t key) {
     const uint64_t input = child(object, t::title_presenter::input);
     const uint64_t data = input ? game::read_or<uint64_t>(input + t::title_input::data) : 0;
@@ -185,7 +202,7 @@ uint64_t handler(uint64_t object, uint32_t key) {
         }
     }
     if (!input || !game::is_a(input, input_class)) return 0;
-    if (!data || count != 4 || room < count || room > 16 || !game::readable(data, uint64_t(count) * 32)) return 0;
+    if (!data || count < 4 || count > 16 || room < count || room > 64 || !game::readable(data, uint64_t(count) * 32)) return 0;
     for (int32_t i = 0; i < count; ++i) {
         const uint64_t cell = data + uint64_t(i) * 32;
         if (game::read_or<uint32_t>(cell + t::title_handler::key) != key) continue;
@@ -215,8 +232,9 @@ bool patch(uint64_t object, bool ours) {
     // Up and Down: the other entries of the map, whose handler instances hold the direction handler.
     const uint64_t input = child(object, t::title_presenter::input);
     const uint64_t data = input ? game::read_or<uint64_t>(input + t::title_input::data) : 0;
+    const int32_t count = input ? game::read_or<int32_t>(input + t::title_input::count, 0) : 0;   // checked by handler()
     const uint64_t stock_way = reinterpret_cast<uint64_t>(t::fn::title_direction), our_way = reinterpret_cast<uint64_t>(&direction);
-    for (int32_t i = 0; data && i < 4; ++i) {
+    for (int32_t i = 0; data && i < count; ++i) {
         const uint64_t instance = game::read_or<uint64_t>(data + uint64_t(i) * 32 + t::title_handler::instance);
         if (!instance || !game::writable(instance, 48) || game::read_or<uint64_t>(instance) != game::main_base() + t::data::title_direction_delegate_table) continue;
         const uint64_t now = game::read_or<uint64_t>(instance + t::title_handler::function);
@@ -300,16 +318,15 @@ void order(uint64_t object, uint64_t widget, uint64_t button) {
     if (!buttons_of(widget, list) || !(game::read_or<uint8_t>(widget + t::title_view::hide) & 1)) return;
     int32_t ours = -1;
     for (int32_t i = 0; i < list.count; ++i) if (list.data[i] == button) ours = i;
-    const uint64_t hidden_at = widget + (game::read_or<uint8_t>(widget + t::title_view::hidden_select) ? t::title_view::hidden_other : t::title_view::hidden);
-    const int32_t hidden = game::read_or<int32_t>(hidden_at, -1);
+    const int32_t hidden = hidden_place(widget, game::read_or<uint8_t>(widget + t::title_view::hidden_select) ? t::title_view::hidden_other : t::title_view::hidden);
     if (ours < 0 || hidden < 2 || hidden >= list.count || hidden > ours) return;
+    // Both hidden entries' places, before the list changes.
+    const uint64_t fields[2] = {t::title_view::hidden, t::title_view::hidden_other};
+    const int32_t places[2] = {hidden_place(widget, fields[0]), hidden_place(widget, fields[1])};
     for (int32_t i = ours; i > hidden; --i) list.data[i] = list.data[i - 1];
     list.data[hidden] = button;
-    const uint64_t fields[2] = {t::title_view::hidden, t::title_view::hidden_other};
-    for (uint64_t field : fields) {
-        const int32_t index = game::read_or<int32_t>(widget + field, -1);
-        if (index >= hidden && index < ours) game::write<int32_t>(widget + field, index + 1);
-    }
+    for (uint32_t k = 0; k < 2; ++k)
+        if (places[k] >= hidden && places[k] < ours) game::write<int32_t>(widget + fields[k], game::read_or<int32_t>(widget + fields[k]) + 1);
     const int32_t cursor = game::read_or<int32_t>(object + t::title_presenter::cursor, -1);
     if (cursor >= hidden && cursor < ours) game::write<int32_t>(object + t::title_presenter::cursor, cursor + 1);
     else if (cursor == ours) game::write<int32_t>(object + t::title_presenter::cursor, hidden);
@@ -342,7 +359,7 @@ bool insert(uint64_t object, uint64_t widget, Entry& entry) {
     if (!buttons_of(widget, list) || list.count >= 8) return insert_failed("the button list is not the stock one");
     const uint64_t hidden_fields[] = {t::title_view::hidden, t::title_view::hidden_other};
     for (uint32_t i = 0; i < 2; ++i) if (!hidden_buttons[i]) {
-        const int32_t at = game::read_or<int32_t>(widget + hidden_fields[i], -1);
+        const int32_t at = hidden_place(widget, hidden_fields[i]);
         if (at >= 0 && at < list.count && !entry_of(list.data[at])) hidden_buttons[i] = game::to_handle(list.data[at]);
     }
     uint64_t box = game::member_object(widget, t::name::title_buttons_child);
@@ -385,7 +402,7 @@ bool insert(uint64_t object, uint64_t widget, Entry& entry) {
 void forget_menu() {
     for (uint32_t i = 0; i < entries.count; ++i) { entries[i].button = 0; entries[i].tried = false; }
     retired.count = 0;
-    presenter = view = 0; patched = described = listed = dimmed = false;
+    presenter = view = 0; patched = listed = dimmed = false; described = 0;
     hidden_buttons[0] = hidden_buttons[1] = 0;
 }
 
@@ -428,8 +445,11 @@ void tick(void* pointer, float seconds) {
                 if (entries[i].changed && live(entries[i].button)) { label(child(live(entries[i].button), t::title_button::label), entries[i].label); entries[i].changed = false; }
             const int32_t cursor = game::read_or<int32_t>(object + t::title_presenter::cursor, -1);
             const Entry* on = buttons_of(widget, list) && cursor >= 0 && cursor < list.count ? entry_of(list.data[cursor]) : nullptr;
-            if (on && !described && state == int32_t(t::constant::title_menu_state)) described = label(child(widget, t::title_view::description), on->description);
-            if (!on) described = false;
+            // The game writes the line for its own entries at each move of the cursor, and an empty one for an entry
+            // of ours. So the line is written again when the cursor goes from one mod entry to another.
+            if (on && described != on->button && state == int32_t(t::constant::title_menu_state) &&
+                label(child(widget, t::title_view::description), on->description)) described = on->button;
+            if (!on) described = 0;
         }
     }
     next_tick(pointer, seconds);
@@ -482,7 +502,7 @@ TSUCHI_Result hold_entry(TSUCHI_Mod* mod, TSUCHI_Menu menu, const char* id, cons
     for (uint32_t i = 0; i < entries.count; ++i)
         if (entries[i].mod == mod && !strcmp(entries[i].id, id)) {
             copy(entries[i].label, kLabelBytes, text); copy(entries[i].description, kDescriptionBytes, description);
-            entries[i].changed = true; described = false; return TSUCHI_OK;
+            entries[i].changed = true; described = 0; return TSUCHI_OK;
         }
     if (entries.count >= kEntries || !entries.reserve(entries.count + 1)) return TSUCHI_CAPACITY;
     Entry entry{mod, {}, {}, {}, 0, false, false};

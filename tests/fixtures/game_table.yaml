@@ -812,7 +812,7 @@ structs:
     fields: {child: 0x8, name: 0x10, stopped: 0x20, status: 0x24, pending: 0x28}
   game_instance:
     fields: {scene_manager: 0x18, pause_manager: 0x20, config_save: 0x28, story_save: 0x30, controllers: 0x38, saves: 0x28,
-             academy_save: absent}
+             academy_save: absent, title_extra: 0x40}
   config_save:
     fields: {play_mode: 0x4, slot: 0x8}
   story_save:

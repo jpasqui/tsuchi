@@ -846,6 +846,7 @@ structs:
       pause_manager: 1360
       saves: 496
       academy_save: absent
+      title_extra: absent
   config_save:
     fields:
       play_mode: 128

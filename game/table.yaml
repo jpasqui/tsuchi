@@ -940,7 +940,8 @@ structs:
   game_instance:
     fields: {scene_manager: 0x1B0, config_save: 0x1F0, story_save: 0x1F8, controllers: 0x2E8, pause_manager: 0x538,
              saves: 0x1F0,               # CarrotSaveGames: one object pointer for each of the save_kinds, config first
-             academy_save: absent}       # Switch 2 Edition: pointer to the Dandori Academy's save (CarrotSaveGames.DDK)
+             academy_save: absent,       # Switch 2 Edition: pointer to the Dandori Academy's save (CarrotSaveGames.DDK)
+             title_extra: absent}        # Switch 2 Edition: u8, 1 while the title menu lists one more entry of the game's own; the game adds it to title_view's hidden and hidden_other
   config_save:
     fields: {play_mode: 0x80, slot: 0x98}         # see the play_mode_ constants
   story_save:
