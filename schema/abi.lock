@@ -43,6 +43,7 @@
   "ui",
   "world",
   "packages",
+  "voice",
   "character"
  ],
  "tables": {
@@ -612,6 +613,15 @@
    "remove",
    "on_progress",
    "on_finished"
+  ],
+  "voice": [
+   "start_capture",
+   "stop_capture",
+   "read_packet",
+   "level",
+   "play_packet",
+   "set_volume",
+   "stop_stream"
   ],
   "character": [
    "hold_input",

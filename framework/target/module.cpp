@@ -266,6 +266,7 @@ extern "C" void tsuchi_initialize() {
     tables_start();
     text_start();
     hud_start();
+    if (serves(t::family::voice)) voice_start();
     audio_start();
     world_start();
     anim_start();
