@@ -1274,8 +1274,8 @@ structs:
              actors: 0x4C8,           # an array of the actors it made
              flags: 0x4D8}            # see generator_added
   engine_transform:                 # a turn as x, y, z, w, a place, and a scale, each of floats, as the engine keeps one
-    size: 0x30
-    fields: {rotation: 0x0, translation: 0x10, scale: 0x20}
+    size: 0x30                      # the scale follows the place with no gap: a generator of scale 0.3 reads 0.3 at 0x1C, 0x20, 0x24
+    fields: {rotation: 0x0, translation: 0x10, scale: 0x1C}
   ai_values:                        # what an AI part writes its values into and reads them from: two arrays of bytes
     size: 0x20
     fields: {set: 0x0,                # what the level's maker set for it

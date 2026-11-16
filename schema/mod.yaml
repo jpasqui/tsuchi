@@ -80,6 +80,15 @@ functions:
     returns: {type: u32, doc: The version.}
     completes: version
 
+  - name: game_build
+    in_hooks: true
+    doc: |
+      The build of the game that is running, by the name a manifest's `game` list
+      uses, like `1.1.1`, `2.0.0`, `sw2` or `sw2-demo`. Use it to pick offsets your
+      mod keeps for each build.
+    returns: {type: text, doc: "The build's name."}
+    users: [population-cap, remote-inspector]
+
   - name: restart
     doc: |
       Stops a mod and starts it again with the files it has now, so that an edited

@@ -37,6 +37,14 @@ assert(call_game(4n,5n) === 9n && call_game(6n,7n,true) === 13n && records.lengt
 frame(); assert(records.length === 2 && records[0].args[0] === 4n && records[0].result === 9n && records[1].thread === 'other');
 for (let i=0;i<260;i++) call_game(BigInt(i),1n);
 frame(); assert(records.length === 258 && records[2].dropped === 4); remove(h);
+// Plain code checks and patches go to the same backend as a compiled mod's.
+assert(hook.check_code(0x900n, new Uint8Array([0xe8,0x97,0x9f,0x1a])) === true);
+let refused = null; try { hook.patch_instruction(0x900n, 0x1a9f97e8, 0xd503201f); } catch (e) { refused = e.name; }
+assert(refused === 'not_ready');
+for (const [code, t] of [['not_found', {slot:'no_such_slot', signature:'u64(u64)'}], ['invalid', {slot:'engine_tick', entry_at:0x10n, signature:'u64(u64)'}]]) {
+    let name = null; try { hook.wrap(t, () => 0n); } catch (e) { name = e.name; }
+    assert(name === code);
+}
 let replacement;
 h = hook.watch(target, () => {hook.remove(h); replacement = hook.wrap(target, () => 77n);});
 call_game(1n,2n); frame(); assert(call_game(1n,2n) === 77n); remove(replacement);

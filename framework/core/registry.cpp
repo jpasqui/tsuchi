@@ -225,6 +225,13 @@ bool mod_usable(const TSUCHI_Mod* mod) {
     return false;
 }
 
+bool mod_usable_in_hooks(const TSUCHI_Mod* mod) {
+    if (!mod_running(mod)) return false;
+    if (on_game_thread()) return true;
+    __atomic_fetch_add(&refused_off_thread, 1, __ATOMIC_RELAXED);
+    return false;
+}
+
 uint32_t mod_rank(const TSUCHI_Mod* mod) { return mod && mod->magic == kMagic ? mod->rank : 0; }
 
 const char* mod_id(const TSUCHI_Mod* mod) { return mod && mod->magic == kMagic ? mod->id : ""; }

@@ -52,7 +52,6 @@ functions:
     users: [groink, treasure-demo]
 
   - name: field_at
-    only: native
     doc: |
       The name of one field of a row or of a struct inside of it, by its index. To
       list every field, count up from `0` until the call fails.

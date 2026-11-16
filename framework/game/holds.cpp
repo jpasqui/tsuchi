@@ -99,10 +99,20 @@ void* HoldTable::kept_at(uint32_t index) const {
 }
 
 bool HoldTable::operation_allowed(void* context) {
-    if (!on_game_thread()) return false;
     const auto& call = *static_cast<Operation*>(context);
+    return call.table->allowed_at(call, call.table->index_after(call.at, call.hold.id));
+}
+
+// The slot a hold was at, when the table still has it there; otherwise where it is now, or -1. A keep or an apply
+// may end holds and take new ones, so the slot is checked, and the table searched only when it moved.
+int32_t HoldTable::index_after(uint32_t was, uint64_t id) const {
+    if (was < count_ && hold_at(was).id == id) return int32_t(was);
+    return index_of(id);
+}
+
+bool HoldTable::allowed_at(const Operation& call, int32_t index) const {
+    if (!on_game_thread()) return false;
     if (call.ended || (call.hold.mod && !mod_usable(call.hold.mod))) return false;
-    const int32_t index = call.table->index_of(call.hold.id);
     if (index < 0) return false;
     const Hold& now = call.table->hold_at(uint32_t(index));
     if (now.mod != call.hold.mod || now.object != call.hold.object || now.what != call.hold.what ||
@@ -128,10 +138,11 @@ void hold_apply_checkpoint(const Hold& hold) {
 
 TSUCHI_Result HoldTable::apply(uint32_t index, const void* wanted, bool fresh) {
     Operation call{this, hold_at(index), {}, active_};
+    call.at = index;
     memcpy(call.kept, kept_at(index), stride_ - sizeof(Hold));
     active_ = &call;
     const TSUCHI_Result applied = apply_ ? apply_(call.hold, call.kept, wanted, fresh) : TSUCHI_OK;
-    int32_t now = index_of(call.hold.id);
+    int32_t now = index_after(index, call.hold.id);
     if (!call.ended && !operation_allowed(&call) && now >= 0) {
         end(uint32_t(now), call.hold.mod && !mod_running(call.hold.mod) ? HoldEnd::stopped : HoldEnd::destroyed);
         now = -1;
@@ -252,11 +263,12 @@ void HoldTable::step() {
         }
         if (!keep_) continue;
         Operation call{this, hold_at(i), {}, active_};
+        call.at = i;
         memcpy(call.kept, kept_at(i), stride_ - sizeof(Hold));
         active_ = &call;
         const bool kept = keep_(call.hold, call.kept);
-        int32_t now = index_of(id);
-        if (!call.ended && now >= 0 && (!kept || !operation_allowed(&call))) {
+        int32_t now = index_after(i, id);
+        if (!call.ended && now >= 0 && (!kept || !allowed_at(call, now))) {
             end(uint32_t(now), kept ? HoldEnd::destroyed : HoldEnd::lost);
             now = -1;
         }

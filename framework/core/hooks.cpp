@@ -1,4 +1,5 @@
 #include "hooks.h"
+#include "dynamic_hooks.h"
 
 #include <string.h>
 
@@ -333,6 +334,18 @@ HookInvocation hook_invocation(uint64_t id) {
 
 // ---- The public service -----------------------------------------------------
 
+TSUCHI_Result hook_slot_entry(const char* name, uint64_t& entry, uint64_t& stock) {
+    if (!name) return TSUCHI_INVALID;
+    for (unsigned i = 0; i < t::slot_count; ++i)
+        if (!strcmp(t::slots[i].name, name)) {
+            if (!t::present(t::slots[i].slot.table)) return TSUCHI_UNSUPPORTED;
+            entry = t::slots[i].slot.table + t::slots[i].slot.offset;
+            stock = t::slots[i].slot.stock;
+            return TSUCHI_OK;
+        }
+    return TSUCHI_NOT_FOUND;
+}
+
 namespace {
 
 TSUCHI_Result service_wrap_address(TSUCHI_Mod* mod, uint64_t address, uint64_t stock, void* function, TSUCHI_Hook* out) {
@@ -342,10 +355,9 @@ TSUCHI_Result service_wrap_address(TSUCHI_Mod* mod, uint64_t address, uint64_t s
 }
 
 TSUCHI_Result service_wrap(TSUCHI_Mod* mod, const char* slot, void* function, TSUCHI_Hook* out) {
-    for (unsigned i = 0; i < t::slot_count; ++i)
-        if (!strcmp(t::slots[i].name, slot))
-            return t::present(t::slots[i].slot.table) ? service_wrap_address(mod, t::slots[i].slot.table + t::slots[i].slot.offset, t::slots[i].slot.stock, function, out) : TSUCHI_UNSUPPORTED;
-    return TSUCHI_NOT_FOUND;
+    uint64_t entry = 0, stock = 0;
+    const TSUCHI_Result found = hook_slot_entry(slot, entry, stock);
+    return found == TSUCHI_OK ? service_wrap_address(mod, entry, stock, function, out) : found;
 }
 
 TSUCHI_Result (*dynamic_remove_function)(TSUCHI_Mod*, uint64_t) = nullptr;

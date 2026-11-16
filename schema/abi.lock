@@ -323,7 +323,8 @@
    "restart",
    "state",
    "problem",
-   "on_restarted"
+   "on_restarted",
+   "game_build"
   ],
   "net": [
    "status",

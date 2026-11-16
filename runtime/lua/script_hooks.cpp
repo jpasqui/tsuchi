@@ -235,14 +235,23 @@ int install(lua_State* L, DynamicKind kind) {
         luaL_checktype(L, 1, LUA_TTABLE);
         field(L, 1, "function_at"); const bool function = !lua_isnil(L, -1); lua_pop(L, 1);
         field(L, 1, "entry_at"); const bool entry = !lua_isnil(L, -1); lua_pop(L, 1);
-        if (function == entry) return fail(L, TSUCHI_INVALID);
-        target.site = function ? DynamicSite::function : DynamicSite::entry;
-        field(L, 1, function ? "function_at" : "entry_at"); target.offset = check_u64(L, -1); lua_pop(L, 1);
-        field(L, 1, function ? "expected" : "stock");
-        // `stock` may be left out when the function the entry holds isn't known.
-        if (!function && lua_isnil(L, -1)) target.check = 0;
-        else target.check = function ? uint64_t(check_integer(L, -1, 0, UINT32_MAX)) : check_u64(L, -1);
-        lua_pop(L, 1);
+        field(L, 1, "slot"); const bool slot = !lua_isnil(L, -1); lua_pop(L, 1);
+        if (int(function) + int(entry) + int(slot) != 1) return fail(L, TSUCHI_INVALID);
+        if (slot) {
+            // A name from the game table: the same entry on every build the table knows.
+            field(L, 1, "slot"); const char* name = luaL_checkstring(L, -1);
+            const TSUCHI_Result found = hook_slot_entry(name, target.offset, target.check); lua_pop(L, 1);
+            if (found != TSUCHI_OK) return fail(L, found);
+            target.site = DynamicSite::entry;
+        } else {
+            target.site = function ? DynamicSite::function : DynamicSite::entry;
+            field(L, 1, function ? "function_at" : "entry_at"); target.offset = check_u64(L, -1); lua_pop(L, 1);
+            field(L, 1, function ? "expected" : "stock");
+            // `stock` may be left out when the function the entry holds isn't known.
+            if (!function && lua_isnil(L, -1)) target.check = 0;
+            else target.check = function ? uint64_t(check_integer(L, -1, 0, UINT32_MAX)) : check_u64(L, -1);
+            lua_pop(L, 1);
+        }
         field(L, 1, "signature"); luaL_checktype(L, -1, LUA_TSTRING);
         size_t size = 0; const char* text = lua_tolstring(L, -1, &size);
         const TSUCHI_Result parsed = strlen(text) == size ? parse_signature(text, sig) : TSUCHI_INVALID; lua_pop(L, 1);
