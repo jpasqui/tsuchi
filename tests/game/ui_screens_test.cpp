@@ -211,10 +211,22 @@ void glyph_and_footer_tests() {
         "[PictureFont:IconData key=\"Y_Button\" scale=\"0.76\"/]",
         "[PictureFont:IconData key=\"L_Button\" scale=\"0.76\"/]",
         "[PictureFont:IconData key=\"R_Button\" scale=\"0.76\"/]",
-        "[PictureFont:IconData key=\"ZR_Button\" scale=\"0.76\"/]"
+        "[PictureFont:IconData key=\"ZR_Button\" scale=\"0.76\"/]",
+        "[PictureFont:IconData key=\"ZL_Button\" scale=\"0.76\"/]",
+        "[PictureFont:IconData key=\"Plus_Button\" scale=\"0.76\"/]",
+        "[PictureFont:IconData key=\"Minus_Button\" scale=\"0.76\"/]",
+        "[PictureFont:IconData key=\"Press_L_Stick\" scale=\"0.76\"/]",
+        "[PictureFont:IconData key=\"Press_R_Stick\" scale=\"0.76\"/]",
+        "[PictureFont:IconData key=\"Up_Button\" scale=\"0.76\"/]",
+        "[PictureFont:IconData key=\"Down_Button\" scale=\"0.76\"/]",
+        "[PictureFont:IconData key=\"Left_Button\" scale=\"0.76\"/]",
+        "[PictureFont:IconData key=\"Right_Button\" scale=\"0.76\"/]"
     };
     const TSUCHI_GlyphButton buttons[] = {TSUCHI_GLYPH_BUTTON_A, TSUCHI_GLYPH_BUTTON_B, TSUCHI_GLYPH_BUTTON_X,
-        TSUCHI_GLYPH_BUTTON_Y, TSUCHI_GLYPH_BUTTON_L, TSUCHI_GLYPH_BUTTON_R, TSUCHI_GLYPH_BUTTON_ZR};
+        TSUCHI_GLYPH_BUTTON_Y, TSUCHI_GLYPH_BUTTON_L, TSUCHI_GLYPH_BUTTON_R, TSUCHI_GLYPH_BUTTON_ZR,
+        TSUCHI_GLYPH_BUTTON_ZL, TSUCHI_GLYPH_BUTTON_PLUS, TSUCHI_GLYPH_BUTTON_MINUS,
+        TSUCHI_GLYPH_BUTTON_LEFT_STICK, TSUCHI_GLYPH_BUTTON_RIGHT_STICK, TSUCHI_GLYPH_BUTTON_UP,
+        TSUCHI_GLYPH_BUTTON_DOWN, TSUCHI_GLYPH_BUTTON_LEFT, TSUCHI_GLYPH_BUTTON_RIGHT};
     char buffer[641]; uint64_t needed = 0;
     for (size_t i = 0; i < sizeof buttons / sizeof *buttons; ++i) {
         std::memcpy(buffer, "untouched", sizeof "untouched");
@@ -247,6 +259,11 @@ void glyph_and_footer_tests() {
     assert(!std::strcmp(model->controls[0].label.get(), label.c_str()));
     assert(!std::strcmp(model->controls[1].labels.first(), label.c_str()));
     assert(!std::strcmp(model->controls[3].text.get(), message.c_str()));
+    assert(ui.set_text(owner, screen, "go", "A") == TSUCHI_OK);
+    assert(!std::strcmp(model->controls[0].text.get(), "A"));
+    assert(ui.set_text(other, screen, "go", "B") == TSUCHI_DENIED);
+    assert(ui.set_text(owner, screen, "go", "B") == TSUCHI_OK);
+    assert(!std::strcmp(model->controls[0].text.get(), "B"));
     const void* view = ui_active_view(); const unsigned before_opens = opens, before_closes = closes;
     const uint32_t selected = model->selected, initial_revision = model->revision;
     std::string footer = std::string(tokens[0]) + u8" Choisir " + tokens[1] + " Back";

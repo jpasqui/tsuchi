@@ -336,9 +336,12 @@ TSUCHI_Result set_integer(TSUCHI_Mod* mod, TSUCHI_Screen handle, const char* id,
 TSUCHI_Result set_text(TSUCHI_Mod* mod, TSUCHI_Screen handle, const char* id, const char* value) {
     UiScreen* screen = nullptr; const auto result = own_screen(mod, handle, screen);
     if (result != TSUCHI_OK) return result;
-    auto* control = find_control(screen, id, UiKind::text); if (!control) return TSUCHI_NOT_FOUND;
+    auto* control = find_control(screen, id, UiKind::text);
+    if (!control) control = find_control(screen, id, UiKind::button);
+    if (!control) return TSUCHI_NOT_FOUND;
     if (!glyph_text(value, true)) return TSUCHI_INVALID;
     if (!control->text.set(value)) return TSUCHI_NO_MEMORY;
+    if (control->kind == UiKind::button) screen->resettable = true;
     ++screen->revision; return TSUCHI_OK;
 }
 // The file form calls the same builders as the code form, then publishes the
@@ -398,7 +401,7 @@ TSUCHI_Result release_tab(TSUCHI_Mod* mod, TSUCHI_Screen handle) {
 ui::Backend backend{create, load, destroy, add_button, add_choice, add_integer, add_text, hold_open, release_open, is_open, choice, set_choice, integer, set_integer, text, set_text, hold_tab, release_tab,
     nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
     glyph, set_footer, nullptr, hold_open_over, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
-    nullptr, nullptr, nullptr};
+    nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
 } // namespace
 ui::Backend& ui_screen_backend() { return backend; }
 TSUCHI_Result ui_screen_add_number(TSUCHI_Mod* mod, TSUCHI_Screen screen,

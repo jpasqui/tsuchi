@@ -10,6 +10,9 @@
 # `optional` lists entries the code using them asks t::bound about and goes on without, so a build lacking one loses
 # only that one path and no family.
 optional:
+  - tables.character_remap_sites   # isolated action states check every extra read; older action calls keep their sites
+  - tables.character_remap_words
+  - tables.character_remap_registers
   - functions.actor_sleep_decision   # suspend.cpp asks t::bound: without it a held actor keeps the sleep it had
   - functions.pikmin_deco_stored
   - functions.pikmin_deco_field
@@ -124,7 +127,7 @@ families:
     files: [game/asset_bundles.cpp, game/assets_backend.cpp]
   audio:
     services: [audio]
-    files: [game/audio_backend.cpp, game/audio_parameters.cpp]
+    files: [game/audio_backend.cpp, game/audio_parameters.cpp, game/audio_bus_volume.cpp, game/audio_bus_binding.h]
   battle:
     services: [battle]
     files: [game/battle_backend.cpp]
@@ -182,6 +185,9 @@ families:
   input:
     services: [input]
     files: [game/input_backend.cpp]
+  icon_textures:
+    calls: [ui.hold_icon_texture, ui.release_icon_texture, ui.hold_control_hint, ui.release_control_hint, ui.refresh_control_hints]
+    files: [game/ui_icons.cpp, game/ui_control_hints.cpp]
   net:
     services: [net]
     files: [game/network_native.cpp, target/https_platform.cpp]

@@ -53,6 +53,7 @@ extern "C" unsigned long long tsuchi_libc_ticks(); // script_library.cpp
 #include "hud_prompts.h"
 #include "ui_widgets.h"
 #include "ui_textures.h"
+#include "ui_icons.h"
 #include "ui_settings.h"
 #include "ui_mod_list.h"
 #include "ui_mod_page.h"
@@ -350,7 +351,10 @@ extern "C" void tsuchi_initialize() {
         asm volatile("svc 0x0B" : "+r"(nanoseconds) : : "x1", "x2", "x3", "x4", "x5", "x6", "x7", "memory");
     });
 
-    if (serves(t::family::audio)) audio_parameters_start(self);
+    if (serves(t::family::audio)) {
+        audio_parameters_start(self);
+        audio_bus_volumes_start(self);
+    }
     if (serves(t::family::battle)) battle_start(self);
     if (serves(t::family::actor)) actor_events_start(self);
     if (serves(t::family::ground_contact)) ground_contact_start(self);
@@ -383,6 +387,7 @@ extern "C" void tsuchi_initialize() {
     if (serves(t::family::keyboard)) ui_keyboard_start();
     if (serves(t::family::player_choice)) player_choice_start(self);
     if (serves(t::family::textures)) ui_textures_start();
+    if (serves(t::family::icon_textures)) ui_icons_start(self);
     if (serves(t::family::ui) && ui_native_start(self)) {
         ui_settings_start(self);
         ui_mod_list_start(self);

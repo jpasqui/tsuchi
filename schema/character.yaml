@@ -279,3 +279,38 @@ functions:
       not_found: "The actor no longer exists or isn't a captain or a dog."
       unsupported: "The action doesn't belong to this kind of character."
     users: [online-coop, button-remap]
+
+  - name: hold_action_state
+    doc: |
+      Replaces just one action's input with a down or up state for a number of
+      world steps. Up suppresses the player's original input too. Down gives
+      one press, stays held, then releases when changed to up. Repeated down
+      updates do not add presses. Unlike hold_action, this does not inject the
+      action's shared logical input into other actions. Bite and jump keep
+      separate press ages. The game still decides whether an action can happen.
+      Renew the lease while remapping; it ends on expiry, release, character
+      teardown or mod stop, without a synthetic release or buffered press.
+    owns: true
+    params:
+      - {name: character, type: handle<actor>, doc: A captain or a dog.}
+      - {name: action, type: enum<Action>, doc: The action to replace.}
+      - {name: down, type: bool, doc: "True for down, false for up, suppressing stock input in both cases."}
+      - {name: steps, type: u32, doc: "The lease duration, from 1 to 600 world steps."}
+    fails:
+      not_found: The actor no longer exists or is not a captain or a dog.
+      invalid: The duration is outside 1 to 600.
+      unsupported: The action does not belong to this character.
+      busy: The action already has an action hold or binding, or another mod owns its state.
+      not_ready: The character controller or required native action hooks are unavailable.
+      no_memory: No record can be kept for this character.
+    users: [button-remap, mod-settings-screens]
+
+  - name: release_action_state
+    doc: Ends your isolated action-state lease and restores the action's normal input.
+    owns: true
+    params:
+      - {name: character, type: handle<actor>, doc: The captain or dog.}
+      - {name: action, type: enum<Action>, doc: The leased action.}
+    fails:
+      not_found: Your mod has no such action-state lease.
+    completes: hold_action_state

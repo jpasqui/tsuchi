@@ -136,6 +136,7 @@ void caption(const UiControl& control, char* out, size_t room) {
     auto put = [&](const char* part) { const size_t n = strlen(part); if (used + n < room) { memcpy(out + used, part, n + 1); used += n; } };
     if (control.kind == UiKind::text) { put(label); if (label[0] && control.text.get() && control.text.get()[0]) put("\n"); put(control.text.get() ? control.text.get() : ""); return; }
     put(label);
+    if (control.kind == UiKind::button && control.text.get() && control.text.get()[0]) { put(":  "); put(control.text.get()); }
     if (control.kind == UiKind::integer) {
         put(":  ");char number[32];char* at=number+sizeof number;*--at=0;
         uint64_t value=control.integer<0?uint64_t(-(control.integer+1))+1:uint64_t(control.integer);

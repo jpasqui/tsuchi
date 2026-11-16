@@ -183,7 +183,9 @@ static void frame() {
     step();
 }
 
-static uint64_t site_offset(unsigned site) { return uint64_t(t::tables::character_sites[site]); }
+static uint64_t site_offset(unsigned site) { return uint64_t(site < 23 ? t::tables::character_sites[site] : t::tables::character_remap_sites[site-23]); }
+static uint32_t site_word(unsigned site) { return uint32_t(site < 23 ? t::tables::character_site_words[site] : t::tables::character_remap_words[site-23]); }
+static uint32_t site_register(unsigned site) { return uint32_t(site < 23 ? t::tables::character_site_registers[site] : t::tables::character_remap_registers[site-23]); }
 // Runs a site's hook with these registers. Returns the registers after.
 struct Frame {
     uint64_t x[31] = {};
@@ -202,15 +204,15 @@ static bool reader_stub(void*, int32_t, void*, void*) { return false; }
 // the word's register.
 static Frame call_frame(unsigned site, uint64_t part, uint64_t controller, uint32_t input) {
     Frame frame;
-    const uint32_t reg = uint32_t(t::tables::character_site_registers[site]);
+    const uint32_t reg = site_register(site);
     if (reg < 31) frame.x[reg] = part;
     else if (reg > 31) frame.x[reg - 32] = controller;
     frame.x[0] = controller;
     frame.x[1] = input;
-    frame.x[uint32_t(t::tables::character_site_words[site]) >> 5 & 31] = reinterpret_cast<uint64_t>(&reader_stub);
+    frame.x[site_word(site) >> 5 & 31] = reinterpret_cast<uint64_t>(&reader_stub);
     return frame;
 }
-static uint64_t target_of(unsigned site, const Frame& frame) { return frame.x[uint32_t(t::tables::character_site_words[site]) >> 5 & 31]; }
+static uint64_t target_of(unsigned site, const Frame& frame) { return frame.x[site_word(site) >> 5 & 31]; }
 static bool call_answer(uint64_t target) { return reinterpret_cast<Pressed>(target)(nullptr, 0, nullptr, nullptr); }
 
 int main() {
@@ -260,7 +262,7 @@ int main() {
     // The log tells where the counters are, once.
     CHECK(notes.size() == 1 && notes[0].find("character: debug counters at 0x") == 0);
     const uint64_t counters = std::strtoull(notes[0].c_str() + std::strlen("character: debug counters at "), nullptr, 16);
-    CHECK(get<uint32_t>(counters) == 0x44524843 && get<uint32_t>(counters + 4) == 23 && get<uint32_t>(counters + 8) == 1);
+    CHECK(get<uint32_t>(counters) == 0x44524843 && get<uint32_t>(counters + 4) == 30 && get<uint32_t>(counters + 8) == 1);
     pressed_through_table = pressed_entry();
     frame();
     CHECK(held(captain_pad, 12) && pressed(captain_pad, 12));
@@ -723,6 +725,95 @@ int main() {
     CHECK(placed.size() <= sizeof t::tables::character_sites / sizeof t::tables::character_sites[0]);
     CHECK(wrapped.size() == 4);
 
+    // Isolated action states suppress stock input even while up, retain
+    // distinct press ages, and never inject the shared logical A/X inputs.
+    TSUCHI_Mod* isolated = mod_create("character.isolated");
+    CHECK(c.hold_action_state(isolated, stone, TSUCHI_ACTION_BITE, false, 2) == TSUCHI_NOT_FOUND);
+    CHECK(c.hold_action_state(isolated, cap, TSUCHI_ACTION_BITE, false, 2) == TSUCHI_UNSUPPORTED);
+    CHECK(c.hold_action_state(isolated, pup, TSUCHI_ACTION_BITE, false, 0) == TSUCHI_INVALID);
+    CHECK(c.hold_action_state(isolated, pup, TSUCHI_ACTION_BITE, false, 601) == TSUCHI_INVALID);
+    for (TSUCHI_Action action : {TSUCHI_ACTION_THROW_PIKMIN, TSUCHI_ACTION_BITE, TSUCHI_ACTION_INTERACT, TSUCHI_ACTION_JUMP, TSUCHI_ACTION_RUSH})
+        CHECK(c.hold_action_state(isolated, pup, action, false, 600) == TSUCHI_OK);
+    CHECK(c.hold_action_state(b, pup, TSUCHI_ACTION_BITE, true, 2) == TSUCHI_BUSY);
+    CHECK(c.hold_action(b, pup, TSUCHI_ACTION_BITE) == TSUCHI_BUSY);
+    CHECK(c.hold_binding(isolated, pup, TSUCHI_ACTION_BITE, TSUCHI_INPUT_NONE) == TSUCHI_BUSY);
+    dog_pad.pad_held = dog_pad.pad_pressed = (1u << 18) | (1u << 20);
+    frame();
+    for (unsigned site : {10u, 11u, 12u, 13u, 15u, 17u, 18u, 19u, 20u, 24u, 27u, 28u, 29u}) {
+        seen = at_site(site, call_frame(site, 0, dog_pad.at(), site >= 15 && site <= 19 ? 20 : 18));
+        CHECK(target_of(site, seen) != reinterpret_cast<uint64_t>(&reader_stub) && !call_answer(target_of(site, seen)));
+    }
+    dog_pad.pad_held = dog_pad.pad_pressed = 0;
+    CHECK(c.hold_action_state(isolated, pup, TSUCHI_ACTION_BITE, true, 600) == TSUCHI_OK);
+    frame();
+    CHECK(!held(dog_pad, 18) && !pressed(dog_pad, 18));
+    seen = at_site(13, call_frame(13, 0, dog_pad.at(), 18)); CHECK(call_answer(target_of(13, seen)));
+    for (unsigned site : {10u, 20u, 15u, 18u}) {
+        seen = at_site(site, call_frame(site, 0, dog_pad.at(), 18)); CHECK(!call_answer(target_of(site, seen)));
+    }
+    seen = at_site(14, age); CHECK(get<float>(seen.x[base] + offset) == 0);
+    const uint32_t jump_word = site_word(16); const unsigned jump_base = jump_word >> 5 & 31;
+    const uint64_t jump_offset = uint64_t(jump_word >> 10 & 0xFFF) * 4;
+    Frame jump_age; jump_age.x[site_register(16)-32] = dog_pad.at();
+    seen = at_site(16, jump_age); CHECK(get<float>(seen.x[jump_base]+jump_offset) > 1e20f);
+    CHECK(c.hold_action_state(isolated, pup, TSUCHI_ACTION_JUMP, true, 600) == TSUCHI_OK);
+    frame();
+    seen = at_site(15, call_frame(15, 0, dog_pad.at(), 20)); CHECK(call_answer(target_of(15, seen)));
+    seen = at_site(18, call_frame(18, 0, dog_pad.at(), 20)); CHECK(!call_answer(target_of(18, seen)));
+    seen = at_site(16, jump_age); CHECK(get<float>(seen.x[jump_base]+jump_offset) == 0);
+    seen = at_site(14, age); CHECK(get<float>(seen.x[base]+offset) > 0);
+    CHECK(c.hold_action_state(isolated, pup, TSUCHI_ACTION_JUMP, true, 600) == TSUCHI_OK);
+    frame(); seen = at_site(15, call_frame(15, 0, dog_pad.at(), 20)); CHECK(!call_answer(target_of(15, seen)));
+    lock_all = true;
+    seen = at_site(14, age); CHECK(get<float>(seen.x[base]+offset) > 1e20f); lock_all = false;
+    CHECK(c.hold_action_state(isolated, cap, TSUCHI_ACTION_THROW_PIKMIN, false, 600) == TSUCHI_OK);
+    frame();
+    result = {}; result.x[19] = steered_captain.at(); result.x[0] = 0x101;
+    seen = at_site(25, result); CHECK(seen.x[0] == 0x100); // alternate throw path suppressed too
+    seen = at_site(23, call_frame(23, 0, captain_pad.at(), 0)); CHECK(!call_answer(target_of(23, seen)));
+    CHECK(c.hold_action_state(isolated, cap, TSUCHI_ACTION_THROW_PIKMIN, true, 600) == TSUCHI_OK);
+    frame();
+    seen = at_site(23, call_frame(23, 0, captain_pad.at(), 0)); CHECK(call_answer(target_of(23, seen)));
+    CHECK(!held(captain_pad, 0));
+    CHECK(c.hold_action_state(isolated, cap, TSUCHI_ACTION_RIDE, false, 600) == TSUCHI_OK);
+    frame();seen = at_site(26, call_frame(26, 0, captain_pad.at(), 14));CHECK(!call_answer(target_of(26,seen)));
+    CHECK(c.hold_action_state(isolated, cap, TSUCHI_ACTION_RIDE, true, 600) == TSUCHI_OK);
+    CHECK(c.hold_action_state(isolated, pup, TSUCHI_ACTION_RUSH, true, 600) == TSUCHI_OK);
+    frame();seen = at_site(26, call_frame(26, 0, captain_pad.at(), 14));CHECK(call_answer(target_of(26,seen)));
+    seen = at_site(27, call_frame(27, 0, dog_pad.at(), 20));CHECK(call_answer(target_of(27,seen)));
+    frame();seen = at_site(27, call_frame(27, 0, dog_pad.at(), 20));CHECK(call_answer(target_of(27,seen)));
+    for (unsigned site : {28u,29u}) {
+        seen=at_site(site,call_frame(site,0,dog_pad.at(),20));CHECK(call_answer(target_of(site,seen)));
+    }
+    // A dismount press followed by its release cannot queue a second ride.
+    CHECK(c.hold_action_state(isolated, cap, TSUCHI_ACTION_RIDE, false, 600) == TSUCHI_OK);
+    frame();
+    for (unsigned i=0;i<20;++i) {
+        seen=at_site(8,call_frame(8,steered_captain.at(),captain_pad.at(),13));CHECK(!call_answer(target_of(8,seen)));
+        frame();
+    }
+    CHECK(c.release_action_state(isolated, cap, TSUCHI_ACTION_THROW_PIKMIN) == TSUCHI_OK);
+    seen = at_site(23, call_frame(23, 0, captain_pad.at(), 0)); CHECK(target_of(23, seen) == reinterpret_cast<uint64_t>(&reader_stub));
+    CHECK(c.release_action_state(isolated, cap, TSUCHI_ACTION_THROW_PIKMIN) == TSUCHI_NOT_FOUND);
+    CHECK(c.hold_action_state(isolated, cap, TSUCHI_ACTION_THROW_PIKMIN, true, 1) == TSUCHI_OK);
+    for (unsigned i=0;i<4;++i) frame();
+    seen = at_site(23, call_frame(23, 0, captain_pad.at(), 0)); CHECK(target_of(23, seen) == reinterpret_cast<uint64_t>(&reader_stub));
+    mod_stop(isolated); frame();
+    seen = at_site(14, age); CHECK(seen.x[base] == age.x[base]);
+    CHECK(!held(dog_pad, 18) && !held(dog_pad, 20));
+    TSUCHI_Mod* restored = mod_create("character.restored");
+    CHECK(c.hold_action(restored, cap, TSUCHI_ACTION_RIDE) == TSUCHI_OK);
+    frame();
+    seen=at_site(26,call_frame(26,0,captain_pad.at(),14));
+    CHECK(target_of(26,seen)==reinterpret_cast<uint64_t>(&reader_stub));
+    seen=at_site(7,call_frame(7,steered_captain.at(),captain_pad.at(),13));
+    CHECK(call_answer(target_of(7,seen)));
+    CHECK(c.release_action(restored, cap, TSUCHI_ACTION_RIDE) == TSUCHI_OK);
+    CHECK(c.hold_action_state(restored,cap,TSUCHI_ACTION_RIDE,false,600)==TSUCHI_OK);
+    frame();
+    seen=at_site(8,call_frame(8,steered_captain.at(),captain_pad.at(),13));
+    CHECK(!call_answer(target_of(8,seen))); // the new owner does not inherit the old release
+    CHECK(c.release_action_state(restored,cap,TSUCHI_ACTION_RIDE)==TSUCHI_OK);
     std::printf("character: %u checks passed\n", checks);
     return 0;
 }

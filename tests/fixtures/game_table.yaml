@@ -27,6 +27,9 @@ data:
   title_input_delegate_table: 0x9100
   title_direction_delegate_table: 0x9108
   academy_schedule: absent
+  wwise_index: 0x630
+  wwise_bus_callback_manager: 0x620
+  wwise_main_lock: 0x628
   wwise_audio_manager: 0x610
   wwise_parameter_manager: 0x618
   ui_select_sound: 0x600 # native common UI focus FName, initialized as Select
@@ -492,6 +495,9 @@ rows:
   area_messages: [Note_More, Note_Base, Note_Done]
 
 structs:
+  slate_brush:
+    size: 0x88
+    fields: {resource: 0x48, resource_handle: 0x70}
   options_button: {fields: {look: 0x4D8, look_bytes: 0x15}}
   options_presenter: {fields: {input: 0x78, view: 0x80}}
   options_view: {fields: {state: 0x4D8, buttons: 0x4F8, count: 0x500, room: 0x504, selected: 0x508}}
@@ -505,6 +511,20 @@ structs:
   title_button: {fields: {id: 0x300, label: 0x528, mark: 0x540}}
   title_input: {fields: {data: 0xC8, count: 0xD0, capacity: 0xD4}}
   title_handler: {fields: {key: 0, instance: 8, kind: 0x10, presenter_index: 24, presenter_serial: 28, function: 32, zero: 40}}
+  wwise_bus_node:
+    fields: {subscriber: 72}
+  wwise_bus_subscription:
+    fields: {curves: 96, count: 104}
+  wwise_bus_curve:
+    size: 40
+    fields: {id: 4, parameter: 8, points: 16, point_count: 24, scaling: 28}
+  wwise_bus_callbacks:
+    fields: {entries: 8, count: 0x18, mutex: 0x28}
+  wwise_bus_callback_entry:
+    size: 24
+    fields: {bus: 4, callback: 16}
+  wwise_volume_callback:
+    fields: {base_volume: 0x38}
   console_manager_table:
     fields: {find_variable: {at: 0x40, returns: pointer, args: [pointer, const_pointer, bool]}}
   console_variable_table:
@@ -1403,6 +1423,12 @@ functions:
   ui_set_render_opacity: {address: 0x9250, returns: void, args: [pointer, f32]}
   academy_open_periods: {address: absent, returns: engine_array, args: [const_pointer]}
   academy_period_start: {address: absent, returns: i64, args: [const_pointer, u32]}
+  wwise_get_bus: {address: 51200, returns: u64, args: [u64, u32, u32]}
+  wwise_release_bus: {address: 51208, returns: i32, args: [u64]}
+  wwise_bind_bus_curve: {address: 51216, returns: u32, args: [u64, u32, u32, u32, u32, u32, u32, pointer, u32, bool]}
+  wwise_unbind_bus_curve: {address: 51224, returns: void, args: [u64, u32, u32]}
+  wwise_bus_subscription: {address: 51232, returns: u64, args: [u64, u64, u32]}
+  wwise_register_bus_volume_callback: {address: 0xC018, returns: u32, args: [u32, pointer]}
   map_add_stream: {address: 0x3D30, args: [pointer, pointer]}
   map_remove_stream: {address: 0x3D40, returns: bool, args: [pointer, pointer]}
   map_duplicate_stream: {address: 0x3D50, returns: pointer, args: [const_pointer, pointer, u64, u32, pointer, i32, u32]}
@@ -1897,6 +1923,10 @@ tables:
   collision_record_flags: [0x4, 0x5, 0x9]
   ai_part_tables: [0x1B00, 0x1B40, 0x1B80]
   # The character service's sites: offsets, the words there, and the registers that name the character.
+  ui_hint_text_words: [0xD10543FF]
+  character_remap_sites: [0xE85C, 0xE860, 0xE864, 0xE868, 0xE86C, 0xE870, 0xE874]
+  character_remap_words: [0xD63F0100, 0xD63F0100, 0xA9427BFD, 0xD63F0100, 0xD63F0100, 0xD63F0100, 0xD63F0100]
+  character_remap_registers: [31, 31, 19, 31, 31, 31, 31]
   character_sites: [0xE800, 0xE804, 0xE808, 0xE80C, 0xE810, 0xE814, 0xE818, 0xE81C, 0xE820, 0xE824, 0xE828, 0xE82C, 0xE830, 0xE834, 0xE838, 0xE83C, 0xE840, 0xE844, 0xE848, 0xE84C, 0xE850, 0xE854, 0xE858]
   character_site_words: [0xD63F0100, 0xD63F0100, 0xD63F0100, 0xD61F0040, 0xD63F0100, 0x37000BA0, 0xD63F0100, 0xD63F0100,
                          0xD63F0100, 0xD63F0100, 0xD63F0100, 0xD61F0080, 0xD61F0040, 0xD63F0100, 0xBD412500, 0xD63F0100,

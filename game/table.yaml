@@ -40,6 +40,9 @@ data:
   dialog_result_header: 0x7F19FE8              # the 8 bytes that message carries, as the game makes it
   title_direction_delegate_table: 0x8AA75D8      # and of its Up and Down handler
   title_input_delegate_table: 0x8AA7648          # the function table of the title presenter's Confirm and Back handlers
+  wwise_index: 153997536
+  wwise_bus_callback_manager: 153997648
+  wwise_main_lock: 153997784
   wwise_audio_manager: 0x92DD0E8
   wwise_parameter_manager: 0x92DD120
   ui_select_sound: 0x9335ae0 # native common UI focus FName, initialized as Select
@@ -549,6 +552,20 @@ structs:
   # whose function sits at +32 and its presenter's weak index and serial at +24 and +28.
   title_input: {fields: {data: 0xC8, count: 0xD0, capacity: 0xD4}}
   title_handler: {fields: {key: 0, instance: 8, kind: 0x10, presenter_index: 24, presenter_serial: 28, function: 32, zero: 40}}
+  wwise_bus_node:
+    fields: {subscriber: 48}
+  wwise_bus_subscription:
+    fields: {curves: 80, count: 88}
+  wwise_bus_curve:
+    size: 32
+    fields: {id: 0, parameter: 4, points: 8, point_count: 16, scaling: 20}
+  wwise_bus_callbacks:
+    fields: {entries: 0, count: 8, mutex: 32}
+  wwise_bus_callback_entry:
+    size: 16
+    fields: {bus: 0, callback: 8}
+  wwise_volume_callback:
+    fields: {base_volume: 40}
   console_manager_table:
     fields: {find_variable: {at: 0xb0, returns: pointer, args: [pointer, const_pointer, bool]}}
   console_variable_table:
@@ -1316,6 +1333,9 @@ structs:
     fields: {process_event: {at: 0x228, args: [pointer, pointer, pointer]}}
   struct_vtable:
     fields: {initialize: {at: 0x2B8, args: [pointer, pointer, i32]}, destroy: {at: 0x2C0, args: [pointer, pointer, i32]}}
+  slate_brush:                      # reflected SlateBrush; native renderer caches a shared resource handle
+    size: 0x88
+    fields: {resource: 0x48, resource_handle: 0x70}
   allocator_vtable:
     fields: {malloc: {at: 0x18, returns: pointer, args: [pointer, u64, u32]}, free: {at: 0x38, args: [pointer, pointer]}}
   name_entry:
@@ -1544,6 +1564,12 @@ functions:
   presenter_begin: {address: 0x286E180, returns: void, args: [pointer, bool]}      # starts a presenter: the pause menu's finds its widget here
   game_menu_open_page: {address: 0x28CA540, returns: void, args: [pointer, pointer, u32]}  # (presenter, what to call once it closed, page): a page of the pause menu on its own
   ui_vertical_slot_sync: {address: 0x4C69000, returns: void, args: [pointer]}  # applies a VerticalBoxSlot's padding
+  wwise_get_bus: {address: 95216, returns: u64, args: [u64, u32, u32]}
+  wwise_release_bus: {address: 472896, returns: i32, args: [u64]}
+  wwise_bind_bus_curve: {address: 232384, returns: u32, args: [u64, u32, u32, u32, u32, u32, u32, pointer, u32, bool]}
+  wwise_unbind_bus_curve: {address: 232928, returns: void, args: [u64, u32, u32]}
+  wwise_bus_subscription: {address: 544896, returns: u64, args: [u64, u64, u32]}
+  wwise_register_bus_volume_callback: {address: 16336, returns: u32, args: [u32, pointer]}
   map_add_stream: {address: 0x05BAB910, args: [pointer, pointer]}
   map_remove_stream: {address: 0x05BABDB0, returns: bool, args: [pointer, pointer]}
   map_duplicate_stream: {address: 0x039BDA20, returns: pointer, args: [const_pointer, pointer, u64, u32, pointer, i32, u32]}
@@ -1925,6 +1951,7 @@ functions:
   squad_icon_count: {address: 0x25542E0, args: [pointer, i32]}
   squad_throw_trajectory: {address: 0x1728E90, returns: u32, args: [pointer]}
 tables:
+  ui_hint_text_words: [0xD10543FF] # native rich-text SetText entry
   actor_tables: [0x8884F20, 0x8885C88, 0x8886398, 0x8886AA8, 0x88871B8, 0x8887F20, 0x8889FB0, 0x888C6A8, 0x888D040,
                  0x8891F00, 0x8892628, 0x88933F8, 0x8893B20, 0x8894248, 0x8894970, 0x8895098, 0x88957C0, 0x8895EE8,
                  0x88965F8, 0x8896D20, 0x8897448, 0x8897B70, 0x8898280, 0x88989A8, 0x88990D0, 0x88997F8, 0x8899F20,
@@ -1967,6 +1994,12 @@ tables:
                          0xD63F0100, 0xD63F0100, 0xD63F0100, 0xD61F0080, 0xD61F0040, 0xD63F0100, 0xBD412500, 0xD63F0100,
                          0xBD414500, 0xD63F0100, 0xD63F0100, 0xD63F0100, 0xD63F0100, 0xB50037F4, 0xF9417D16]
   character_site_registers: [19, 19, 19, 31, 19, 19, 19, 23, 23, 23, 31, 31, 31, 31, 53, 31, 53, 31, 31, 31, 31, 19, 19]
+  # Isolated action states additionally cover both throw-release held reads
+  # and the alternate throw predicate's shared return, before its epilogue.
+  # Then dismount's input 14 and RushCharge's own held-20 maintenance read.
+  character_remap_sites: [0x15A0C20, 0x15A196C, 0x15A06F4, 0xE02F70, 0x13BB5D0, 0x13E839C, 0x13E969C]
+  character_remap_words: [0xD63F0100, 0xD63F0100, 0xA9427BFD, 0xD63F0100, 0xD63F0100, 0xD63F0100, 0xD63F0100]
+  character_remap_registers: [31, 31, 19, 31, 31, 31, 31]
 
 # One entry in each of a list of tables, with the functions the game puts there.
 slot_groups:

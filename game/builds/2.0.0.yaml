@@ -23,6 +23,9 @@ data:
   title_input_delegate_table: absent
   title_direction_delegate_table: absent
   academy_schedule: absent
+  wwise_index: 154517728
+  wwise_bus_callback_manager: 154517840
+  wwise_main_lock: 154517976
   wwise_audio_manager: 154517736
   wwise_parameter_manager: 154517792
   ui_select_sound: 154883344
@@ -302,6 +305,9 @@ constants:
   effect_spawn_blocked: 2097664
   ui_keyboard_characters: 31
 structs:
+  slate_brush:
+    size: 0x88
+    fields: {resource: 0x48, resource_handle: 0x70}
   options_button: {fields: {look: absent, look_bytes: absent}}
   options_presenter: {fields: {input: absent, view: absent}}
   game_menu_presenter: {fields: {view: absent}}
@@ -347,6 +353,20 @@ structs:
     fields:
       key: absent
       row: absent
+  wwise_bus_node:
+    fields: {subscriber: 48}
+  wwise_bus_subscription:
+    fields: {curves: 80, count: 88}
+  wwise_bus_curve:
+    size: 32
+    fields: {id: 0, parameter: 4, points: 8, point_count: 16, scaling: 20}
+  wwise_bus_callbacks:
+    fields: {entries: 0, count: 8, mutex: 32}
+  wwise_bus_callback_entry:
+    size: 16
+    fields: {bus: 0, callback: 8}
+  wwise_volume_callback:
+    fields: {base_volume: 40}
   console_manager_table:
     fields:
       find_variable: 176
@@ -1339,23 +1359,23 @@ structs:
       squad: 2328
   character_part:
     fields:
-      controller: absent
-      move: absent
+      controller: 1880
+      move: 1860
   game_controller:
     fields:
-      unpaused_frames: absent
-      lock_mask: absent
-      lock_timer: absent
-      press_ages: absent
-      press_age_count: absent
+      unpaused_frames: 128
+      lock_mask: 136
+      lock_timer: 144
+      press_ages: 152
+      press_age_count: 160
   press_age:
-    size: absent
+    size: 16
     fields:
-      seconds: absent
+      seconds: 4
   game_controller_table:
     fields:
-      locked: absent
-      pressed: absent
+      locked: 216
+      pressed: 96
   whistle_part:
     fields:
       radius: 564
@@ -1873,6 +1893,12 @@ functions:
   title_back: absent
   title_list_grow: absent
   ui_vertical_slot_sync: absent
+  wwise_get_bus: 95216
+  wwise_release_bus: 472896
+  wwise_bind_bus_curve: 232384
+  wwise_unbind_bus_curve: 232928
+  wwise_bus_subscription: 544896
+  wwise_register_bus_volume_callback: 16336
   map_add_stream: 96503216
   map_remove_stream: 96504400
   map_duplicate_stream: 60934416
@@ -2263,11 +2289,24 @@ slots:
     table: 143793272
     offset: 2592
     stock: 22796704
-  controller_held: absent
-  controller_pressed: absent
-  controller_released: absent
-  controller_update: absent
+  controller_held:
+    table: 144992496
+    offset: 56
+    stock: 34006352
+  controller_pressed:
+    table: 144992496
+    offset: 96
+    stock: 34011328
+  controller_released:
+    table: 144992496
+    offset: 104
+    stock: 34007824
+  controller_update:
+    table: 144992496
+    offset: 144
+    stock: 34004592
 tables:
+  ui_hint_text_words: [0xD10543FF] # native rich-text SetText entry
   actor_tables:
   - 143626016
   - 143629448
@@ -2383,77 +2422,101 @@ tables:
   - 146217888
   - 146297744
   character_sites:
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
+  - 22829328
+  - 22829416
+  - 14655212
+  - 22789584
+  - 14636988
+  - 22652744
+  - 22652772
+  - 14714176
+  - 14709892
+  - 14709916
+  - 20794248
+  - 21083016
+  - 21083152
+  - 20833048
+  - 20833060
+  - 20834760
+  - 20834772
+  - 20834892
+  - 20794836
+  - 20795552
+  - 20844420
+  - 22709696
+  - 22712984
   character_site_words:
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
+  - 3594453248
+  - 3594453248
+  - 3594453248
+  - 3592355904
+  - 3594453248
+  - 922749856
+  - 3594453248
+  - 3594453248
+  - 3594453248
+  - 3594453248
+  - 3594453248
+  - 3592355968
+  - 3592355904
+  - 3594453248
+  - 3175163136
+  - 3594453248
+  - 3175171328
+  - 3594453248
+  - 3594453248
+  - 3594453248
+  - 3594453248
+  - 3036681204
+  - 4181818646
+  character_remap_sites:
+  - 22791100
+  - 22791168
+  - 22789700
+  - 14698368
+  - 20789936
+  - 20974092
+  - 20978960
+  character_remap_words:
+  - 3594453248
+  - 3594453248
+  - 2839706621
+  - 3594453248
+  - 3594453248
+  - 3594453248
+  - 3594453248
+  character_remap_registers:
+  - 31
+  - 31
+  - 19
+  - 31
+  - 31
+  - 31
+  - 31
   character_site_registers:
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
-  - absent
+  - 19
+  - 19
+  - 19
+  - 31
+  - 19
+  - 19
+  - 19
+  - 23
+  - 23
+  - 23
+  - 31
+  - 31
+  - 31
+  - 31
+  - 53
+  - 31
+  - 53
+  - 31
+  - 31
+  - 31
+  - 31
+  - 19
+  - 19
 slot_groups:
   actor_register:
     offset: 1736

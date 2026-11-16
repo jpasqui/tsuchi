@@ -314,4 +314,9 @@ void audio_parameters_start(TSUCHI_Mod* self) {
     framework = self;
     if (!frames_ready) frames_ready = each_frame(step);
 }
+TSUCHI_Result audio_parameter_observers() { return observers(); }
+uint64_t audio_parameter_engine_epoch() {
+    Engine engine{};
+    return ready(engine) ? engine.epoch : 0;
+}
 }

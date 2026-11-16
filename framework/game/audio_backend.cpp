@@ -3,6 +3,7 @@
 #include "actors.h"
 #include "audio_service.h"
 #include "audio_parameters.h"
+#include "audio_bus_volume.h"
 #include "game.h"
 #include "objects.h"
 #include "reflect.h"
@@ -30,7 +31,8 @@ TSUCHI_Result play_on(TSUCHI_Actor actor, const char* key) {
     return t::fn::play_sound_on(reinterpret_cast<void*>(source), &name, &nowhere, true) ? TSUCHI_OK : TSUCHI_NOT_FOUND;
 }
 
-const audio::Backend service{play_on, audio_parameter, audio_hold_parameter, audio_release_parameter};
+const audio::Backend service{play_on, audio_parameter, audio_hold_parameter, audio_release_parameter,
+                             audio_hold_bus_volume, audio_release_bus_volume};
 
 } // namespace
 

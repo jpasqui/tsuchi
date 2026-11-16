@@ -42,6 +42,7 @@ constexpr uint32_t kActions = 10; // as the schema's Action enum
 constexpr uint32_t kRecords = 16;
 constexpr uint8_t kOwn = 0xFE;    // a binding: the action reads its own input
 constexpr uint8_t kNone = uint8_t(TSUCHI_INPUT_NONE);
+uint64_t step_number = 0;
 // How many controller updates an action's press or release waits for its site to read it. The game reads a site
 // only in some states and frames, and not always between two updates, so the press waits for the read. 30 updates
 // are half a second at 60 frames a second.
@@ -94,9 +95,19 @@ constexpr Site kSites[] = {
     {TSUCHI_ACTION_INTERACT, kDog, Form::call, 18, Read::pressed},            // 20
     {kActions, kBoth, Form::move, 0, Read::none},                             // 21
     {kActions, kBoth, Form::move, 0, Read::none},                             // 22
+    // Extra reads needed when stock A is reserved for interaction. Existing
+    // action APIs keep their original sites; isolated states also own these.
+    {TSUCHI_ACTION_THROW_PIKMIN, kCaptain, Form::call, 0, Read::held},       // 23 release while carrying
+    {TSUCHI_ACTION_THROW_PIKMIN, kDog, Form::call, 18, Read::held},          // 24 release while riding
+    {TSUCHI_ACTION_THROW_PIKMIN, kCaptain, Form::result, 0, Read::pressed},  // 25 alternate throw predicate
+    {TSUCHI_ACTION_RIDE, kCaptain, Form::call, 14, Read::pressed},          // 26 dismount while riding
+    {TSUCHI_ACTION_RUSH, kDog, Form::call, 20, Read::held},                 // 27 keep charging until release
+    {TSUCHI_ACTION_RUSH, kDog, Form::call, 20, Read::held},                 // 28 jump into charge
+    {TSUCHI_ACTION_RUSH, kDog, Form::call, 20, Read::held},                 // 29 alternate jump path
 };
 constexpr uint32_t kSiteCount = sizeof kSites / sizeof kSites[0];
-static_assert(kSiteCount == sizeof t::tables::character_sites / sizeof t::tables::character_sites[0], "one Site for each site of the table");
+constexpr uint32_t kOriginalSites = sizeof t::tables::character_sites / sizeof t::tables::character_sites[0];
+static_assert(kOriginalSites == 23 && kSiteCount == kOriginalSites + sizeof t::tables::character_remap_sites / sizeof t::tables::character_remap_sites[0], "one Site for each site of the tables");
 
 // The actions with a site that reads this way.
 uint32_t actions_reading(Read read) {
@@ -177,12 +188,15 @@ struct Record {
     uint64_t now, before;    // inputs as the controller reads them this frame and the frame before
     uint64_t used;           // pressed once and latched: the press's hold ends at the next step
     uint32_t act_held, act_pressing, act_now, act_before, act_used;
+    uint32_t driven, driven_down;
+    float driven_age[kActions];
     uint32_t press_pending, release_pending; // actions whose press, or release, a site has yet to read
     // Actions whose press a site read since the controller's last update: every read until the next update sees
     // it, as a button's press lasts its frame. The game asks more than once a frame (a whistle's press was read
     // three times in its frame; answered at the first read only, the whistle never started). A release is still
     // read once: the ride's two release reads are of two inputs, and one release is one ride.
     uint32_t press_now;
+    uint32_t release_skip;   // a driven ride already consumed this press to mount/dismount
     uint32_t act_quiet;      // actions whose hold ended with its mod or its character: no release is read
     uint8_t press_waited[kActions], release_waited[kActions];
     uint64_t act_inputs, act_inputs_before; // the inputs that the actions down this frame and the frame before read
@@ -254,6 +268,7 @@ struct Bind {
 struct Move {
     float direction[3];
 };
+struct ActionState { uint64_t until; bool down; };
 
 void sync(uint64_t handle);
 
@@ -288,17 +303,32 @@ void end_action(const Hold& hold, Press&, HoldEnd why) {
 }
 template <class T>
 void end_other(const Hold& hold, T&, HoldEnd) { sync(hold.object); }
+bool keep_state(const Hold&, ActionState& state) { return step_number < state.until; }
+void quiet_state(uint64_t actor, uint32_t action) {
+    if (Record* record = record_of(actor)) {
+        const uint32_t bit = 1u << action;
+        record->act_now &= ~bit; record->act_before &= ~bit;
+        record->press_pending &= ~bit; record->release_pending &= ~bit; record->press_now &= ~bit;
+        record->release_skip &= ~bit; record->act_quiet &= ~bit;
+        record->driven_age[action] = 1e30f;
+    }
+}
+void end_state(const Hold& hold, ActionState&, HoldEnd) {
+    quiet_state(hold.object, uint32_t(hold.what));
+    sync(hold.object);
+}
 
 Holds<Press, Press, take_as<Press>, keep_input, end_input> inputs{"character.input", HoldOn::actor, true};
 Holds<Press, Press, take_as<Press>, keep_action, end_action> actions{"character.action", HoldOn::actor, true};
 Holds<Bind, Bind, take_as<Bind>, nullptr, end_other<Bind>> bindings{"character.binding", HoldOn::actor, true};
 Holds<Move, Move, take_as<Move>, nullptr, end_other<Move>> moves{"character.move", HoldOn::actor, true};
+Holds<ActionState, ActionState, take_as<ActionState>, keep_state, end_state> action_states{"character.action_state", HoldOn::actor, true};
 
 // The record of a character, made again from its holds. A character with none has no record.
 void sync(uint64_t handle) {
     Record* record = record_of(handle);
     uint64_t held = 0, pressing = 0;
-    uint32_t act_held = 0, act_pressing = 0;
+    uint32_t act_held = 0, act_pressing = 0, driven = 0, driven_down = 0;
     uint8_t bound[kActions];
     memset(bound, kOwn, sizeof bound);
     bool moving = false, any = false;
@@ -331,10 +361,17 @@ void sync(uint64_t handle) {
         any = moving = true;
         memcpy(move, moves.kept_at(i).direction, sizeof move);
     }
+    for (uint32_t i = 0; i < action_states.count(); ++i) {
+        const Hold& hold = action_states.hold_at(i);
+        if (hold.object != handle) continue;
+        any = true; driven |= 1u << hold.what;
+        if (action_states.kept_at(i).down) driven_down |= 1u << hold.what;
+    }
     if (!record) {
         if (!any || record_count == kRecords) return; // a full table is refused before a hold is taken: see room()
         record = &records[record_count];
         *record = Record{};
+        for (float& age : record->driven_age) age = 1e30f;
         record->handle = handle;
         record->latched = true; // its controller has a frame to show that it updates
         refresh(*record);
@@ -345,6 +382,7 @@ void sync(uint64_t handle) {
     record->pressing = pressing;
     record->act_held = act_held;
     record->act_pressing = act_pressing;
+    record->driven = driven; record->driven_down = driven_down;
     memcpy(record->bound, bound, sizeof bound);
     record->moving = moving;
     memcpy(record->move, move, sizeof move);
@@ -363,23 +401,26 @@ uint8_t input_of(const Record& record, uint32_t action) {
 
 // Once a controller update: what is held now, and what was held before. A press latched here ends its hold at the
 // next step.
-void latch(Record& record) {
+void latch(Record& record, float seconds = 1 / 30.f) {
     record.press_now = 0;
     record.before = record.now;
     record.now = record.held | record.pressing;
     record.used |= record.pressing;
     record.pressing = 0;
     record.act_before = record.act_now;
-    record.act_now = record.act_held | record.act_pressing;
+    record.act_now = record.act_held | record.act_pressing | record.driven_down;
     record.act_used |= record.act_pressing;
     record.act_pressing = 0;
     // An action that went down has a press for its pressed sites, and one that went up a release for its released
     // sites. Each waits for the first read of it, which ends it at every site of the action, or gives up.
     const uint32_t went_down = record.act_now & ~record.act_before & actions_reading(Read::pressed),
-                   went_up = record.act_before & ~record.act_now & actions_reading(Read::released) & ~record.act_quiet;
+                   went_up = record.act_before & ~record.act_now & actions_reading(Read::released) & ~record.act_quiet & ~record.release_skip;
+    record.release_skip &= record.act_now;
     record.act_quiet &= record.act_now; // a quiet end has been latched
     for (uint32_t action = 0; action < kActions; ++action) {
         const uint32_t bit = 1u << action;
+        if ((record.driven & bit) && (record.act_now & ~record.act_before & bit)) record.driven_age[action] = 0;
+        else if (record.driven_age[action] < 1e20f && seconds > 0 && seconds < 10) record.driven_age[action] += seconds;
         if (went_down & bit) record.press_pending |= bit, record.press_waited[action] = 0;
         else if ((record.press_pending & bit) && ++record.press_waited[action] > kPendingUpdates) record.press_pending &= ~bit;
         if (went_up & bit) record.release_pending |= bit, record.release_waited[action] = 0;
@@ -393,7 +434,7 @@ void latch(Record& record) {
     record.act_inputs_before = record.act_inputs;
     record.act_inputs = 0;
     for (uint32_t action = 0; action < kActions; ++action) {
-        const uint8_t input = record.act_now >> action & 1 ? input_of(record, action) : kNone;
+        const uint8_t input = (record.act_now & ~record.driven) >> action & 1 ? input_of(record, action) : kNone;
         if (input < kInputs) record.act_inputs |= uint64_t(1) << input;
     }
     record.latched = true;
@@ -467,7 +508,7 @@ bool released(void* controller, int32_t input) {
 void update(void* controller, float seconds) {
     for (uint32_t i = 0; i < record_count; ++i)
         if (records[i].controller == reinterpret_cast<uint64_t>(controller)) {
-            latch(records[i]);
+            latch(records[i], seconds);
             ++debug.updates;
             debug.controller = records[i].controller;
             debug.part = records[i].part;
@@ -510,8 +551,10 @@ bool answer_up(void*, int32_t, void*, void*) { return false; }
 // What a press-age read is moved to for an action bound to no input: pressed longer ago than any window.
 const float never_pressed = 1e30f;
 
-uint32_t register_of(uint32_t site) { return uint32_t(t::tables::character_site_registers[site]); }
-uint32_t word_of(uint32_t site) { return uint32_t(t::tables::character_site_words[site]); }
+uint32_t register_of(uint32_t site) { return uint32_t(site < kOriginalSites ? t::tables::character_site_registers[site] : t::tables::character_remap_registers[site - kOriginalSites]); }
+uint32_t word_of(uint32_t site) { return uint32_t(site < kOriginalSites ? t::tables::character_site_words[site] : t::tables::character_remap_words[site - kOriginalSites]); }
+uint64_t address_of(uint32_t site) { return uint64_t(site < kOriginalSites ? t::tables::character_sites[site] : t::tables::character_remap_sites[site - kOriginalSites]); }
+bool present_site(uint32_t site) { return site < kOriginalSites ? t::present(t::tables::character_sites[site]) : t::present(t::tables::character_remap_sites[site - kOriginalSites]); }
 
 // The record a site's registers name, among the characters the site's code is for.
 Record* matching(uint32_t site, const uint64_t* x) {
@@ -531,6 +574,9 @@ void at_site(uint32_t site, TSUCHI_InlineContext* context) {
     ++debug.site[site].reads;
     Record* record = matching(site, x);
     if (!record) return;
+    // Inline hooks remain installed after a lease ends. Extra reads belong
+    // only to isolated states, even when an older action API is used later.
+    if (site >= kOriginalSites && !(record->driven & (1u << kSites[site].action))) return;
     ++debug.site[site].matched;
     const Site& what = kSites[site];
     const uint32_t word = word_of(site);
@@ -545,11 +591,19 @@ void at_site(uint32_t site, TSUCHI_InlineContext* context) {
     // the pad doesn't start it.
     const uint32_t bit = 1u << what.action;
     bool down = false;
-    if (what.read == Read::held) down = (record->act_now & bit) != 0;
+    const bool driven = (record->driven & bit) != 0;
+    const bool unlocked = !driven || (open(record->controller, what.own) &&
+        game::read_or<int32_t>(record->controller + t::game_controller::unpaused_frames) >= 2);
+    if (what.read == Read::held) down = unlocked && (record->act_now & bit) != 0;
     else if (what.read == Read::pressed && ((record->press_pending | record->press_now) & bit))
-        down = true, record->press_pending &= ~bit, record->press_now |= bit;
-    else if (what.read == Read::released && (record->release_pending & bit)) down = true, record->release_pending &= ~bit;
-    const bool acting = ((record->act_now | record->act_before | record->press_pending | record->release_pending) & bit) != 0;
+        down = unlocked, record->press_pending &= ~bit, record->press_now |= bit;
+    else if (what.read == Read::released && (record->release_pending & bit)) down = unlocked, record->release_pending &= ~bit;
+    // Ride's stock press and release paths represent different contextual
+    // logical inputs. Once its press starts mounting or dismounting, releasing
+    // that same remapped button must not queue another ride after the animation.
+    if (driven && down && what.action == TSUCHI_ACTION_RIDE && what.read == Read::pressed)
+        record->release_skip |= bit;
+    const bool acting = driven || ((record->act_now | record->act_before | record->press_pending | record->release_pending) & bit) != 0;
     const uint8_t bound = record->bound[what.action];
     switch (what.form) {
     case Form::call: {
@@ -570,10 +624,14 @@ void at_site(uint32_t site, TSUCHI_InlineContext* context) {
         return;
     }
     case Form::age: {
-        if (bound == kOwn) return;
         // ldr s<t>, [x<n>, #imm]: the entry's offset is the immediate, in words.
         const uint32_t base = word >> 5 & 31;
         const uint64_t offset = uint64_t(word >> 10 & 0xFFF) * 4;
+        if (driven) {
+            x[base] = reinterpret_cast<uint64_t>(unlocked ? &record->driven_age[what.action] : &never_pressed) - offset;
+            return;
+        }
+        if (bound == kOwn) return;
         const int32_t count = game::read_or<int32_t>(record->controller + t::game_controller::press_age_count);
         if (bound == kNone || int32_t(bound) >= count) x[base] = reinterpret_cast<uint64_t>(&never_pressed) - offset;
         else x[base] += (int64_t(bound) - int64_t(what.own)) * int64_t(t::press_age::size);
@@ -595,18 +653,19 @@ struct Hooks {
 };
 template <uint32_t... N>
 constexpr Inline Hooks<N...>::all[];
-using SiteHooks = Hooks<0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22>;
+using SiteHooks = Hooks<0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29>;
 static_assert(sizeof SiteHooks::all / sizeof SiteHooks::all[0] == kSiteCount, "one hook for each site");
 
 // Puts the hooks on every site of an action, or of the movement for kActions. A site that is on stays on.
-TSUCHI_Result hook_sites(uint32_t action) {
+TSUCHI_Result hook_sites(uint32_t action, bool isolated = false) {
     const NativeHooks* native = native_hooks_backend();
     for (uint32_t site = 0; site < kSiteCount; ++site) {
         if (kSites[site].action != action || site_on[site]) continue;
-        if (!native || !native->inline_hook || !self || !t::present(t::tables::character_sites[site])) return TSUCHI_NOT_READY;
+        if (site >= kOriginalSites && !isolated) continue;
+        if (!native || !native->inline_hook || !self || !present_site(site)) return TSUCHI_NOT_READY;
         uint64_t id = 0;
         void* next = nullptr;
-        const TSUCHI_Result result = native->inline_hook(self, uint64_t(t::tables::character_sites[site]), word_of(site),
+        const TSUCHI_Result result = native->inline_hook(self, address_of(site), word_of(site),
                                                          reinterpret_cast<void*>(SiteHooks::all[site]), &id, &next);
         if (result != TSUCHI_OK) return result == TSUCHI_CAPACITY ? result : TSUCHI_NOT_READY;
         next_site[site] = reinterpret_cast<Inline>(next);
@@ -684,6 +743,7 @@ TSUCHI_Result take_action(TSUCHI_Mod* mod, TSUCHI_Actor character, TSUCHI_Action
     Who target;
     const TSUCHI_Result result = action_target(character, action, target);
     if (result != TSUCHI_OK) return result;
+    if (action_states.holder(character.id, action)) return TSUCHI_BUSY;
     if (once ? actions.find(character.id, action) != nullptr : (actions.holder(character.id, action) && actions.holder(character.id, action) != mod))
         return TSUCHI_BUSY;
     if (!room(character.id)) return TSUCHI_NO_MEMORY;
@@ -712,6 +772,7 @@ TSUCHI_Result hold_binding(TSUCHI_Mod* mod, TSUCHI_Actor character, TSUCHI_Actio
     Who target;
     const TSUCHI_Result result = action_target(character, action, target);
     if (result != TSUCHI_OK) return result;
+    if (action_states.holder(character.id, action)) return TSUCHI_BUSY;
     if (!input_ok(input) && input != TSUCHI_INPUT_NONE) return TSUCHI_INVALID;
     if (bindings.holder(character.id, action) && bindings.holder(character.id, action) != mod) return TSUCHI_BUSY;
     if (!room(character.id)) return TSUCHI_NO_MEMORY;
@@ -737,6 +798,30 @@ TSUCHI_Result binding(TSUCHI_Actor character, TSUCHI_Action action, TSUCHI_Input
             return TSUCHI_OK;
         }
     return TSUCHI_UNSUPPORTED;
+}
+
+TSUCHI_Result hold_action_state(TSUCHI_Mod* mod, TSUCHI_Actor character, TSUCHI_Action action, bool down, uint32_t steps) {
+    if (!steps || steps > 600) return TSUCHI_INVALID;
+    Who target;
+    const auto result = action_target(character, action, target);
+    if (result != TSUCHI_OK) return result;
+    if (!target.part || !target.controller) return TSUCHI_NOT_READY;
+    if (actions.holder(character.id, action) || bindings.holder(character.id, action) ||
+        (action_states.holder(character.id, action) && action_states.holder(character.id, action) != mod)) return TSUCHI_BUSY;
+    if (!room(character.id)) return TSUCHI_NO_MEMORY;
+    if (const auto hooked = hook_sites(action, true); hooked != TSUCHI_OK) return hooked;
+    if (const auto wrapped = wrap_controller(); wrapped != TSUCHI_OK) return wrapped;
+    tell_debug();
+    const bool first = !action_states.holder(character.id, action);
+    const auto taken = action_states.take(mod, character.id, action, ActionState{step_number + steps, down});
+    if (taken == TSUCHI_OK) {
+        if (first) quiet_state(character.id, action); // do not inherit another owner's buffered edge
+        sync(character.id);
+    }
+    return taken;
+}
+TSUCHI_Result release_action_state(TSUCHI_Mod* mod, TSUCHI_Actor character, TSUCHI_Action action) {
+    return action < kActions ? action_states.release(mod, character.id, action) : TSUCHI_NOT_FOUND;
 }
 
 // Once a step: each record follows its character's part and controller, which a ride can change, and a character
@@ -775,6 +860,7 @@ void log_sites() {
 }
 
 void step() {
+    ++step_number;
     log_sites();
     for (uint32_t i = record_count; i--;) {
         Record& record = records[i];
@@ -789,7 +875,7 @@ void step() {
 
 const character::Backend service{hold_input,  press_input,    release_input, input_held,   hold_move,       release_move,
                                  move,        hold_action,    press_action,  release_action, action_held, hold_binding,
-                                 release_binding, binding};
+                                 release_binding, binding, hold_action_state, release_action_state};
 
 } // namespace
 
@@ -800,6 +886,7 @@ void characters_start(TSUCHI_Mod* owner) {
     actions.start();
     bindings.start();
     moves.start();
+    action_states.start();
     each_frame(step);
 }
 
