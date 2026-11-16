@@ -12,7 +12,6 @@ LIFETIMES = {'process', 'save', 'world', 'match', 'session'}
 NAME = re.compile(r'^[a-z][a-z0-9]*(_[a-z0-9]+)*$')
 TYPE_NAME = re.compile(r'^[A-Z][A-Za-z0-9]*$')
 WRAPPED = re.compile(r'^(handle|enum|flags|struct)<([A-Za-z_][A-Za-z0-9_]*)>$')
-MIN_USERS = 2
 # An ID, as framework/core/ids.h reads one: a mod's ID is 1 to 47 bytes, and so is the name after its colon.
 ID_PART = r'[a-z0-9](?:[a-z0-9._-]{0,45}[a-z0-9])?'
 ID = re.compile(rf'^(?:{ID_PART}:{ID_PART}|[A-Za-z0-9._-]{{1,95}}|#(?:0|[1-9][0-9]{{0,9}}))$')
@@ -95,7 +94,7 @@ class Function:
     owns: bool = False  # the call records something against the mod, so its backend is told which mod
     only: str = ''      # 'native' or 'script' when the function exists for one kind of mod only
     mark: Mark = NO_MARK
-    completes: str = ''  # in place of users: the member of its service whose family it completes
+    completes: str = ''  # the member of its service whose family it completes, when the schema records one
     # How a script waits for it, which changes no table: '' for a plain return, 'result' when a JavaScript
     # call gives a Promise for the result, or an event of the same service, which the Promise resolves with
     # once that event names the handle the call returned.
@@ -349,14 +348,12 @@ def _value(where, table, version=0):
 
 
 def _users(where, table):
-    if 'completes' in table:
-        # Checked once the whole service is read: see _service.
-        if table.get('users') or not isinstance(table['completes'], str):
-            raise SchemaError(f'{where}: a typed call names its users, or with "completes" the one member whose family it completes')
-        return []
+    """The mods a call was added for, when the schema records them. A call needs none to exist."""
     users = table.get('users') or []
-    if len(set(users)) < MIN_USERS:
-        raise SchemaError(f'{where}: a typed call names at least {MIN_USERS} users (DESIGN.md, "When a call gets a typed form")')
+    if not isinstance(users, list) or not all(isinstance(user, str) for user in users):
+        raise SchemaError(f'{where}: "users" is a list of mod names')
+    if not isinstance(table.get('completes', ''), str):
+        raise SchemaError(f'{where}: "completes" names one function or event of the same service')
     return list(users)
 
 
@@ -474,14 +471,11 @@ def _service(path, version):
         service.events.append(Event(row['name'], _doc(at, row),
                                     [_value(at, f, version) for f in _need(at, row, 'fields')], _users(at, row),
                                     mark=_mark(at, row, version), completes=row.get('completes', '')))
-    # A member with no users of its own completes a family that has them: it names one member of that family.
+    # "completes" records the member whose family a call belongs to, so it names another member of the service.
     members = {member.name: member for member in service.functions + service.events}
     for member in members.values():
-        if 'completes' in next(row for row in (raw.get('functions') or []) + (raw.get('events') or []) if row['name'] == member.name):
-            family = members.get(member.completes)
-            if not family or family is member or len(set(family.users)) < MIN_USERS:
-                raise SchemaError(f'{name}.{member.name}: "completes" names a function or an event of the same service that has '
-                                  f'{MIN_USERS} users of its own (DESIGN.md, "When a call gets a typed form")')
+        if member.completes and members.get(member.completes) in (None, member):
+            raise SchemaError(f'{name}.{member.name}: "completes" names another function or event of the same service')
     return service
 
 

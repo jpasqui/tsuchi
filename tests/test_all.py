@@ -270,32 +270,23 @@ class SchemaRules(unittest.TestCase):
         self.assertIn('TSUCHI_EntityDestroyedFn', entity_header)
         self.assertNotIn('TSUCHI_ActorSpawned', entity_header)
 
-    def test_a_call_needs_two_users(self):
-        with self.assertRaisesRegex(SchemaError, 'at least 2 users'):
-            load(self.broken('users: [groink, online-coop]', 'users: [groink]'))
-
-    def test_a_call_with_no_users_completes_a_family_that_has_them(self):
-        """A call gets a typed form for two users, or because it completes a family that has them: then it names one of the family."""
-        mods = next(s for s in load(ROOT / 'schema').services if s.name == 'mod')
-        asked = {fn.name: fn for fn in mods.functions}
-        self.assertEqual((asked['framework'].completes, asked['framework'].users), ('version', []))
-        self.assertGreaterEqual(len(set(asked['version'].users)), 2)
-        # knockback's own failures, which no other function of the service lists in this order
+    def test_a_call_needs_no_users(self):
+        """`users` and `completes` record whom a call was added for and which family it belongs to. Neither is required."""
         knock = ('      invalid: The damage is negative.\n'
                  '      not_ready: "The target can\'t be hit right now, like when it is asleep or the game is stopped."\n'
                  '      no_memory: "The game is out of memory."\n    users: [groink, online-coop]\n')
-        kill = '      not_ready: "The game can\'t remove actors right now."\n    users: [groink, online-coop]\n'
-        load(self.broken(knock, knock.replace('users: [groink, online-coop]', 'completes: damage')))
-        load(self.broken(knock, knock.replace('users: [groink, online-coop]', 'completes: damaged')))  # an event is of the family too
-        for named in ('no_such', 'knockback', 'entity.destroy', '[damage]'):
-            with self.assertRaisesRegex(SchemaError, 'combat.knockback: (a typed call names its users|"completes" names a function or an event of the same service)'):
-                load(self.broken(knock, knock.replace('users: [groink, online-coop]', f'completes: {named}')))
-        with self.assertRaisesRegex(SchemaError, 'combat.knockback: a typed call names its users, or with "completes"'):
-            load(self.broken(knock, knock + '    completes: damage\n'))
-        # A member that only completes a family does not make one.
-        with self.assertRaisesRegex(SchemaError, 'combat.knockback: "completes" names a function or an event of the same service that has 2 users'):
-            load(self.broken(knock, knock.replace('users: [groink, online-coop]', 'completes: kill_pikmin'),
-                             kill, kill.replace('users: [groink, online-coop]', 'completes: damage')))
+        named = 'users: [groink, online-coop]'
+        for record in ('users: [groink]', 'users: []', 'completes: damage', 'completes: damaged', 'users: [groink]\n    completes: damage'):
+            load(self.broken(knock, knock.replace(named, record)))
+        load(self.broken(knock, knock.replace('    ' + named + '\n', '')))
+        for record in ('users: groink', 'users: [1, 2]'):
+            with self.assertRaisesRegex(SchemaError, 'combat.knockback: "users" is a list of mod names'):
+                load(self.broken(knock, knock.replace(named, record)))
+        for other in ('no_such', 'knockback', 'entity.destroy'):
+            with self.assertRaisesRegex(SchemaError, 'combat.knockback: "completes" names another function or event of the same service'):
+                load(self.broken(knock, knock.replace(named, f'completes: {other}')))
+        with self.assertRaisesRegex(SchemaError, 'combat.knockback: "completes" names one function or event'):
+            load(self.broken(knock, knock.replace(named, 'completes: [damage]')))
 
     def test_a_type_must_exist(self):
         with self.assertRaisesRegex(SchemaError, 'unknown enum'):
