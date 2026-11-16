@@ -33,6 +33,8 @@ data:
   dialog_answer_yes: 0x93514C0                 # the names the game's dialogs answer with: the first button
   dialog_answer_no: 0x93514C8                  # the second
   dialog_answer_cancel: 0x93514D0              # the third
+  title_answer_load: 0x9347C28                 # the name the title's save list answers with for a slot to load
+  save_slot_paths: 0x934F160                   # the title's path for each save slot, an engine string (16 bytes) each
   dialog_answer_return: 0x93514E0              # Back
   dialog_result_table: 0x89C07B8               # the function table of the message that ends a dialog
   dialog_result_header: 0x7F19FE8              # the 8 bytes that message carries, as the game makes it
@@ -132,6 +134,11 @@ constants:
   options_down_key: 1
   options_last_stock: 3                         # its last stock entry, where the game wraps Down to the first
   title_flow_players_wait: 0x24                # the title flow's state while the Number of Players question is up
+  title_flow_menu: 2                           # the title flow's state while its menu takes input
+  title_flow_story: 6                          # and while it waits for the save list's answer: then it loads the slot
+  fade_out_in_front: 3                         # a fade request's direction: to black, with the loading screen above every other widget
+  fade_role_title: 1                           # and the sound role the title's save list gives that request
+  play_mode_one: 1                             # one player
   dialog_result_message: 0x45                  # the kind of message that ends a dialog
   title_confirm_key: 0x16                        # the title presenter's input map: Confirm
   title_back_key: 0x17                           # and Back
@@ -233,6 +240,7 @@ constants:
   pause_blocks_travel: 0x7FFF0C0B   # the pause kinds under any of which the story takes no request for travel
   request_from_menu: 4              # where a request says it comes from, as the game's own menus say
   leave_request_id: 16
+  travel_request_id: 0xF               # what a travel request (from the map, or the game's own) says it is
   portal_request_id: 0xB
   dialog_question: 0x15             # the game's dialog with a button to accept and one to cancel
   dialog_message: 0x5E              # its dialog with one button
@@ -523,7 +531,7 @@ structs:
   options_button: {fields: {look: 0x4D8, look_bytes: 0x15}}   # a menu button's ButtonSize, text place and PresetType (MenuButtonWidget)
   options_presenter: {fields: {input: 0x78, view: 0x80}}   # the title's Options menu presenter: its input map and its widget
   options_view: {fields: {state: 0x4D8, buttons: 0x4F8, count: 0x500, room: 0x504, selected: 0x508}}  # its widget
-  title_flow: {fields: {state: 0xD8, answered: 0xE8, answer: 0xEC}}   # the title's state machine: its state, and the dialog's answer
+  title_flow: {fields: {state: 0xD8, answered: 0xE8, answer: 0xEC, slot: 0xF4}}   # the title's state machine: its state, and the dialog's answer
   dialog_result: {size: 0x50, fields: {self: 0x18, header: 0x28, message: 0x38, dialog_kind: 0x3C, as_flow: 0x4D}}
   # The title presenter: the selected entry, its widget, its input map and its state (0 to 3 the opening and
   # Press Start, 4 the menu coming in, 5 the menu, 9 and 10 a choice being carried out).
@@ -950,10 +958,11 @@ structs:
              pending: 0xB0}                # a stage waiting to become its child
   game_instance:
     fields: {scene_manager: 0x1B0, config_save: 0x1F0, story_save: 0x1F8, controllers: 0x2E8, pause_manager: 0x538,
+             fade: 0x450,                # the fade manager that outlasts a level: its fade to black is the loading screen
              saves: 0x1F0,               # CarrotSaveGames: one object pointer for each of the save_kinds, config first
              academy_save: absent}       # Switch 2 Edition: pointer to the Dandori Academy's save (CarrotSaveGames.DDK)
   config_save:
-    fields: {play_mode: 0x80, slot: 0x98}         # see the play_mode_ constants
+    fields: {play_mode: 0x80, slot: 0x98, difficulty: 0x2D8, difficulty_count: 0x2E0, difficulty_set: 0x2E8, difficulty_set_count: 0x2F0}  # see the play_mode_ constants; one byte for each slot in the two difficulty arrays
   story_save:
     fields: {night: 0xBC, summary: 0xB8, onyon_leaves: 0x290, onyon_deco: 0x2A0, outside_deco: 0x2B0, switch_unlocked: 0x268, day: 0xB8, treasure_records: 0x678, sparklium: 0xA78,  # nonzero once the story lets the player switch to Oatchi
              area_bases: 0xAB0, saved_portal: 0xB20, return_portal: 0xBA8, reserved_flow: 0xC30, reserved_travel_type: 0xC31}       # an array with one entry for each area's number
@@ -1520,7 +1529,9 @@ functions:
   options_button_icon: {address: 0x24170A0, returns: void, args: [pointer, i32]}  # a menu button's icon, which also places its label
   options_direction: {address: 0x28E2E40, returns: bool, args: [pointer, bool]}  # the Options menu's Up and Down (presenter, down)
   options_confirm: {address: 0x28E2E90, returns: bool, args: [pointer]}          # and its Confirm
+  set_slot_difficulty: {address: 0x20B9330, returns: void, args: [pointer, u32, i32]}  # (config, difficulty, slot): also marks the slot as having one, so it isn't asked
   face_message_request: {address: 0x2778100, returns: void, args: [pointer, pointer, u32, u32]}  # (FaceMessageMgr, a row's name, 0, 0): a missing or turned-off row is dropped; both of the game's callers pass 0, 0
+  fade_request: {address: 0x1D45BF0, returns: void, args: [pointer, u32, u32, bool, f32]}  # (fade manager, direction, sound role, with the story's numbers, seconds): the title's save list asks (3, 1, false, 0.3) as the player picks Load
   options_gate: {address: 0x2D38910, returns: bool, args: [pointer]}             # whether its widget takes input now
   options_list_grow: {address: 0x2489150, returns: void, args: [pointer]}        # grows its button list to fit its count
   options_button_highlight: {address: 0x2416C30, returns: void, args: [pointer, bool, bool]}  # a menu button selected or not

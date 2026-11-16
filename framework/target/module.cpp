@@ -293,7 +293,7 @@ extern "C" void tsuchi_initialize() {
     tsuchi_libc_ticks(); // scripts' clocks count from here
     cost_clock = [] { return uint64_t(tsuchi_libc_ticks()); }; // what the framework's own steps cost
     if (serves(t::family::compiled_mods)) register_compiled_mods();
-    if (serves(t::family::story)) story_start();
+    if (serves(t::family::story)) story_start(&self);
 
     // Publish the status first, so a tool can read why start-up stopped.
     auto* words = reinterpret_cast<uint64_t*>(status.game_base + t::data::status_words);

@@ -15,6 +15,8 @@ data:
   dialog_answer_yes: absent
   dialog_answer_no: absent
   dialog_answer_cancel: absent
+  title_answer_load: absent
+  save_slot_paths: absent
   dialog_answer_return: absent
   dialog_result_table: absent
   dialog_result_header: absent
@@ -102,6 +104,11 @@ constants:
   options_down_key: 1
   options_last_stock: 3
   title_flow_players_wait: 0x24
+  title_flow_menu: 2
+  title_flow_story: 6
+  fade_out_in_front: 3
+  fade_role_title: 1
+  play_mode_one: 1
   dialog_result_message: 0x45
   title_confirm_key: 0x16
   title_back_key: 0x17
@@ -200,6 +207,7 @@ constants:
   pause_blocks_travel: 2147421195
   request_from_menu: 4
   leave_request_id: 16
+  travel_request_id: 0xF
   portal_request_id: 11
   dialog_question: 21
   dialog_message: 94
@@ -299,7 +307,7 @@ structs:
   game_menu_presenter: {fields: {view: absent}}
   presenter_table: {fields: {reset: absent}}
   options_view: {fields: {state: absent, buttons: absent, count: absent, room: absent, selected: absent}}
-  title_flow: {fields: {state: absent, answered: absent, answer: absent}}
+  title_flow: {fields: {state: absent, answered: absent, answer: absent, slot: absent}}
   dialog_result: {size: absent, fields: {self: absent, header: absent, message: absent, dialog_kind: absent, as_flow: absent}}
   title_presenter: {fields: {cursor: absent, view: absent, input: absent, state: absent}}
   title_view: {fields: {description: absent, buttons: absent, count: absent, room: absent, hidden_select: absent, hide: absent, hidden: absent, hidden_other: absent}}
@@ -850,12 +858,17 @@ structs:
       story_save: 504
       controllers: 768
       pause_manager: 1360
+      fade: absent
       saves: 496
       academy_save: absent
   config_save:
     fields:
       play_mode: 128
       slot: 152
+      difficulty: absent
+      difficulty_count: absent
+      difficulty_set: absent
+      difficulty_set_count: absent
   story_save:
     fields:
       night: 188
@@ -1848,6 +1861,8 @@ functions:
   ui_presenter_find: absent
   presenter_begin: absent
   game_menu_open_page: absent
+  set_slot_difficulty: absent
+  fade_request: absent
   face_message_request: absent
   options_gate: absent
   options_list_grow: absent

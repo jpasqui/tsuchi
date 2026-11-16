@@ -300,7 +300,7 @@ void build() {
         fake::put<uint32_t>(fake::main_image() + credit.address, 0x14000000u | uint32_t((credit.entry - credit.address) >> 2));
     }
     tsuchi::carry_start(framework_maps);
-    tsuchi::story_start();
+    tsuchi::story_start(nullptr);   // without the framework mod, trips asked of the stand-in queue are not watched
     tsuchi::reflect_start();
     mod = tsuchi::mod_create("actor.test");
     install_events();
