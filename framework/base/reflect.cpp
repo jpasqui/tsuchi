@@ -1254,6 +1254,7 @@ TSUCHI_Result write_argument_guarded(const Place& place, const Value& value, Cal
 }
 
 void* engine_memory(uint64_t bytes) { return engine_allocate(bytes, 0); }
+bool engine_allocator_ready() { return engine_memory_ready(); }
 void release_engine_memory(void* block) { engine_release(reinterpret_cast<uint64_t>(block)); }
 
 } // namespace tsuchi::game

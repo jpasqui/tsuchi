@@ -10,6 +10,40 @@ identity:
 - offset: 54547984
   hash: 17676423334391457610
 data:
+  academy_points_session_gate: absent
+  academy_points_provider_gate: absent
+  academy_points_blocked_gate: absent
+  academy_time_session_gate: absent
+  academy_time_provider_gate: absent
+  academy_time_blocked_gate: absent
+  academy_board_apply: absent
+  academy_local_launch_callback_table: absent
+  academy_local_launch_callback_invoke: absent
+  academy_local_retry_callback_table: absent
+  academy_local_retry_callback_invoke: absent
+  academy_local_launch_action: absent
+  academy_score_ready_table: absent
+  academy_score_ready_invoke: absent
+  academy_local_course_details: absent
+  academy_local_course_refresh: absent
+  academy_local_preflight: absent
+  academy_local_provider_gate: absent
+  academy_local_admission_gate: absent
+  academy_local_schedule_refresh: absent
+  academy_local_callback_table: absent
+  academy_local_callback_invoke: absent
+  academy_board_request: absent
+  academy_exam_finish_site: absent
+  academy_exam_points_start_site: absent
+  academy_exam_time_start_site: absent
+  academy_menu_update_entry: absent
+  academy_upload_table: absent
+  academy_score_request: absent
+  academy_score_task_update: absent
+  academy_score_response_table: absent
+  academy_score_response_invoke: absent
+  academy_delivery_update: absent
+  academy_delivery_entry: absent
   options_direction_delegate_table: absent
   options_input_delegate_table: absent
   dialog_answer_yes: absent
@@ -96,6 +130,29 @@ data:
   gimmick_warp_stage_function: 52913312
   content_icon_size: 134154048
 constants:
+  academy_points_session_instruction: 0x54000ae1
+  academy_points_provider_instruction: 0x54000a81
+  academy_points_blocked_instruction: 0x37000a4a
+  academy_time_session_instruction: 0x54000181
+  academy_time_provider_instruction: 0x54000121
+  academy_time_blocked_instruction: 0x370000ea
+  academy_local_provider_instruction: 0
+  academy_local_admission_instruction: 0
+  academy_local_idle_phase: 3
+  academy_local_refresh_success: 1
+  academy_hook_pac: 0xd503237f
+  academy_board_answered: 1
+  academy_status_open: 0
+  academy_status_between_exams: 1
+  academy_status_ended: 2
+  academy_status_upcoming: 3
+  academy_status_unavailable: 4
+  academy_points_rule: 4
+  academy_time_rule: 5
+  academy_exam_start_instruction: 0xfd4013e8
+  academy_exam_finish_instruction: 0xb9402269
+  academy_blocked_result: 0x30141
+  academy_blocked_detail: 0xffffffff
   options_entry_icon: 0
   options_row_pitch: 117
   options_up_key: 0
@@ -293,6 +350,17 @@ constants:
   effect_spawn_blocked: 2097664
   ui_keyboard_characters: 31
 structs:
+  academy_local_presenter:
+    fields: {widget: absent, phase: absent, busy: absent}
+  academy_local_callback:
+    fields: {target: absent, presenter: absent}
+  academy_local_callback_table:
+    fields: {invoke: absent}
+  academy_local_ready_callback_table:
+    fields: {invoke: absent}
+  academy_local_reply:
+    size: absent
+    fields: {state: absent, owned_data: absent}
   options_button: {fields: {look: absent, look_bytes: absent}}
   options_presenter: {fields: {input: absent, view: absent}}
   game_menu_presenter: {fields: {view: absent}}
@@ -307,6 +375,8 @@ structs:
   title_handler: {fields: {key: absent, instance: absent, kind: absent, presenter_index: absent, presenter_serial: absent, function: absent, zero: absent}}
   academy_schedule:
     fields:
+      interface: absent
+      boards: absent
       status: absent
       record: absent
       valid: absent
@@ -328,11 +398,70 @@ structs:
       closed: absent
   academy_save:
     fields:
+      opened_ids: absent
+      redo_passes: absent
+      reserve_passes: absent
+      dandori_points: absent
+      dandori_rank: absent
+      card_rank: absent
+      exam_results: absent
+      training_results: absent
       held_ids: absent
       disable_test_guide: absent
       update_delivery: absent
       delivery_text: absent
       service_end: absent
+  academy_exam_row:
+    fields: {courses: absent}
+  academy_training_row:
+    fields: {course: absent}
+  academy_course:
+    size: absent
+    fields: {level: absent}
+  academy_exam_entry:
+    size: absent
+    fields: {key: absent, value: absent}
+  academy_training_entry:
+    size: absent
+    fields: {key: absent, value: absent}
+  academy_exam_result:
+    size: absent
+    fields: {practice_score: absent, score: absent, local_score: absent, practice_time: absent, time: absent, local_time: absent, practice_count: absent, count: absent, medal: absent, viewed_medal: absent, local_medal: absent, practice_medal: absent, practice_clear: absent, clear: absent, stamp_rank: absent, stamp_x: absent, stamp_y: absent, stamp_rotation: absent}
+  academy_training_result:
+    size: absent
+    fields: {count: absent, score: absent, medal: absent, clear: absent}
+  academy_sticker_data:
+    fields: {mask_count: absent, color_count: absent}
+  academy_member:
+    size: absent
+    fields: {nickname: absent, id: absent, score: absent, kings: absent, type: absent, color: absent}
+  academy_board_list:
+    size: absent
+    fields: {key: absent, members: absent, next: absent}
+  academy_board_reply:
+    size: absent
+    fields: {state: absent, answered: absent}
+  academy_chart:
+    fields: {face_enabled: absent}
+  academy_context:
+    fields: {course: absent, board_key: absent, submission_mode: absent}
+  academy_end_report:
+    fields: {score: absent, elapsed: absent, cleared: absent}
+  academy_menu_state:
+    fields: {parent: absent}
+  academy_menu_presenter:
+    fields: {widget: absent}
+  academy_score_task:
+    fields: {phase: absent}
+  academy_upload_job:
+    fields: {result: absent}
+  academy_upload_job_table:
+    fields: {run: absent}
+  academy_upload_result_table:
+    fields: {failed: absent}
+  academy_training_course_entry:
+    size: absent
+    fields: {key: absent, row: absent}
   academy_course_entry:
     size: absent
     fields:
@@ -666,11 +795,13 @@ structs:
       text: 1416
   academy_data:
     fields:
+      training_courses: absent
       test_courses: absent
   ui_manager:
     fields:
       open_dialog: absent
       academy_data: absent
+      academy_training_courses: absent
       academy_courses: absent
       announcer: 760
   announcer:
@@ -1788,6 +1919,15 @@ functions:
   ui_arrow_left: 59209792
   ui_arrow_right: 59209872
   ui_post_sound: 5999312
+  academy_board_slot: absent
+  academy_board_copy: absent
+  academy_board_link: absent
+  academy_menu_update_stock: absent
+  academy_local_launch_ready: absent
+  academy_local_retry_ready: absent
+  academy_is_exam: absent
+  academy_upload_stock: absent
+  academy_status: absent
   academy_open_periods: absent
   academy_period_start: absent
   ui_context_world: 2916048

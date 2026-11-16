@@ -18,6 +18,7 @@
 #include <string.h>
 
 #include "files.h"
+#include "academy_internal.h"
 #include "game.h"
 #include "json.h"
 #include "mods.h"
@@ -58,6 +59,9 @@ struct Schedule {
     // The blocks last written into the game's arrays, so a schedule the game has replaced is noticed.
     uint64_t set_block = 0;
     uint32_t applied = 0;
+    uint32_t applied_count = 0;
+    int32_t applied_stage = 0;
+    bool pending = false;
 };
 
 Schedule schedule;
@@ -85,7 +89,7 @@ bool digits(const char*& at, int count, int64_t& out) {
 
 // ISO 8601 as the game's own parser takes it: YYYY-MM-DD, optionally THH:MM[:SS[.fraction]], optionally Z or
 // +HH:MM / -HH:MM. The result is an FDateTime: 100-nanosecond ticks since 0001-01-01, in UTC. It is cut to the
-// millisecond, which is as fine as iso_text writes a date back, so a date read from the save compares as it was set.
+// millisecond, which is the precision accepted by the schedule parser.
 bool iso_ticks(const char* text, int64_t& ticks) {
     const char* at = text;
     int64_t year, month, day, hour = 0, minute = 0, second = 0, fraction = 0;
@@ -132,41 +136,6 @@ bool iso_ticks(const char* text, int64_t& ticks) {
     const int64_t days = days_from_civil(year, month, day) + 719162; // 0001-01-01 to 1970-01-01
     ticks = days * 86400 * kTicksPerSecond + (hour * 3600 + minute * 60 + second) * kTicksPerSecond + fraction;
     return true;
-}
-
-// The inverse of days_from_civil.
-void civil_from_days(int64_t days, int64_t& year, int64_t& month, int64_t& day) {
-    days += 719468;
-    const int64_t era = (days >= 0 ? days : days - 146096) / 146097;
-    const int64_t doe = days - era * 146097;
-    const int64_t yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    const int64_t doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    const int64_t mp = (5 * doy + 2) / 153;
-    day = doy - (153 * mp + 2) / 5 + 1;
-    month = mp < 10 ? mp + 3 : mp - 9;
-    year = yoe + era * 400 + (month <= 2);
-}
-
-// Ticks as the game writes a delivery date: %Y-%m-%dT%H:%M:%S.%sZ, %s being milliseconds. 25 bytes with the end.
-void iso_text(int64_t ticks, char (&out)[25]) {
-    constexpr int64_t kTicksPerSecond = 10000000;
-    const int64_t seconds = ticks / kTicksPerSecond;
-    int64_t year, month, day;
-    civil_from_days(seconds / 86400 - 719162, year, month, day);
-    const int64_t of_day = seconds % 86400;
-    const int64_t parts[] = {year, month, day, of_day / 3600, of_day / 60 % 60, of_day % 60, ticks % kTicksPerSecond / 10000};
-    const int widths[] = {4, 2, 2, 2, 2, 2, 3};
-    const char after[] = {'-', '-', 'T', ':', ':', '.', 'Z'};
-    char* at = out;
-    for (int i = 0; i < 7; ++i) {
-        for (int place = widths[i] - 1; place >= 0; --place) {
-            int64_t value = parts[i];
-            for (int k = 0; k < place; ++k) value /= 10;
-            *at++ = char('0' + value % 10);
-        }
-        *at++ = after[i];
-    }
-    *at = 0;
 }
 
 // ---- Reading the file ----------------------------------------------------------
@@ -281,32 +250,56 @@ void engine_release(uint64_t block) {
     if (release) release(reinterpret_cast<void*>(allocator), reinterpret_cast<void*>(block));
 }
 
-// Replaces one of the game's arrays with `count` elements. The block, or 0 when there was no memory (nothing changed).
-uint64_t put_array(uint64_t header, const void* elements, uint32_t count, uint32_t element_bytes) {
-    if (!game::writable(header, t::array::size)) return 0;
-    uint64_t block = 0;
+struct ArrayReplacement {
+    uint64_t header = 0, block = 0, before = 0;
+    uint32_t count = 0;
+};
+
+bool prepare_array(ArrayReplacement& out, uint64_t header, const void* elements, uint32_t count, uint32_t stride) {
+    if (!game::writable(header, t::array::size)) return false;
+    out.header = header;
+    out.before = game::read_or<uint64_t>(header + t::array::data);
+    out.count = count;
     if (count) {
-        block = reinterpret_cast<uint64_t>(engine_allocate(uint64_t(count) * element_bytes));
-        if (!block) return 0;
-        memcpy(reinterpret_cast<void*>(block), elements, size_t(count) * element_bytes);
+        out.block = reinterpret_cast<uint64_t>(engine_allocate(uint64_t(count) * stride));
+        if (!out.block) return false;
+        memcpy(reinterpret_cast<void*>(out.block), elements, size_t(count) * stride);
     }
-    const uint64_t old = game::read_or<uint64_t>(header + t::array::data);
-    game::write(header + t::array::data, block);
-    game::write(header + t::array::count, int32_t(count));
-    game::write(header + t::array::max, int32_t(count));
-    if (old && old != block) engine_release(old);
-    return block ? block : 1;
+    return true;
 }
 
-bool put_period(uint64_t at, const Period& period) {
+void discard_arrays(ArrayReplacement* arrays, uint32_t count) {
+    for (uint32_t i = 0; i < count; ++i) engine_release(arrays[i].block);
+}
+
+void commit_arrays(ArrayReplacement* arrays, uint32_t count) {
+    for (uint32_t i = 0; i < count; ++i) {
+        const auto& array = arrays[i];
+        game::write(array.header + t::array::data, array.block);
+        game::write(array.header + t::array::count, int32_t(array.count));
+        game::write(array.header + t::array::max, int32_t(array.count));
+    }
+    for (uint32_t i = 0; i < count; ++i) {
+        bool already = false;
+        for (uint32_t earlier = 0; earlier < i; ++earlier) already |= arrays[earlier].before == arrays[i].before;
+        if (!already) engine_release(arrays[i].before);
+    }
+}
+
+bool period_writable(uint64_t at) {
+    return game::writable(at + t::academy_period::stage, 4) &&
+           game::writable(at + t::academy_period::delivery, 8) &&
+           game::writable(at + t::academy_period::ticket, 4) &&
+           game::writable(at + t::academy_period::ticket_limit, 1) &&
+           game::writable(at + t::academy_period::closed, 1);
+}
+
+void commit_period(uint64_t at, const Period& period) {
     game::write(at + t::academy_period::stage, period.stage);
     game::write(at + t::academy_period::delivery, period.delivery);
-    if (!put_array(at + t::academy_period::starts, period.starts, period.dates, sizeof(int64_t))) return false;
-    if (!put_array(at + t::academy_period::ends, period.ends, period.dates, sizeof(int64_t))) return false;
     game::write(at + t::academy_period::ticket, period.ticket);
     game::write(at + t::academy_period::ticket_limit, uint8_t(period.ticket_limit));
     game::write(at + t::academy_period::closed, uint8_t(0));
-    return true;
 }
 
 // Whether the manager still holds the schedule written last: the game puts its own empty one back when a tab changes
@@ -316,74 +309,41 @@ bool still_ours(uint64_t manager) {
            game::read_or<uint8_t>(manager + t::academy_schedule::uses_schedule) == 1 &&
            game::read_or<uint8_t>(manager + t::academy_schedule::refresh_pending) == 0 &&
            game::read_or<uint64_t>(manager + t::academy_schedule::set + t::array::data) == schedule.set_block &&
-           game::read_or<int32_t>(manager + t::academy_schedule::set + t::array::count) == int32_t(schedule.set_count) &&
-           game::read_or<int32_t>(manager + t::academy_schedule::latest + t::academy_period::stage) == schedule.latest.stage;
+           game::read_or<int32_t>(manager + t::academy_schedule::set + t::array::count) == int32_t(schedule.applied_count) &&
+           game::read_or<int32_t>(manager + t::academy_schedule::latest + t::academy_period::stage) == schedule.applied_stage;
 }
 
 void apply(uint64_t manager) {
-    const uint64_t set = put_array(manager + t::academy_schedule::set, schedule.set, schedule.set_count, sizeof(int32_t));
-    if (!set || !put_period(manager + t::academy_schedule::latest, schedule.latest)) return;
-    if (schedule.has_prev && !put_period(manager + t::academy_schedule::prev, schedule.prev)) return;
+    const uint64_t latest = manager + t::academy_schedule::latest, prev = manager + t::academy_schedule::prev;
+    if (!period_writable(latest) || (schedule.has_prev && !period_writable(prev)) ||
+        !game::writable(manager + t::academy_schedule::first_period, 1) ||
+        !game::writable(manager + t::academy_schedule::refresh_pending, 1) ||
+        !game::writable(manager + t::academy_schedule::valid, 1) ||
+        !game::writable(manager + t::academy_schedule::uses_schedule, 1) ||
+        !game::writable(manager + t::academy_schedule::status, 4)) return;
+    ArrayReplacement arrays[5]{};
+    const uint32_t count = schedule.has_prev ? 5 : 3;
+    if (!prepare_array(arrays[0], manager + t::academy_schedule::set, schedule.set, schedule.set_count, 4) ||
+        !prepare_array(arrays[1], latest + t::academy_period::starts, schedule.latest.starts, schedule.latest.dates, 8) ||
+        !prepare_array(arrays[2], latest + t::academy_period::ends, schedule.latest.ends, schedule.latest.dates, 8) ||
+        (schedule.has_prev && (!prepare_array(arrays[3], prev + t::academy_period::starts, schedule.prev.starts, schedule.prev.dates, 8) ||
+                              !prepare_array(arrays[4], prev + t::academy_period::ends, schedule.prev.ends, schedule.prev.dates, 8)))) {
+        discard_arrays(arrays, count);
+        return;
+    }
+    commit_arrays(arrays, count);
+    commit_period(latest, schedule.latest);
+    if (schedule.has_prev) commit_period(prev, schedule.prev);
     game::write(manager + t::academy_schedule::first_period, uint8_t(!schedule.has_prev));
     game::write(manager + t::academy_schedule::refresh_pending, uint8_t(0));
     game::write(manager + t::academy_schedule::valid, uint8_t(1));
     game::write(manager + t::academy_schedule::uses_schedule, uint8_t(1));
     game::write(manager + t::academy_schedule::status, int32_t(1));
-    schedule.set_block = set;
+    schedule.set_block = arrays[0].block;
+    schedule.applied_count = schedule.set_count;
+    schedule.applied_stage = schedule.latest.stage;
+    schedule.pending = false;
     if (++schedule.applied == 1 && schedule.owner) mod_note(kFrameworkLogId, "the Academy's exam schedule is the one a mod supplies");
-}
-
-// The delivery date in the save, as ticks. False when it holds none the game's parser would take.
-bool delivered_at(uint64_t save, int64_t& ticks) {
-    const uint64_t text = save + t::academy_save::delivery_text;
-    const uint64_t units = game::read_or<uint64_t>(text + t::array::data);
-    const int32_t count = game::read_or<int32_t>(text + t::array::count);
-    if (!units || count < 2 || count > 64 || !game::readable(units, uint64_t(count) * 2)) return false;
-    char ascii[64];
-    for (int32_t i = 0; i < count; ++i) {
-        const char16_t unit = game::read_or<char16_t>(units + uint64_t(i) * 2);
-        if (unit > 0x7e) return false;
-        ascii[i] = char(unit);
-    }
-    ascii[count - 1] = 0;
-    return iso_ticks(ascii, ticks);
-}
-
-// The game's own delivery, which its schedule update runs only while it is signed in to the service: when the period
-// in effect came out after what the save last had delivered, the save's delivered periods become the ones open now,
-// and its delivery date that period's. The Academy then lists those periods and announces the new ones, and the game
-// keeps them in the save as it does online.
-void deliver(uint64_t manager) {
-    if (!t::bound(t::fn::academy_open_periods) || !t::bound(t::fn::academy_period_start)) return;
-    const uint64_t instance = game::global<uint64_t>(t::data::game_instance);
-    const uint64_t save = instance ? game::read_or<uint64_t>(instance + t::game_instance::academy_save) : 0;
-    if (!save || !game::writable(save + t::academy_save::held_ids, t::array::size) ||
-        !game::writable(save + t::academy_save::delivery_text, t::array::size) ||
-        !game::readable(save + t::academy_save::service_end, 1))
-        return;
-    if (game::read_or<uint8_t>(save + t::academy_save::service_end) == 1) return;
-    const auto* record = reinterpret_cast<const void*>(manager + t::academy_schedule::record);
-    const int64_t start = t::fn::academy_period_start(record, 0);
-    int64_t delivered = 0;
-    if (!start || (delivered_at(save, delivered) && delivered >= start)) return;
-    const game::EngineArray open = t::fn::academy_open_periods(record);  // empty until the period has come out
-    const uint64_t block = reinterpret_cast<uint64_t>(open.data);
-    if (open.count <= 0 || open.count > int32_t(kMostPeriods) || !game::readable(block, uint64_t(open.count) * 4)) {
-        engine_release(block);
-        return;
-    }
-    char date[25];
-    iso_text(start, date);
-    char16_t units[25];
-    for (int i = 0; i < 25; ++i) units[i] = char16_t(date[i]);
-    const bool kept = put_array(save + t::academy_save::held_ids, open.data, uint32_t(open.count), sizeof(int32_t)) &&
-                      put_array(save + t::academy_save::delivery_text, units, 25, sizeof(char16_t));
-    engine_release(block);
-    if (!kept) return;
-    const bool announce = game::read_or<uint8_t>(save + t::academy_save::disable_test_guide) ||
-                          game::read_or<uint8_t>(manager + t::academy_schedule::tab_checked);
-    game::write(save + t::academy_save::update_delivery, uint8_t(announce));
-    mod_note(kFrameworkLogId, "the Academy delivered the exam periods of the mod's schedule");
 }
 
 // ---- The course table ---------------------------------------------------------
@@ -395,45 +355,60 @@ void deliver(uint64_t manager) {
 game::ClassRef table_class{t::name::data_table_class};
 
 // The table the Academy made its copy from, through its data asset's reference to it, as the game loads it.
-uint64_t courses_table(uint64_t ui) {
+uint64_t courses_table(uint64_t ui, bool training = false) {
     const uint64_t data = game::read_or<uint64_t>(ui + t::ui_manager::academy_data);
-    if (!data || !t::bound(t::fn::load_soft_object) || !game::writable(data + t::academy_data::test_courses, t::soft_object::most)) return 0;
-    const auto table = reinterpret_cast<uint64_t>(t::fn::load_soft_object(reinterpret_cast<void*>(data + t::academy_data::test_courses)));
+    const uint64_t reference = data + (training ? t::academy_data::training_courses : t::academy_data::test_courses);
+    if (!data || !t::bound(t::fn::load_soft_object) || !game::writable(reference, t::soft_object::most)) return 0;
+    const auto table = reinterpret_cast<uint64_t>(t::fn::load_soft_object(reinterpret_cast<void*>(reference)));
     return table && game::is_a(table, table_class) ? table : 0;
 }
 
-// Where the Academy keeps its copy of a row of its course table, or 0: for a row of another table, or before the
-// Academy has made its copy.
-uint64_t course_copy(uint64_t table, uint64_t row) {
-    const uint64_t framework = game::global<uint64_t>(t::data::game_framework);
-    const uint64_t ui = framework ? game::read_or<uint64_t>(framework + t::game_framework::ui) : 0;
-    if (!ui || !row) return 0;
-    const uint64_t entries = ui + t::ui_manager::academy_courses;
+// Where one of the Academy's copies (of its exam courses, or of its training courses) keeps the row of that name, or 0.
+uint64_t copied_row(uint64_t ui, uint64_t row, bool training) {
+    const uint64_t entries = ui + (training ? t::ui_manager::academy_training_courses : t::ui_manager::academy_courses);
     const uint64_t data = game::read_or<uint64_t>(entries + t::sparse_array::data);
     const int32_t count = game::read_or<int32_t>(entries + t::sparse_array::count);
-    if (!data || count <= 0 || courses_table(ui) != table) return 0;
+    const uint64_t stride = training ? t::academy_training_course_entry::size : t::academy_course_entry::size;
+    if (!data || count <= 0 || count > 128 || !game::readable(data, uint64_t(count) * stride)) return 0;
     const uint64_t more = game::read_or<uint64_t>(entries + t::sparse_array::more_bits);
     const uint64_t bits = more ? more : entries + t::sparse_array::bits;
     const int32_t held = game::read_or<int32_t>(entries + t::sparse_array::bit_count);
-    for (int32_t i = 0; i < count && i < held; ++i) {
+    if (held < count || !game::readable(bits, 4 * ((uint32_t(count) + 31) / 32))) return 0;
+    for (int32_t i = 0; i < count; ++i) {
         if (!(game::read_or<uint32_t>(bits + uint64_t(i / 32) * 4) >> (i % 32) & 1)) continue;  // a free entry
-        const uint64_t entry = data + uint64_t(i) * t::academy_course_entry::size;
-        if (game::read_or<uint64_t>(entry + t::academy_course_entry::key) == row) return entry + t::academy_course_entry::row;
+        const uint64_t entry = data + uint64_t(i) * stride;
+        if (game::read_or<uint64_t>(entry + (training ? t::academy_training_course_entry::key : t::academy_course_entry::key)) == row)
+            return entry + (training ? t::academy_training_course_entry::row : t::academy_course_entry::row);
     }
     return 0;
+}
+
+// Where the Academy keeps its copy of a row of one of its course tables, or nothing: for a row of another table, or
+// before the Academy has made its copy. Every field written into any table asks, and so does each frame for each
+// array a mod resized, so the row's name is looked for first: a table is only resolved for a row of that name.
+TableRowCopy course_copy(uint64_t table, uint64_t row, uint64_t owner) {
+    const uint64_t framework = game::global<uint64_t>(t::data::game_framework);
+    const uint64_t ui = owner ? game::from_handle(owner) : framework ? game::read_or<uint64_t>(framework + t::game_framework::ui) : 0;
+    if (!ui || !row || !table) return {};
+    for (int copy = 0; copy < 2; ++copy) {
+        const bool training = copy == 1;
+        const uint64_t base = copied_row(ui, row, training);
+        if (base && courses_table(ui, training) == table) return {base, game::to_handle(ui)};
+    }
+    return {};
 }
 
 void each_frame() {
     if (!schedule.active) return;
     const uint64_t manager = game::global<uint64_t>(t::data::academy_schedule);
     if (!manager || !game::writable(manager + t::academy_schedule::valid, 1)) return;
-    if (!still_ours(manager)) {
+    if (schedule.pending || !still_ours(manager)) {
         apply(manager);
         if (!still_ours(manager)) return;
     } else if (game::read_or<int32_t>(manager + t::academy_schedule::status) != 1) {
         game::write(manager + t::academy_schedule::status, int32_t(1));  // the game's download retry failed again
     }
-    deliver(manager);
+    academy_deliver(manager);
 }
 
 // The owner stopped: the manager is left as the game has it with no download.
@@ -444,14 +419,39 @@ void ended(void*, uint64_t) {
         game::write(manager + t::academy_schedule::uses_schedule, uint8_t(0));
         game::write(manager + t::academy_schedule::status, int32_t(0));
     }
-    schedule.active = false;
-    schedule.owner = nullptr;
-    schedule.set_block = 0;
+    schedule = Schedule{};
 }
 
 bool well_formed(const Json& part, Text& wrong) {
     if (!whole_text(&part)) return wrong.set("\"academy_schedule\" is the path of a JSON file in the mod that holds the DDKStages and DDKHeldInfo schedule"), false;
     return true;
+}
+
+TSUCHI_Result take_schedule(TSUCHI_Mod* mod, const Json& root, Text& problem) {
+    if (!academy_delivery_ready()) return TSUCHI_NOT_READY;
+    if (schedule.active && schedule.owner != mod) return TSUCHI_BUSY;
+    if (schedule.active && !ownership_update_allowed(mod, kSchedule, 1)) return TSUCHI_BUSY;
+    Schedule next;
+    if (!read_schedule(root, next, problem)) return TSUCHI_INVALID;
+    TSUCHI_Result result = reserve_owned(mod, schedule.active ? 0 : 1);
+    if (result != TSUCHI_OK) return result;
+    const bool blocked_before = academy_uploads_blocked();
+    result = academy_block_uploads();
+    if (result != TSUCHI_OK) return result;
+    result = own(mod, kSchedule, 1, ended, nullptr, true);
+    if (result != TSUCHI_OK) {
+        if (!blocked_before) academy_unblock_uploads(); // no schedule was taken
+        return result;
+    }
+    next.active = true;
+    next.owner = mod;
+    next.pending = true;
+    next.set_block = schedule.set_block;
+    next.applied = schedule.applied;
+    next.applied_count = schedule.applied_count;
+    next.applied_stage = schedule.applied_stage;
+    schedule = next;
+    return TSUCHI_OK;
 }
 
 TSUCHI_Result begin(TSUCHI_Mod* mod, const Json& part, Text& problem) {
@@ -472,37 +472,52 @@ TSUCHI_Result begin(TSUCHI_Mod* mod, const Json& part, Text& problem) {
     const Json* root = read_json(text, size_t(bytes), &error);
     release(text);
     if (!root) {
-        fail(problem, "\"academy_schedule\": ", part.text, error.what ? ": it is not JSON" : ": there is no memory to read it");
-        return error.what ? TSUCHI_INVALID : TSUCHI_NO_MEMORY;
+        fail(problem, "\"academy_schedule\": ", part.text, error.allocation_failure ? ": there is no memory to read it" : ": it is not JSON");
+        return error.allocation_failure ? TSUCHI_NO_MEMORY : TSUCHI_INVALID;
     }
-    Schedule next;
     Text wrong;
-    const bool good = read_schedule(*root, next, wrong);
+    const TSUCHI_Result accepted = take_schedule(mod, *root, wrong);
     release_json(root);
-    if (!good) {
-        join(problem, "\"academy_schedule\": ", part.text, ": ", wrong.get());
-        wrong.clear();
-        return TSUCHI_INVALID;
+    if (accepted != TSUCHI_OK) {
+        join(problem, "\"academy_schedule\": ", part.text, ": ", *wrong.get() ? wrong.get() : "the schedule or native score-upload guard is unavailable");
     }
     wrong.clear();
-    const TSUCHI_Result owned = own(mod, kSchedule, 1, ended, nullptr, true);
-    if (owned != TSUCHI_OK) {
-        fail(problem, "\"academy_schedule\": another mod supplies the Academy's schedule");
-        return owned;
-    }
-    next.active = true;
-    next.owner = mod;
-    next.set_block = 0;
-    schedule = next;
-    return TSUCHI_OK;
+    return accepted;
 }
 
 } // namespace
 
 void academy_start() {
+    academy_backend_start();
     add_manifest_section({"academy_schedule", well_formed, begin});
     each_engine_frame(each_frame);
     add_row_copies(course_copy);
+}
+
+bool academy_mod_schedule() { return schedule.active; }
+
+TSUCHI_Result academy_hold_schedule(TSUCHI_Mod* mod, const char* json) {
+    if (!mod_usable(mod) || !json) return TSUCHI_INVALID;
+    size_t bytes = 0;
+    while (bytes <= 65536 && json[bytes]) ++bytes;
+    if (!bytes || bytes > 65536) return TSUCHI_INVALID;
+    JsonError error{};
+    const Json* root = read_json(json, bytes, &error);
+    if (!root) return error.allocation_failure ? TSUCHI_NO_MEMORY : TSUCHI_INVALID;
+    Text problem;
+    const TSUCHI_Result accepted = take_schedule(mod, *root, problem);
+    problem.clear();
+    release_json(root);
+    return accepted;
+}
+
+TSUCHI_Result academy_release_schedule(TSUCHI_Mod* mod) {
+    if (!schedule.active || schedule.owner != mod) return TSUCHI_NOT_FOUND;
+    if (!ownership_update_allowed(mod, kSchedule, 1)) return TSUCHI_BUSY;
+    const TSUCHI_Result removed = disown(mod, kSchedule, 1);
+    if (removed != TSUCHI_OK) return removed;
+    ended(nullptr, 1);
+    return TSUCHI_OK;
 }
 
 } // namespace tsuchi

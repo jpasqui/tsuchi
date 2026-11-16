@@ -35,3 +35,4 @@ handles:
   - {name: field_hold, doc: "An owned scalar field override, until release or mod stop."}
   - {name: setting_hold, doc: "An owned runtime scalar setting override, until release or mod stop."}
   - {name: package_install, doc: "A package install started by your mod, readable until another install starts or your mod stops."}
+  - {name: academy_submission, doc: "A native Academy score request owned by your mod, valid only during its submission handler."}

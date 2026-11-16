@@ -11,8 +11,9 @@ The Switch 2 Edition's Dandori Academy opens its exams in periods. The game down
 the schedule of those periods from Nintendo's service, so without it (offline, or once the
 service has ended) no exam opens. A mod can supply that schedule instead. While the mod
 runs, the Academy opens, lists, and announces exams the way it does online, and keeps them
-in the player's save as it does online. Tsuchi doesn't send anything or connect to the
-service.
+in the player's save as it does online. The original game code handles delivery dates, period lists, notices, Redo Pass
+processing, and save changes after it receives the local schedule. Tsuchi doesn't
+send anything or connect to the service.
 
 Before you start, [create your mod](/develop/first-mod/).
 
@@ -110,8 +111,28 @@ Graduate A, Elementary B, Advanced B and Graduate B. Some of the fields:
 | `PassingScore`, `MaxScore` | Score limits. |
 
 The Academy copies the table as the game starts. Tsuchi writes each change into that copy too,
-so your changes show up in the Academy. The lengths of arrays are the exception: the Academy
-keeps six courses to a period, whatever length you give `CourseData`.
+so your changes show up in the Academy. Exam periods keep six courses: `CourseData` is an
+array of structs and cannot be resized. Primitive arrays inside a course, including
+`TargetPikminColor` and `CourseRewardInfo.RewardRowNameList`, can be resized with
+`datatable.resize`. Element overrides apply to the live copies as well. For example,
+resize `CourseData[0].TargetPikminColor`, then override its indexed colors. Restore the
+length and element overrides separately when you finish with them.
+
+Each native copy has its own array storage. A failed allocation leaves the table and all
+copies as they were. Release or mod stop restores their original arrays. A copy made later
+is reconciled on an engine frame. If another writer replaces a supplied array's header,
+Tsuchi leaves that header alone and refuses a conflicting resize.
+
+Training uses rows `Course_00` to `Course_02` of the training course table, whose row type
+is `DDKTrainingCourseRow`. Each row has one `CourseData` struct, so use paths such as
+`CourseData.LevelName`, `CourseData.Timer`, and `CourseData.TargetPikminColor[0]`, without
+an index after `CourseData`. Training edits propagate to its live copies too. The result
+API calls these training courses `0` to `2`; the game's internal IDs are `72` to `74`.
+
+To route a course to your custom level, ship that level with your mod and set `LevelName`
+to its world name. The result lookup follows the course's current `LevelName`, so two
+courses pointing at the same world share its native saved result key. Give different
+course revisions separate community board identities when using an online board.
 
 The clock in the level comes from the level, not from `Timer`: each level has a game rule
 actor (`CarrotGameRule`), and the `Minutes` and `Seconds` of its `GameSettings` are how
@@ -123,3 +144,25 @@ level for a course, set its game rule's time to the course's `Timer`.
 
 A delivery goes into the player's Academy save data, as it does online: which periods came
 out and when.
+
+## Schedules from code
+
+[`academy.hold_schedule`](/reference/academy/#hold_schedule) accepts the same JSON as the
+manifest file. In Lua, call `academy.hold_schedule(json)`; in JavaScript, call
+`academy.hold_schedule(JSON.stringify(schedule))`; in C, call
+`host->academy->hold_schedule(self, json)`. It applies on an engine frame once the game
+has its schedule manager. The same mod can replace its schedule. Invalid input preserves
+the previous request; a different mod receives `busy` while the schedule is owned.
+
+Call `academy.release_schedule()` to release it. Mod stop also releases ownership.
+Previously delivered periods stay in the save. Release does not undo a delivery.
+
+[`academy.hold_unlocked_periods`](/reference/academy/#hold_unlocked_periods) optionally
+lists all delivered periods without requiring the previous period's clear. Reopen the
+Exams tab after taking the hold. Release its returned field hold with
+`reflection.release_field`; mod stop restores it too. It changes the configuration's
+menu check and does not fabricate saved results or unlocked-period entries.
+
+Schedule, course, unlock, and local board changes block Nintendo score uploads before
+they apply. That block lasts until the game closes, including after the mod stops.
+Read [`academy.state`](/develop/academy-progress/) to inspect it and the current progress.

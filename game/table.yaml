@@ -28,6 +28,40 @@ identity:
   - {offset: 0x3405610, hash: 0x12E47DB99BCCB5CC}
 
 data:
+  academy_points_session_gate: absent
+  academy_points_provider_gate: absent
+  academy_points_blocked_gate: absent
+  academy_time_session_gate: absent
+  academy_time_provider_gate: absent
+  academy_time_blocked_gate: absent
+  academy_board_apply: absent
+  academy_local_launch_callback_table: absent
+  academy_local_launch_callback_invoke: absent
+  academy_local_retry_callback_table: absent
+  academy_local_retry_callback_invoke: absent
+  academy_local_launch_action: absent
+  academy_score_ready_table: absent
+  academy_score_ready_invoke: absent
+  academy_local_course_details: absent
+  academy_local_course_refresh: absent
+  academy_local_preflight: absent
+  academy_local_provider_gate: absent
+  academy_local_admission_gate: absent
+  academy_local_schedule_refresh: absent
+  academy_local_callback_table: absent
+  academy_local_callback_invoke: absent
+  academy_board_request: absent    # Switch 2 Edition: the schedule manager's request for one course's board, which a board asks with
+  academy_exam_finish_site: absent
+  academy_exam_points_start_site: absent
+  academy_exam_time_start_site: absent
+  academy_menu_update_entry: absent
+  academy_upload_table: absent
+  academy_score_request: absent
+  academy_score_task_update: absent
+  academy_score_response_table: absent
+  academy_score_response_invoke: absent
+  academy_delivery_update: absent
+  academy_delivery_entry: absent
   options_direction_delegate_table: 0x8AA2518   # the function table of the Options menu's Up and Down handler
   options_input_delegate_table: 0x8AA2588       # and of its Confirm and Back handlers
   dialog_answer_yes: 0x93514C0                 # the names the game's dialogs answer with: the first button
@@ -126,6 +160,29 @@ data:
   content_icon_size: 0x935E568
   academy_schedule: absent          # Switch 2 Edition: pointer to the Dandori Academy's schedule manager (what it parsed of DDKStages and DDKHeldInfo)
 constants:
+  academy_points_session_instruction: 0x54000ae1
+  academy_points_provider_instruction: 0x54000a81
+  academy_points_blocked_instruction: 0x37000a4a
+  academy_time_session_instruction: 0x54000181
+  academy_time_provider_instruction: 0x54000121
+  academy_time_blocked_instruction: 0x370000ea
+  academy_local_provider_instruction: 0
+  academy_local_admission_instruction: 0
+  academy_local_idle_phase: 3                   # the course screen's phase while it shows a course's details; the game calls its refresh from it
+  academy_local_refresh_success: 1
+  academy_hook_pac: 0xd503237f
+  academy_board_answered: 1                     # the state of a board request that has its entries
+  academy_status_open: 0
+  academy_status_between_exams: 1
+  academy_status_ended: 2
+  academy_status_upcoming: 3
+  academy_status_unavailable: 4
+  academy_points_rule: 4
+  academy_time_rule: 5
+  academy_exam_start_instruction: 0xfd4013e8
+  academy_exam_finish_instruction: 0xb9402269
+  academy_blocked_result: 0x30141
+  academy_blocked_detail: 0xffffffff
   options_entry_icon: 0                         # the icon a mod entry of the Options menu shows: Play Co-op's
   options_row_pitch: 117                        # the height of one entry of that menu, with its spacing
   options_up_key: 0                             # the Options menu's input map: Up and Down
@@ -517,6 +574,17 @@ rows:
                   AreaSelect_Common_Complete_00]
 
 structs:
+  academy_local_presenter:
+    fields: {widget: absent, phase: absent, busy: absent}
+  academy_local_callback:
+    fields: {target: absent, presenter: absent}
+  academy_local_callback_table:
+    fields: {invoke: {at: absent, returns: void, args: [pointer, pointer]}}
+  academy_local_ready_callback_table:
+    fields: {invoke: {at: absent, returns: void, args: [pointer]}}
+  academy_local_reply:
+    size: absent
+    fields: {state: absent, owned_data: absent}
   options_button: {fields: {look: 0x4D8, look_bytes: 0x15}}   # a menu button's ButtonSize, text place and PresetType (MenuButtonWidget)
   options_presenter: {fields: {input: 0x78, view: 0x80}}   # the title's Options menu presenter: its input map and its widget
   options_view: {fields: {state: 0x4D8, buttons: 0x4F8, count: 0x500, room: 0x504, selected: 0x508}}  # its widget
@@ -800,11 +868,11 @@ structs:
   ui_manager:
     fields: {announcer: 0x2F0,        # what shows the game's announcements
              open_dialog: 0x980,      # the dialog on the screen
-             academy_courses: absent,  # Switch 2 Edition: a sparse_array of academy_course_entry, the Academy's copy of
+             academy_courses: absent, academy_training_courses: absent,  # Switch 2 Edition: a sparse_array of academy_course_entry, the Academy's copy of
                                        # each exam period's row of its course table, made once as the game starts
              academy_data: absent}     # pointer to the Academy's data asset
   academy_data:                     # the Academy's data asset: its tables and limits
-    fields: {test_courses: absent}   # a soft pointer to the table of exam courses; it starts with a weak reference
+    fields: {test_courses: absent, training_courses: absent} # soft pointers to the course tables
   announcer:
     fields: {banner: 0x2C0}           # the banner's widget, once the game has made it
   banner_widget:
@@ -894,7 +962,7 @@ structs:
              more_bits: 0x20,       # or, when not null, the bits are there instead
              bit_count: 0x28}
   academy_schedule:                 # the Academy's schedule manager (Switch 2 Edition), as its download parser fills it
-    fields: {status: absent,         # the download's result: 1 when the schedule loaded
+    fields: {interface: absent, boards: absent, status: absent,         # the download's result: 1 when the schedule loaded
              record: absent,         # the parsed schedule, which the game's period functions read
              valid: absent,          # 1 while the parsed schedule holds
              set: absent,            # array of i32: DDKStages.Set, the exam periods in the order they come out
@@ -914,10 +982,71 @@ structs:
              closed: absent}         # u8: Close
   academy_save:                     # the Academy's save, as the game keeps it while it runs
     fields: {held_ids: absent,       # array of i32: the exam periods delivered to the player
+             opened_ids: absent,     # array of i32: periods the player has opened
+             redo_passes: absent, reserve_passes: absent,
+             dandori_points: absent, dandori_rank: absent, card_rank: absent,
+             exam_results: absent, training_results: absent, # maps keyed by the course's LevelName
              disable_test_guide: absent,  # u8: the player turned the Exams guide off
              update_delivery: absent,     # u8: a delivery waits to be announced
              delivery_text: absent,       # engine string: when the delivered periods came out, %Y-%m-%dT%H:%M:%S.%sZ
              service_end: absent}         # u8: the save is past the end of the service
+  academy_exam_row:
+    fields: {courses: absent}
+  academy_training_row:
+    fields: {course: absent}
+  academy_course:
+    size: absent
+    fields: {level: absent}
+  academy_exam_entry:                # map entry: FName key, DDKTestCaveInfo, hash links
+    size: absent
+    fields: {key: absent, value: absent}
+  academy_training_entry:            # map entry: FName key, DDKTrainingCaveInfo, hash links
+    size: absent
+    fields: {key: absent, value: absent}
+  academy_exam_result:
+    size: absent
+    fields: {practice_score: absent, score: absent, local_score: absent,
+             practice_time: absent, time: absent, local_time: absent,
+             practice_count: absent, count: absent, medal: absent, viewed_medal: absent,
+             local_medal: absent, practice_medal: absent, practice_clear: absent, clear: absent,
+             stamp_rank: absent, stamp_x: absent, stamp_y: absent, stamp_rotation: absent}
+  academy_training_result:
+    size: absent
+    fields: {count: absent, score: absent, medal: absent, clear: absent}
+  academy_sticker_data:
+    fields: {mask_count: absent, color_count: absent}
+  academy_member:                    # one entry of a board, as the game keeps a downloaded one: two engine strings, then numbers
+    size: absent
+    fields: {nickname: absent, id: absent, score: absent, kings: absent, type: absent, color: absent}
+  academy_board_list:                # the manager's element for one course: the course's key, its array of members, its hash link
+    size: absent
+    fields: {key: absent, members: absent, next: absent}
+  academy_board_reply:               # what the board request tells its callback
+    size: absent
+    fields: {state: absent,          # u32: academy_board_answered when the entries are in the manager
+             answered: absent}       # u8: 1 in the reply the game makes from entries it already has
+  academy_chart:
+    fields: {face_enabled: absent}
+  academy_context:
+    fields: {course: absent,
+             board_key: absent, submission_mode: absent}      # i32: the selected course's key among the manager's boards
+  academy_end_report:
+    fields: {score: absent, elapsed: absent, cleared: absent}
+  academy_menu_state:
+    fields: {parent: absent}
+  academy_menu_presenter:
+    fields: {widget: absent}
+  academy_score_task:
+    fields: {phase: absent}
+  academy_upload_job:
+    fields: {result: absent}
+  academy_upload_job_table:
+    fields: {run: absent}
+  academy_upload_result_table:
+    fields: {failed: {at: absent, returns: void, args: [pointer, u32, u32]}}
+  academy_training_course_entry:
+    size: absent
+    fields: {key: absent, row: absent}
   academy_course_entry:              # one entry of the Academy's copy of its course table
     size: absent
     fields: {key: absent,            # the row's name
@@ -1474,6 +1603,17 @@ functions:
   ui_arrow_right: {address: 0x02274D70, args: [pointer]}
   # Switch 2 Edition: the exam periods open now by the schedule (an array of i32), and when the
   # period in effect came out (FDateTime ticks; the second argument is 0). Both read the network clock.
+  # How the game stores a board it downloaded: a new element of the manager's set of boards, a copy of the members
+  # into it, and its place in the set by the course's key, where it takes over from the board that course had.
+  academy_board_slot: {address: absent, returns: engine_slot, args: [pointer]}
+  academy_board_copy: {address: absent, returns: void, args: [pointer, const_pointer, u32]}
+  academy_board_link: {address: absent, returns: void, args: [pointer, u32, pointer, i32]}
+  academy_menu_update_stock: {address: absent, returns: void, args: [pointer, f32]}
+  academy_local_launch_ready: {address: absent, returns: void, args: [pointer, u64]}
+  academy_local_retry_ready: {address: absent, returns: void, args: [pointer]}
+  academy_is_exam: {address: absent, returns: bool, args: [pointer]}
+  academy_upload_stock: {address: absent, returns: void, args: [pointer]}
+  academy_status: {address: absent, returns: i32, args: [pointer]}
   academy_open_periods: {address: absent, returns: engine_array, args: [const_pointer]}
   academy_period_start: {address: absent, returns: i64, args: [const_pointer, u32]}
   ui_post_sound: {address: 0x18d02f0, returns: u64, args: [pointer, const_pointer, u32, u32, bool, bool]}

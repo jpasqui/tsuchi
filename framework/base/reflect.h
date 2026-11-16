@@ -173,6 +173,8 @@ uint64_t default_object(uint64_t type);
 // Memory from the engine's own allocator, and giving it back. Null while the
 // engine has no allocator yet, or has no memory to give.
 void* engine_memory(uint64_t bytes);
+// True after the game has published its allocator and both allocation methods.
+bool engine_allocator_ready();
 void release_engine_memory(void* block);
 
 // Memory for a function's arguments and results, set up as the engine expects.

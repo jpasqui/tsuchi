@@ -42,7 +42,8 @@
   "time",
   "ui",
   "world",
-  "packages"
+  "packages",
+  "academy"
  ],
  "tables": {
   "actor": [
@@ -339,7 +340,8 @@
    "read",
    "cancel_request",
    "release_request",
-   "on_completed"
+   "on_completed",
+   "request"
   ],
   "pikmin": [
    "list",
@@ -557,6 +559,30 @@
    "remove",
    "on_progress",
    "on_finished"
+  ],
+  "academy": [
+   "hold_board",
+   "release_board",
+   "board_state",
+   "state",
+   "period",
+   "window",
+   "period_at",
+   "exam_result",
+   "training_result",
+   "hold_schedule",
+   "release_schedule",
+   "hold_unlocked_periods",
+   "open_board",
+   "hold_score_submissions",
+   "release_score_submissions",
+   "complete_score_submission",
+   "on_score_submission_requested",
+   "on_opened",
+   "on_period_delivered",
+   "on_period_unlocked",
+   "on_exam_finished",
+   "on_exam_started"
   ]
  }
 }

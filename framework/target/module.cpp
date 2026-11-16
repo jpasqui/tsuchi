@@ -351,6 +351,7 @@ extern "C" void tsuchi_initialize() {
 
     if (serves(t::family::audio)) audio_parameters_start(self);
     if (serves(t::family::battle)) battle_start(self);
+    if (serves(t::family::academy)) academy_hooks_start(self);
     if (serves(t::family::actor)) actor_events_start(self);
     if (serves(t::family::ground_contact)) ground_contact_start(self);
     if (serves(t::family::effects)) effects_start(self);

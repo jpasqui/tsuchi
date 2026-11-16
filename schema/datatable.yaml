@@ -167,7 +167,8 @@ functions:
       not_found: "The table no longer exists or isn't a data table, it has no row with that name, or the path doesn't lead to a field."
       invalid: "The row's name or the path isn't valid, or the field isn't an array."
       unsupported: "The array holds structs, or elements of a kind that this service can't make."
-      capacity: "The length is more than 1,000,000."
+      capacity: "The length is more than 1,000,000, or 4,096 retained native array copies are already in use."
+      busy: "Another writer replaced a retained copy's array, or its storage is shared with another destination."
       no_memory: "There is no memory for the new array."
       not_ready: "The game isn't ready."
     completes: override

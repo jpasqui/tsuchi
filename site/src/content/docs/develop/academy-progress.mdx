@@ -1,0 +1,170 @@
+---
+title: Read Academy progress and events
+description: Inspect exam and training records and follow the Academy's native lifecycle.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+The [`academy`](/reference/academy/) service is available in the Switch 2 Edition.
+Other builds return `unsupported`. Before the game has loaded an Academy save,
+reads can return `not_ready`. A course with no saved result returns `not_found`.
+
+Exam course IDs are `period * 6 + course`, with periods `0` to `11` and courses
+`0` to `5`. Training result IDs are `0` to `2`.
+
+## Read progress
+
+`state()` reads the schedule status, delivered and unlocked counts, Redo Passes,
+Dandori Points and ranks, and the Nintendo upload block. `period(false)` reads
+Latest; `period(true)` reads Prev. Use `window(previous, index)` for that period's
+exam windows and `period_at(list, index)` for scheduled, delivered, or unlocked
+period numbers. Indexes start at zero. Dates are seconds since 1970 UTC; JavaScript
+receives these 64-bit integers as `bigint`.
+
+`exam_result(course)` keeps exam, practice, and local scores, times, and medals
+separate. It also reads counts, clear flags, and stamp placement. `training_result`
+reads training's own score, medal, play count, and clear flag. These calls read
+progress without changing it. The result key follows the course's live LevelName.
+
+<Tabs syncKey="language">
+<TabItem label="Lua">
+
+```lua title="main.lua"
+academy.on_opened(function()
+    local state, why = academy.state()
+    if not state then mod.log(why) return end
+    mod.log("Redo Passes: " .. state.redo_passes)
+    local result = academy.exam_result(8)
+    if result then
+        mod.log("Exam: " .. result.high_score .. ", practice: " .. result.practice_high_score)
+    end
+end)
+
+academy.on_exam_started(function(event)
+    mod.log("Started course " .. event.course .. ", timed: " .. tostring(event.timed))
+end)
+academy.on_exam_finished(function(event)
+    mod.log("Attempt: " .. event.score .. ", medal: " .. event.medal)
+end)
+```
+
+</TabItem>
+<TabItem label="JavaScript">
+
+```javascript title="main.js"
+academy.on("opened", () => {
+    try {
+        const state = academy.state();
+        mod.log(`Redo Passes: ${state.redo_passes}`);
+        const result = academy.exam_result(8);
+        mod.log(`Exam: ${result.high_score}, practice: ${result.practice_high_score}`);
+    } catch (error) { mod.log(error.name); }
+});
+academy.on("exam_started", event => {
+    mod.log(`Started course ${event.course}, timed: ${event.timed}`);
+});
+academy.on("exam_finished", event => {
+    mod.log(`Attempt: ${event.score}, medal: ${event.medal}`);
+});
+```
+
+</TabItem>
+<TabItem label="C">
+
+```c title="main.c"
+#include "tsuchi/tsuchi.h"
+
+static const TSUCHI_Host *api;
+static TSUCHI_Mod *owner;
+
+static void opened(void *user, const TSUCHI_AcademyOpened *event) {
+    (void)user;
+    (void)event;
+    TSUCHI_AcademyState state;
+    if (api->academy->state(owner, &state) == TSUCHI_OK && state.schedule_loaded)
+        api->mod->log(owner, "Academy schedule loaded");
+    TSUCHI_AcademyExamResult result;
+    if (api->academy->exam_result(owner, 8, &result) == TSUCHI_OK && result.exam_cleared)
+        api->mod->log(owner, "Course 8 has an exam clear");
+}
+static void started(void *user, const TSUCHI_AcademyExamStarted *event) {
+    (void)user;
+    api->mod->log(owner, event->timed ? "Timed exam started" : "Points exam started");
+}
+static void finished(void *user, const TSUCHI_AcademyExamFinished *event) {
+    (void)user;
+    api->mod->log(owner, event->cleared ? "Attempt cleared" : "Attempt failed");
+}
+TSUCHI_Result tsuchi_mod_start(const TSUCHI_Host *host, TSUCHI_Mod *self) {
+    api = host;
+    owner = self;
+    TSUCHI_Subscription subscription;
+    TSUCHI_Result result = api->academy->on_opened(self, opened, 0, &subscription);
+    if (result != TSUCHI_OK) return result;
+    result = api->academy->on_exam_started(self, started, 0, &subscription);
+    if (result != TSUCHI_OK) return result;
+    return api->academy->on_exam_finished(self, finished, 0, &subscription);
+}
+```
+
+</TabItem>
+</Tabs>
+
+## Follow native events
+
+`opened` fires after the menu reaches the viewport in a visible state. Hiding
+and reopening the same widget emits another event. `period_delivered` and
+`period_unlocked` observe newly added native list entries; loading a save sets
+their baseline without replaying old progress.
+
+`exam_started` observes entry into the exam's native play stage, after course
+selection. Its countdown may still be visible. Cancelling selection emits no
+start. Retrying emits another start. `exam_finished` reports each attempt after
+the native medal calculation, including an attempt that does not improve a
+record. For a timed attempt, the legacy `elapsed` field holds fractional
+remaining seconds and `score` contains whole remaining seconds; higher is better.
+A points attempt has `elapsed` zero because its native report has no clock field.
+Practice and training emit neither event.
+
+Callbacks run on engine frames. Start and finish observations retain native
+order, and switching saves before dispatch discards pending attempts. Subscriptions
+belong to the mod and end on mod stop. Use the attempt event when recording run
+history or submitting to a [community scoreboard](/develop/academy-boards/).
+
+## Handle native score submissions
+
+`hold_score_submissions(course)` routes the game's native submission to your mod
+before the online preflight. Only the owning mod receives
+`score_submission_requested`, synchronously on the engine thread. The game's
+`board_key` and encoded `score` arrive unchanged. Tsuchi does not format JSON,
+choose a file, or write storage on this path.
+
+At native exam start, a held route selects your provider for that attempt. The
+game uses its usual exam record and submission flow. Practice and training keep
+their separate records, and Nintendo account membership is unchanged.
+
+Your mod supplies its backend. This example writes those fields to JSON using
+the ordinary storage API, then acknowledges the native request:
+
+```lua
+academy.on_score_submission_requested(function(event)
+    local json = string.format('{"board_key":%d,"score":%d}\n',
+        event.board_key, event.score)
+    local saved = storage.write("results/" .. event.course .. ".json", json)
+    academy.complete_score_submission(event.request, saved == true)
+end)
+local ok, why = academy.hold_score_submissions(0)
+if not ok then error(why) end
+```
+
+Complete the request before returning from its handler. Pass true only after
+your backend accepts it; for a file, after `storage.write` succeeds. Tsuchi then
+returns the native success or failure response to the game. Missing completion,
+release, mod stop or a save change fails the request. Request handles expire on
+return and cannot be completed asynchronously. Stale handles cannot acknowledge
+another submission.
+
+The score already contains the game's time-course encoding. Do not convert it
+from an attempt's remaining clock. `exam_finished` remains a separate source for
+per-attempt history, medals and remaining time. `release_score_submissions(course)`
+releases the route; Nintendo uploads stay blocked until the process closes.

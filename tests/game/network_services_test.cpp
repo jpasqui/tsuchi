@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include "registry.h"
 #include "frame.h"
 #include "holds.h"
@@ -34,7 +35,21 @@ bool worker_start(){++starts;return !refuse_start;}
 void wake(){++wakes;auto* job=https::https_take_job();assert(job&&job->url[0]&&job->max_bytes);job->state.store(https::HTTPS_QUEUED);}
 uint32_t disposed=0;
 void dispose(https::HttpsJob*){++disposed;}
-const https::WorkerBackend worker{worker_start,dispose,wake};
+uint64_t input_live=0;bool refuse_input=false;
+struct Input {void* pointer;uint64_t bytes;};Input inputs[64]{};
+void* input_allocate(uint64_t bytes){
+ if(refuse_input)return nullptr;
+ for(auto& input:inputs)if(!input.pointer){input={malloc(size_t(bytes)),bytes};assert(input.pointer);input_live+=bytes;return input.pointer;}
+ assert(false);return nullptr;
+}
+void input_free(void* pointer){
+ for(auto& input:inputs)if(input.pointer==pointer){
+  for(uint64_t i=0;i<input.bytes;++i)assert(static_cast<const unsigned char*>(pointer)[i]==0);
+  input_live-=input.bytes;free(pointer);input={};return;
+ }
+ assert(false);
+}
+const https::WorkerBackend worker{worker_start,dispose,wake,input_allocate,input_free};
 uint32_t completion_a=0,completion_b=0;bool stop_on_completion=false;
 TSUCHI_Mod* active=nullptr;
 void completion(void* context,const TSUCHI_NetCompleted*){++*static_cast<uint32_t*>(context);if(stop_on_completion)mod_stop(active);}
@@ -63,8 +78,42 @@ int main(){
  // Failed startup returns its reserved job slot; repeated retries cannot exhaust it.
  refuse_start=true;for(unsigned i=0;i<80;++i)assert(n.get(a,"https://example.org/",32,1000,&request)==TSUCHI_UNSUPPORTED);
  assert(!https::https_take_job()&&wakes==0);refuse_start=false;
- assert(n.get(a,"https://example.org/small",32,1000,&request)==TSUCHI_OK&&wakes==1);TSUCHI_RequestInfo info{};assert(n.request_info(a,request,&info)==TSUCHI_OK&&info.state==TSUCHI_REQUEST_STATE_QUEUED);assert(n.request_info(b,request,&info)==TSUCHI_DENIED);assert(n.read(a,request,0,data,sizeof(data),&size)==TSUCHI_NOT_READY);
- auto* job=https::https_take_job();assert(job);job->body.chunks[0]=const_cast<char*>("captain");job->body.allocated=7;job->received.store(7);job->http_status.store(200);https::https_finish(*job,0);frame(.03f);frame(.03f);assert(completion_a==1&&completion_b==0);assert(n.read(a,request,2,data,3,&size)==TSUCHI_OK&&size==3&&memcmp(data,"pta",3)==0);assert(n.request_info(a,request,&info)==TSUCHI_OK&&strcmp(info.failure,"")==0);assert(n.release_request(a,request)==TSUCHI_OK);assert(n.request_info(a,request,&info)==TSUCHI_NOT_FOUND);
+ // Inputs are validated before workers start, copied synchronously, and retained
+ // after cancellation until a running worker publishes its terminal state.
+ const auto initial_starts=starts;
+ const char* bad_headers[]={"Host: example.org\r\n","Content-Length: 8\r\n","Transfer-Encoding: chunked\r\n","Authorization: token\nInjected: yes\r\n","A: one\r\na: two\r\n","X: yes\r\n\r\n"," X: yes\r\n","X: yes"};
+ for(const char* bad:bad_headers)
+  assert(n.request(a,TSUCHI_HTTP_METHOD_POST,"https://example.org/",bad,"{}",2,32,1000,&request)==TSUCHI_INVALID);
+ assert(n.request(a,99,"https://example.org/","",nullptr,0,32,1000,&request)==TSUCHI_INVALID);
+ assert(n.request(a,TSUCHI_HTTP_METHOD_GET,"https://example.org/","","x",1,32,1000,&request)==TSUCHI_INVALID);
+ assert(n.request(a,TSUCHI_HTTP_METHOD_POST,"https://example.org/","","x",65537,32,1000,&request)==TSUCHI_INVALID);
+ char many[400]{};uint32_t many_bytes=0;for(unsigned i=0;i<33;++i)many_bytes+=uint32_t(snprintf(many+many_bytes,sizeof many-many_bytes,"X%u: v\r\n",i));
+ assert(n.request(a,TSUCHI_HTTP_METHOD_POST,"https://example.org/",many,nullptr,0,32,1000,&request)==TSUCHI_INVALID);
+ char huge[8194];memset(huge,'x',sizeof huge);huge[sizeof huge-1]=0;
+ assert(n.request(a,TSUCHI_HTTP_METHOD_POST,"https://example.org/",huge,nullptr,0,32,1000,&request)==TSUCHI_INVALID);
+ assert(starts==initial_starts&&!input_live);
+ refuse_input=true;
+ for(unsigned i=0;i<80;++i)assert(n.request(a,TSUCHI_HTTP_METHOD_PUT,"https://example.org/profile","Content-Type: application/json\r\n","{}",2,32,1000,&request)==TSUCHI_NO_MEMORY);
+ assert(!https::https_take_job()&&!input_live);refuse_input=false;
+ char headers[]="Authorization: Bearer private\r\nContent-Type: application/json\r\n";
+ char payload[]={'{',0,'}'};char url[]="https://example.org/run";
+ assert(n.request(a,TSUCHI_HTTP_METHOD_POST,url,headers,payload,sizeof payload,32,1000,&request)==TSUCHI_OK);
+ const auto copied_bytes=strlen(headers)+1+sizeof payload;
+ auto* upload=https::https_take_job();assert(upload&&input_live==copied_bytes&&upload->method==https::HTTPS_POST&&upload->same_origin_redirects);
+ memset(headers,'x',sizeof headers-1);memset(payload,'y',sizeof payload);memset(url,'z',sizeof url-1);
+ assert(!strcmp(upload->url,"https://example.org/run")&&!strcmp(upload->headers,"Authorization: Bearer private\r\nContent-Type: application/json\r\n"));
+ assert(upload->upload_bytes==3&&!memcmp(upload->upload,"{\0}",3));
+ TSUCHI_RequestInfo denied_info{};assert(n.request_info(b,request,&denied_info)==TSUCHI_DENIED);
+ assert(n.release_request(b,request)==TSUCHI_DENIED&&input_live==copied_bytes);
+ assert(n.release_request(a,request)==TSUCHI_OK&&https::https_stopped(*upload)&&input_live==copied_bytes);
+ assert(!memcmp(upload->upload,"{\0}",3));https::https_finish(*upload,0);frame(.03f);
+ assert(!input_live&&completion_a==0&&completion_b==0);
+ // Queued cancellation can free the copy immediately; slot reuse resets all inputs.
+ assert(n.request(a,TSUCHI_HTTP_METHOD_PUT,"https://example.org/profile","","{}",2,32,1000,&request)==TSUCHI_OK);
+ assert(input_live==3&&n.release_request(a,request)==TSUCHI_OK&&!input_live);
+ const auto uploaded_wakes=wakes;
+ assert(n.get(a,"https://example.org/small",32,1000,&request)==TSUCHI_OK&&wakes==uploaded_wakes+1);TSUCHI_RequestInfo info{};assert(n.request_info(a,request,&info)==TSUCHI_OK&&info.state==TSUCHI_REQUEST_STATE_QUEUED);assert(n.request_info(b,request,&info)==TSUCHI_DENIED);assert(n.read(a,request,0,data,sizeof(data),&size)==TSUCHI_NOT_READY);
+ auto* job=https::https_take_job();assert(job&&job->method==https::HTTPS_GET&&!job->headers[0]&&!job->upload&&!job->upload_bytes&&!job->same_origin_redirects);job->body.chunks[0]=const_cast<char*>("captain");job->body.allocated=7;job->received.store(7);job->http_status.store(200);https::https_finish(*job,0);frame(.03f);frame(.03f);assert(completion_a==1&&completion_b==0);assert(n.read(a,request,2,data,3,&size)==TSUCHI_OK&&size==3&&memcmp(data,"pta",3)==0);assert(n.request_info(a,request,&info)==TSUCHI_OK&&strcmp(info.failure,"")==0);assert(n.release_request(a,request)==TSUCHI_OK);assert(n.request_info(a,request,&info)==TSUCHI_NOT_FOUND);
  assert(n.get(a,"http://example.org/",10,100,&request)==TSUCHI_INVALID);assert(n.get(a,"https://example.org/",10,100,&request)==TSUCHI_OK);assert(n.cancel_request(a,request)==TSUCHI_OK);frame(.03f);assert(completion_a==2);assert(n.request_info(a,request,&info)==TSUCHI_OK&&info.state==TSUCHI_REQUEST_STATE_CANCELLED);assert(n.release_request(a,request)==TSUCHI_OK);
  assert(n.get(a,"https://cancel.example/",10,100,&request)==TSUCHI_OK);job=https::https_take_job();assert(job);assert(n.cancel_request(a,request)==TSUCHI_OK&&https::https_stopped(*job));assert(n.request_info(a,request,&info)==TSUCHI_OK&&info.state==TSUCHI_REQUEST_STATE_RUNNING);https::https_finish(*job,0);frame(.03f);assert(n.request_info(a,request,&info)==TSUCHI_OK&&info.state==TSUCHI_REQUEST_STATE_CANCELLED);assert(n.release_request(a,request)==TSUCHI_OK);completion_a=2;
  assert(n.get(a,"https://wrong.example/",10,100,&request)==TSUCHI_OK);job=https::https_take_job();assert(job);https::https_finish(*job,https::HTTPS_ERROR_TLS);frame(.03f);assert(completion_a==3);assert(n.request_info(a,request,&info)==TSUCHI_OK&&strcmp(info.failure,"io")==0);assert(n.release_request(a,request)==TSUCHI_OK);
@@ -74,7 +123,7 @@ int main(){
  assert(s.join(a,"127.0.0.1",47801,"Oatchi")==TSUCHI_OK);assert(s.info(a,&session_info)==TSUCHI_OK&&session_info.state==TSUCHI_SESSION_STATE_JOINING);assert(s.leave(a)==TSUCHI_OK);
  set_thread_probe(thread);note_game_thread();token=2;const uint32_t before=closes;assert(n.close(a,socket)==TSUCHI_INVALID);assert(s.open_channel(a,1)==TSUCHI_INVALID);assert(closes==before);token=1;
  // Terminal work that finishes after stop must release storage without events.
- assert(n.get(a,"https://late.example/",10,100,&request)==TSUCHI_OK);job=https::https_take_job();assert(job);const uint32_t previous=disposed;mod_stop(a);assert(https::https_stopped(*job));assert(closes==before+1);https::https_finish(*job,0);frame(.03f);assert(disposed==previous+1&&completion_a==3);assert(n.status(a,&status)==TSUCHI_INVALID);
+ assert(n.request(a,TSUCHI_HTTP_METHOD_POST,"https://late.example/","Authorization: Bearer token\r\n","score",5,10,100,&request)==TSUCHI_OK);job=https::https_take_job();assert(job);const uint32_t previous=disposed;const auto before_stop_input=input_live;mod_stop(a);assert(https::https_stopped(*job)&&before_stop_input&&input_live==before_stop_input&&!memcmp(job->upload,"score",5));assert(closes==before+1);https::https_finish(*job,0);frame(.03f);assert(disposed==previous+1&&completion_a==3&&!input_live);assert(n.status(a,&status)==TSUCHI_INVALID);
  mod_stop(b);assert(closes==before+2);
  // Every per-mod counted socket and request limit is restored on stop.
  auto* c=mod_create("capacity.mod");for(uint32_t i=0;i<16;++i)assert(n.udp_open(c,0,false,&socket)==TSUCHI_OK);assert(n.udp_open(c,0,false,&socket)==TSUCHI_CAPACITY);for(uint32_t i=0;i<8;++i)assert(n.get(c,"https://example.org/",10,100,&request)==TSUCHI_OK);assert(n.get(c,"https://example.org/",10,100,&request)==TSUCHI_CAPACITY);assert(s.open_channel(c,1)==TSUCHI_OK);assert(s.host(c,47809,2,"Captain")==TSUCHI_OK);mod_stop(c);assert(s.info(mod_create("observer.mod"),&session_info)==TSUCHI_OK&&session_info.state==TSUCHI_SESSION_STATE_NONE);

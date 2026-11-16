@@ -10,6 +10,40 @@ identity:
 - offset: 54633456
   hash: 17676423334391457610
 data:
+  academy_points_session_gate: 0x36765e8
+  academy_points_provider_gate: 0x36765f4
+  academy_points_blocked_gate: 0x36765fc
+  academy_time_session_gate: 0x367a7c8
+  academy_time_provider_gate: 0x367a7d4
+  academy_time_blocked_gate: 0x367a7dc
+  academy_board_apply: 0x39318c0
+  academy_local_launch_callback_table: 0x76c0958
+  academy_local_launch_callback_invoke: 0x3c6d210
+  academy_local_retry_callback_table: 0x76c0640
+  academy_local_retry_callback_invoke: 0x3c6bd40
+  academy_local_launch_action: 0x800e9c8
+  academy_score_ready_table: 0x75d02a8
+  academy_score_ready_invoke: 0x3683f00
+  academy_local_course_details: 0x3c57a30
+  academy_local_course_refresh: 0x3c57200
+  academy_local_preflight: 0x364cea0
+  academy_local_provider_gate: 0x3c581e4
+  academy_local_admission_gate: 0x3c56d88
+  academy_local_schedule_refresh: 0x37355e0
+  academy_local_callback_table: 0x76c07f0
+  academy_local_callback_invoke: 0x3c6c720
+  academy_board_request: 0x37392b0
+  academy_exam_finish_site: 0x377c95c
+  academy_exam_points_start_site: 0x3675804
+  academy_exam_time_start_site: 0x3679690
+  academy_menu_update_entry: 0x76c87c0
+  academy_upload_table: 0x75e2c50
+  academy_score_request: 0x3739960
+  academy_score_task_update: 0x36750f0
+  academy_score_response_table: 0x75d02f0
+  academy_score_response_invoke: 0x36840d0
+  academy_delivery_update: 0x3735e90
+  academy_delivery_entry: 0x3736a2c
   options_direction_delegate_table: absent
   options_input_delegate_table: absent
   dialog_answer_yes: absent
@@ -96,6 +130,29 @@ data:
   gimmick_warp_stage_function: 52996080
   content_icon_size: 134350656
 constants:
+  academy_points_session_instruction: 0x54000ae1
+  academy_points_provider_instruction: 0x54000a81
+  academy_points_blocked_instruction: 0x37000a4a
+  academy_time_session_instruction: 0x54000181
+  academy_time_provider_instruction: 0x54000121
+  academy_time_blocked_instruction: 0x370000ea
+  academy_local_provider_instruction: 0x36000328
+  academy_local_admission_instruction: 0x36000a60
+  academy_local_idle_phase: 3
+  academy_local_refresh_success: 1
+  academy_hook_pac: 0xd503237f
+  academy_board_answered: 1
+  academy_status_open: 0
+  academy_status_between_exams: 1
+  academy_status_ended: 2
+  academy_status_upcoming: 3
+  academy_status_unavailable: 4
+  academy_points_rule: 4
+  academy_time_rule: 5
+  academy_exam_start_instruction: 0xfd4013e8
+  academy_exam_finish_instruction: 0xb9402269
+  academy_blocked_result: 0x30141
+  academy_blocked_detail: 0xffffffff
   options_entry_icon: 0
   options_row_pitch: 117
   options_up_key: 0
@@ -293,6 +350,17 @@ constants:
   effect_spawn_blocked: 2097664
   ui_keyboard_characters: 31
 structs:
+  academy_local_presenter:
+    fields: {widget: 0x80, phase: 0xcb, busy: 0x73}
+  academy_local_callback:
+    fields: {target: 32, presenter: 8}
+  academy_local_callback_table:
+    fields: {invoke: 48}
+  academy_local_ready_callback_table:
+    fields: {invoke: 48}
+  academy_local_reply:
+    size: 40
+    fields: {state: 0, owned_data: 24}
   options_button: {fields: {look: absent, look_bytes: absent}}
   options_presenter: {fields: {input: absent, view: absent}}
   game_menu_presenter: {fields: {view: absent}}
@@ -307,6 +375,8 @@ structs:
   title_handler: {fields: {key: absent, instance: absent, kind: absent, presenter_index: absent, presenter_serial: absent, function: absent, zero: absent}}
   academy_schedule:
     fields:
+      interface: 16
+      boards: 0x250
       status: 72
       record: 672
       valid: 680
@@ -328,11 +398,70 @@ structs:
       closed: 53
   academy_save:
     fields:
+      opened_ids: 488
+      redo_passes: 632
+      reserve_passes: 636
+      dandori_points: 268
+      dandori_rank: 256
+      card_rank: 260
+      exam_results: 360
+      training_results: 280
       held_ids: 504
       disable_test_guide: 545
       update_delivery: 576
       delivery_text: 584
       service_end: 952
+  academy_exam_row:
+    fields: {courses: 32}
+  academy_training_row:
+    fields: {course: 64}
+  academy_course:
+    size: 280
+    fields: {level: 0}
+  academy_exam_entry:
+    size: 136
+    fields: {key: 0, value: 8}
+  academy_training_entry:
+    size: 32
+    fields: {key: 0, value: 8}
+  academy_exam_result:
+    size: 120
+    fields: {practice_score: 0, score: 4, local_score: 8, practice_time: 12, time: 16, local_time: 20, practice_count: 24, count: 28, medal: 32, viewed_medal: 36, local_medal: 40, practice_medal: 44, practice_clear: 48, clear: 49, stamp_rank: 52, stamp_x: 56, stamp_y: 60, stamp_rotation: 64}
+  academy_training_result:
+    size: 16
+    fields: {count: 0, score: 4, medal: 8, clear: 12}
+  academy_sticker_data:
+    fields: {mask_count: 0x1780, color_count: 0x1508}
+  academy_member:
+    size: 80
+    fields: {nickname: 0, id: 16, score: 32, kings: 36, type: 40, color: 44}
+  academy_board_list:
+    size: 32
+    fields: {key: 0, members: 8, next: 24}
+  academy_board_reply:
+    size: 48
+    fields: {state: 0, answered: 40}
+  academy_chart:
+    fields: {face_enabled: 0x748}
+  academy_context:
+    fields: {course: 0xb70, board_key: 0xc78, submission_mode: 0xca8}
+  academy_end_report:
+    fields: {score: 0x14, elapsed: 0x20, cleared: 0xa}
+  academy_menu_state:
+    fields: {parent: 0x78}
+  academy_menu_presenter:
+    fields: {widget: 0x80}
+  academy_score_task:
+    fields: {phase: 0x4}
+  academy_upload_job:
+    fields: {result: 8}
+  academy_upload_job_table:
+    fields: {run: 24}
+  academy_upload_result_table:
+    fields: {failed: 24}
+  academy_training_course_entry:
+    size: 360
+    fields: {key: 0, row: 8}
   academy_course_entry:
     size: 64
     fields:
@@ -666,11 +795,13 @@ structs:
       text: 1416
   academy_data:
     fields:
+      training_courses: 56
       test_courses: 96
   ui_manager:
     fields:
       open_dialog: absent
       academy_data: 6000
+      academy_training_courses: 5504
       academy_courses: 5584
       announcer: 840
   announcer:
@@ -1788,6 +1919,15 @@ functions:
   ui_arrow_left: 59306432
   ui_arrow_right: 59306512
   ui_post_sound: 6162000
+  academy_board_slot: 0x3748970
+  academy_board_copy: 0x37490f0
+  academy_board_link: 0x3748ba0
+  academy_menu_update_stock: 0x3c77180
+  academy_local_launch_ready: 0x3c582a0
+  academy_local_retry_ready: 0x3c58130
+  academy_is_exam: 0x10de0b0
+  academy_upload_stock: 0x3745620
+  academy_status: 57892032
   academy_open_periods: 57872448
   academy_period_start: 57873600
   ui_context_world: 2909680
