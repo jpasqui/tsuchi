@@ -19,6 +19,7 @@
 #include "ai_file.h"
 #include "added.h"
 #include "callable_thunks.h"
+#include "blueprint_motions.h"
 #include "clips.h"
 #include "engine_call.h"
 #include "fake_engine.h"
@@ -1966,6 +1967,89 @@ void registers_anew(uint64_t mesh) {
     motion.looping = (bits & kSavedLooping) != 0, motion.playing = (bits & kSavedPlaying) != 0;
     motion.position = fake::get<float>(mesh + kSavedPositionAt), motion.rate = fake::get<float>(mesh + kSavedRateAt);
 }
+// The made-up game's own animation blueprints: state machines by name, each playing a motion, a move motion and a
+// speed, set through the blueprint's own functions. What those functions were asked, in order.
+uint64_t choreography_class = 0, choreography_table = 0;
+std::string blueprint_log;
+std::map<uint64_t, std::vector<std::u16string>> choreographed; // the machines of each mesh's blueprint, to make it anew
+bool blueprint_eases = false; // a kind of blueprint that goes half of the way to a speed each time it is given one
+uint64_t named(const std::u16string& text) { return text.empty() ? 0 : fake::engine_name(const_cast<char16_t*>(text.data()), text.size(), 1); }
+std::string text_of(uint64_t name) {
+    char text[64] = "?";
+    if (!name) return "None";
+    tsuchi::game::name_text(tsuchi::game::Name{uint32_t(name), uint32_t(name >> 32)}, text, sizeof text);
+    return text;
+}
+uint64_t blueprint_entry(uint64_t blueprint, uint64_t machine) {
+    const uint64_t list = blueprint + t::motion_blueprint::motions, slots = fake::get<uint64_t>(list + t::row_list::slots);
+    const uint32_t used = fake::get<uint32_t>(list + t::row_list::used_bits);
+    for (int32_t i = 0; i < fake::get<int32_t>(list + t::row_list::slot_count); ++i) {
+        const uint64_t entry = slots + uint64_t(i) * t::motion_entry::size;
+        if (used >> i & 1 && fake::get<uint64_t>(entry + t::motion_entry::state_machine) == machine) return entry;
+    }
+    return 0;
+}
+void blueprint_set_motion(void* blueprint, uint64_t motion, uint64_t machine) {
+    blueprint_log += "motion:" + text_of(machine) + "=" + text_of(motion) + " ";
+    if (const uint64_t at = blueprint_entry(reinterpret_cast<uint64_t>(blueprint), machine)) fake::put(at + t::motion_entry::motion, motion);
+}
+void blueprint_set_move(void* blueprint, uint64_t motion) {
+    blueprint_log += "move:" + text_of(motion) + " ";
+    fake::put(reinterpret_cast<uint64_t>(blueprint) + t::motion_blueprint::move_motion, motion);
+}
+void blueprint_set_speed(void* blueprint, float speed) {
+    const uint64_t at = reinterpret_cast<uint64_t>(blueprint) + t::motion_blueprint::speed;
+    char text[32];
+    std::snprintf(text, sizeof text, "speed:%g ", double(speed));
+    blueprint_log += text;
+    fake::put<float>(at, blueprint_eases ? fake::get<float>(at) + (speed - fake::get<float>(at)) / 2 : speed);
+}
+// Gives a skeletal mesh a blueprint of the game's own: each machine plays Wait, its move motion is Stand and its speed
+// 0. Its list of machines keeps a free slot ahead of them, as a set that has lost an element does.
+uint64_t choreograph(uint64_t mesh, const std::vector<std::u16string>& machines) {
+    const uint64_t blueprint = fake::object(u"Dance", choreography_class, 0xA0);
+    fake::put(blueprint, choreography_table);
+    const uint64_t list = blueprint + t::motion_blueprint::motions;
+    const int32_t slots = int32_t(machines.size()) + 1;
+    const uint64_t data = fake::memory(size_t(slots) * t::motion_entry::size);
+    uint32_t used = 0;
+    for (size_t i = 0; i < machines.size(); ++i) {
+        const uint64_t entry = data + (i + 1) * t::motion_entry::size;
+        fake::put(entry + t::motion_entry::state_machine, named(machines[i]));
+        fake::put(entry + t::motion_entry::motion, named(u"Wait"));
+        used |= 1u << (i + 1);
+    }
+    fake::put(list + t::row_list::slots, data);
+    fake::put<int32_t>(list + t::row_list::slot_count, slots);
+    fake::put<int32_t>(list + t::row_list::bit_count, slots);
+    fake::put<int32_t>(list + t::row_list::free_count, 1);
+    fake::put<uint32_t>(list + t::row_list::used_bits, used);
+    fake::put(blueprint + t::motion_blueprint::move_motion, named(u"Stand"));
+    fake::put<float>(blueprint + t::motion_blueprint::speed, 0);
+    fake::put(mesh + t::skeletal_mesh::blueprint, blueprint);
+    choreographed[mesh] = machines;
+    return blueprint;
+}
+// As the engine does: a mesh that plays one clip runs no blueprint, and one that is animated by its blueprint again
+// runs a new one, from its first state.
+void blueprint_for_mode(uint64_t mesh, uint8_t mode) {
+    const auto machines = choreographed.find(mesh);
+    if (machines == choreographed.end()) return;
+    if (mode != t::constant::animation_by_blueprint) fake::put<uint64_t>(mesh + t::skeletal_mesh::blueprint, 0);
+    else if (!fake::get<uint64_t>(mesh + t::skeletal_mesh::blueprint)) choreograph(mesh, std::vector<std::u16string>(machines->second));
+}
+void install_choreography(uint64_t anything) {
+    choreography_class = fake::object(u"Choreography", w.root);
+    fake::set_super(choreography_class, anything);
+    choreography_table = fake::memory(0x80);
+    fake::put(choreography_table + t::object_vtable::process_event, &fake::engine_process);
+    fake::put(choreography_table + t::motion_blueprint_table::set_motion.offset, &blueprint_set_motion);
+    fake::put(choreography_table + t::motion_blueprint_table::set_move_motion.offset, &blueprint_set_move);
+    fake::put(choreography_table + t::motion_blueprint_table::set_speed.offset, &blueprint_set_speed);
+    for (auto function : {reinterpret_cast<uint64_t>(&blueprint_set_motion), reinterpret_cast<uint64_t>(&blueprint_set_move),
+                          reinterpret_cast<uint64_t>(&blueprint_set_speed)})
+        fake::code().push_back(function);
+}
 std::map<uint64_t, int32_t> slots_of; // how many material slots each mesh has
 constexpr int32_t kOverridesAt = 0x80;
 bool engine_starves_after_counting = false;
@@ -2180,6 +2264,7 @@ void install_parts() {
         Motion& motion = motions[object];
         motion.clip = fake::get<uint64_t>(arguments), motion.looping = fake::get<uint8_t>(arguments + 8) != 0, motion.playing = true, motion.position = 0;
         fake::put<uint8_t>(object + kAnimationModeAt, uint8_t(t::constant::animation_single));
+        blueprint_for_mode(object, uint8_t(t::constant::animation_single));
         part_log += "play:" + part_name(motion.clip) + (motion.looping ? "+loop " : " ");
         if (engine_starves_after_playing) fake::engine().out_of_memory = true;
     });
@@ -2188,6 +2273,7 @@ void install_parts() {
     const uint64_t mode = fake::function(skeletal_class, function_class, u"SetAnimationMode", 1, 1, [](uint64_t object, uint64_t arguments) {
         const uint8_t wanted = fake::get<uint8_t>(arguments);
         fake::put<uint8_t>(object + kAnimationModeAt, wanted);
+        blueprint_for_mode(object, wanted);
         if (wanted == t::constant::animation_by_blueprint) motions.erase(object);
         part_log += "mode" + std::to_string(wanted) + ":" + part_name(object) + " ";
     });
@@ -2215,6 +2301,7 @@ void install_parts() {
         fake::put<uint8_t>(arguments, motions[object].playing);
     });
     fake::flag(fake::bit_field(going, u"ReturnValue", 0, 0, 0xFF), kResult);
+    install_choreography(anything);
 }
 
 void parts() {
@@ -6097,6 +6184,219 @@ void animating() {
     fake::destroy(wing);
     tsuchi::frame(0.03f);
     CHECK(tsuchi::clip_holds() == 0 && tsuchi::owned_count(mod) == owned && log_is(""));
+}
+
+// ---- Motions of the game's own animation blueprints --------------------------------------------
+
+struct HeardMotion {
+    uint64_t mesh;
+    std::string machine, motion, previous;
+};
+std::vector<HeardMotion> heard_motions;
+void on_motion_changed(void*, const TSUCHI_AnimationMotionChanged* event) {
+    heard_motions.push_back({event->component.id, event->state_machine, event->motion, event->previous});
+}
+void on_move_motion_changed(void*, const TSUCHI_AnimationMoveMotionChanged* event) {
+    heard_motions.push_back({event->component.id, "", event->motion, event->previous});
+}
+
+void blueprint_motions() {
+    namespace a = t::game_actor;
+    const TSUCHI_AnimationService& anim = *tsuchi::host.animation;
+    const auto part = [](uint64_t object) { return TSUCHI_Component{to_handle(object)}; };
+    const auto skeletal_part = [](const std::u16string& name, uint64_t parent, uint64_t owner) {
+        const uint64_t mesh = fake::engine_object(name, skeletal_class, 0x100);
+        fake::put(mesh + t::scene_component::owner, owner);
+        fake::put<uint8_t>(mesh + kAnimationModeAt, uint8_t(t::constant::animation_by_blueprint));
+        saved_by_default(mesh);
+        attach_under(parent, mesh);
+        parts_of[owner].push_back(mesh);
+        return mesh;
+    };
+    const auto log_is = [](const std::string& expected) {
+        const bool same = blueprint_log == expected;
+        if (!same) std::printf("  blueprint log: [%s]\n", blueprint_log.c_str());
+        blueprint_log.clear();
+        return same;
+    };
+    char text[64];
+    uint64_t needed = 0;
+    const auto motion_is = [&](TSUCHI_Mod* asking, uint64_t mesh, const char* machine, const std::string& expected) {
+        std::snprintf(text, sizeof text, "untouched");
+        return anim.motion(asking, part(mesh), machine, text, sizeof text, &needed) == TSUCHI_OK && text == expected && needed == expected.size() + 1;
+    };
+    const auto move_is = [&](uint64_t mesh, const std::string& expected) {
+        return anim.move_motion(mod, part(mesh), text, sizeof text, &needed) == TSUCHI_OK && text == expected;
+    };
+    const auto speed_of = [&](uint64_t mesh) {
+        float speed = -1;
+        return anim.speed(mod, part(mesh), &speed) == TSUCHI_OK ? speed : -1.0f;
+    };
+    const uint32_t owned = tsuchi::owned_count(mod);
+
+    // A performer whose body runs a blueprint of the game's own, with a tail that runs another and a hat with no skeleton.
+    const uint64_t performer = tabled(table_a(), u"Performer", u"Performer", 0, 0);
+    registers(performer);
+    const uint64_t root = fake::get<uint64_t>(performer + a::root);
+    fake::put(root + t::scene_component::owner, performer);
+    parts_of[performer].push_back(root);
+    const uint64_t body = skeletal_part(u"Body", root, performer), tail = skeletal_part(u"Tail", root, performer);
+    const uint64_t plain = skeletal_part(u"Plain", root, performer); // animated by a blueprint that is not the game's own kind
+    const uint64_t hat = fake::engine_object(u"Hat", mesh_class, 0x100);
+    fake::put(hat + t::scene_component::owner, performer);
+    choreograph(body, {u"Default", u"UpperSM", u"FacialSM"});
+    choreograph(tail, {u"Default", u"TailSM"});
+    fake::put(plain + t::skeletal_mesh::blueprint, fake::object(u"OtherBlueprint", w.component_class, 0xA0));
+    fake::put(performer + a::body, body);
+    blueprint_log.clear();
+
+    // What is read, and what cannot be.
+    CHECK(anim.state_machines(mod, part(body), text, sizeof text, &needed) == TSUCHI_OK && needed == 26 &&
+          std::memcmp(text, "Default\0UpperSM\0FacialSM\0", 26) == 0);
+    CHECK(anim.state_machines(mod, part(body), text, 10, &needed) == TSUCHI_CAPACITY && needed == 26);
+    CHECK(motion_is(mod, body, "Default", "Wait") && motion_is(mod, body, "UpperSM", "Wait") && move_is(body, "Stand") && speed_of(body) == 0);
+    fake::put<uint64_t>(blueprint_entry(fake::get<uint64_t>(body + t::skeletal_mesh::blueprint), named(u"FacialSM")) + t::motion_entry::motion, 0);
+    CHECK(motion_is(mod, body, "FacialSM", "")); // a machine that plays no motion
+    CHECK(anim.motion(mod, part(body), "StemSM", text, sizeof text, &needed) == TSUCHI_NOT_FOUND && anim.motion(mod, part(body), "", text, sizeof text, &needed) == TSUCHI_NOT_FOUND);
+    float speed = 0;
+    for (uint64_t refused : {hat, plain}) {
+        CHECK(anim.state_machines(mod, part(refused), text, sizeof text, &needed) == TSUCHI_UNSUPPORTED &&
+              anim.motion(mod, part(refused), "Default", text, sizeof text, &needed) == TSUCHI_UNSUPPORTED &&
+              anim.move_motion(mod, part(refused), text, sizeof text, &needed) == TSUCHI_UNSUPPORTED && anim.speed(mod, part(refused), &speed) == TSUCHI_UNSUPPORTED &&
+              anim.hold_motion(mod, part(refused), "Default", "Run") == TSUCHI_UNSUPPORTED && anim.hold_move_motion(mod, part(refused), "Run") == TSUCHI_UNSUPPORTED &&
+              anim.hold_speed(mod, part(refused), 1) == TSUCHI_UNSUPPORTED);
+    }
+    const TSUCHI_Component gone{to_handle(body) ^ 1};
+    CHECK(anim.motion(mod, gone, "Default", text, sizeof text, &needed) == TSUCHI_NOT_FOUND && anim.hold_motion(mod, gone, "Default", "Run") == TSUCHI_NOT_FOUND &&
+          anim.hold_speed(mod, gone, 1) == TSUCHI_NOT_FOUND && anim.release_motion(mod, gone, "Default") == TSUCHI_NOT_FOUND &&
+          anim.state_machines(mod, part(performer), text, sizeof text, &needed) == TSUCHI_NOT_FOUND); // an actor is no part
+    CHECK(anim.hold_motion(mod, part(body), "StemSM", "Run") == TSUCHI_NOT_FOUND && anim.hold_motion(mod, part(body), "Default", std::string(2000, 'x').c_str()) == TSUCHI_INVALID &&
+          anim.hold_speed(mod, part(body), std::nanf("")) == TSUCHI_INVALID && anim.release_motion(mod, part(body), "Default") == TSUCHI_NOT_FOUND &&
+          anim.release_move_motion(mod, part(body)) == TSUCHI_NOT_FOUND && anim.release_speed(mod, part(body)) == TSUCHI_NOT_FOUND && log_is("") &&
+          tsuchi::motion_holds() == 0 && tsuchi::owned_count(mod) == owned);
+
+    // A state machine held: set through the blueprint's own function, and read back.
+    CHECK(anim.hold_motion(mod, part(body), "UpperSM", "Throw") == TSUCHI_OK && log_is("motion:UpperSM=Throw ") && motion_is(mod, body, "UpperSM", "Throw") &&
+          motion_is(mod, body, "Default", "Wait") && tsuchi::motion_holds() == 1 && tsuchi::owned_count(mod) == owned + 1);
+    // Held again: the mod changes its one hold. Another mod is refused, and cannot let go of it.
+    TSUCHI_Mod* rival = tsuchi::mod_create("anim.rival");
+    CHECK(anim.hold_motion(mod, part(body), "UpperSM", "Wave") == TSUCHI_OK && log_is("motion:UpperSM=Wave ") && tsuchi::motion_holds() == 1 &&
+          tsuchi::owned_count(mod) == owned + 1);
+    CHECK(anim.hold_motion(rival, part(body), "UpperSM", "Point") == TSUCHI_BUSY && anim.release_motion(rival, part(body), "UpperSM") == TSUCHI_NOT_FOUND && log_is("") &&
+          motion_is(rival, body, "UpperSM", "Wave"));
+    // Another machine of the same mesh is another hold, which the rival may take.
+    CHECK(anim.hold_motion(rival, part(body), "Default", "Run") == TSUCHI_OK && log_is("motion:Default=Run ") && tsuchi::motion_holds() == 2);
+    // Kept: the game sets another motion, and the next frame sets the held one again.
+    const uint64_t blueprint = fake::get<uint64_t>(body + t::skeletal_mesh::blueprint);
+    tsuchi::frame(0.03f);
+    CHECK(log_is("") && motion_is(mod, body, "UpperSM", "Wave"));
+    blueprint_set_motion(reinterpret_cast<void*>(blueprint), named(u"Point"), named(u"UpperSM"));
+    blueprint_log.clear();
+    tsuchi::frame(0.03f);
+    CHECK(log_is("motion:UpperSM=Wave ") && motion_is(mod, body, "UpperSM", "Wave"));
+    // Released: the machine plays what the game last set.
+    CHECK(anim.release_motion(mod, part(body), "UpperSM") == TSUCHI_OK && log_is("motion:UpperSM=Point ") && motion_is(mod, body, "UpperSM", "Point") &&
+          anim.release_motion(mod, part(body), "UpperSM") == TSUCHI_NOT_FOUND && tsuchi::motion_holds() == 1 && tsuchi::owned_count(mod) == owned);
+    // What the game set after the hold's last frame is left as the game set it.
+    CHECK(anim.hold_motion(mod, part(body), "UpperSM", "Wave") == TSUCHI_OK);
+    blueprint_set_motion(reinterpret_cast<void*>(blueprint), named(u"Cheer"), named(u"UpperSM"));
+    blueprint_log.clear();
+    CHECK(anim.release_motion(mod, part(body), "UpperSM") == TSUCHI_OK && log_is("") && motion_is(mod, body, "UpperSM", "Cheer"));
+    // An empty name stops a machine's motion, as the game does.
+    CHECK(anim.hold_motion(mod, part(body), "UpperSM", "") == TSUCHI_OK && log_is("motion:UpperSM=None ") && motion_is(mod, body, "UpperSM", "") &&
+          anim.release_motion(mod, part(body), "UpperSM") == TSUCHI_OK && log_is("motion:UpperSM=Cheer "));
+
+    // The move motion, the same way.
+    CHECK(anim.hold_move_motion(mod, part(body), "Run") == TSUCHI_OK && log_is("move:Run ") && move_is(body, "Run") &&
+          anim.hold_move_motion(rival, part(body), "Walk") == TSUCHI_BUSY && tsuchi::motion_holds() == 2);
+    blueprint_set_move(reinterpret_cast<void*>(blueprint), named(u"Walk"));
+    blueprint_log.clear();
+    tsuchi::frame(0.03f);
+    CHECK(log_is("move:Run ") && move_is(body, "Run"));
+    CHECK(anim.release_move_motion(mod, part(body)) == TSUCHI_OK && log_is("move:Walk ") && move_is(body, "Walk") &&
+          anim.release_move_motion(mod, part(body)) == TSUCHI_NOT_FOUND);
+
+    // A speed held on a blueprint that eases toward what it is given: set every frame, and read as the blueprint has it.
+    blueprint_eases = true;
+    fake::put<float>(blueprint + t::motion_blueprint::speed, 2);
+    CHECK(anim.hold_speed(mod, part(body), 10) == TSUCHI_OK && log_is("speed:10 ") && speed_of(body) == 6 && anim.hold_speed(rival, part(body), 1) == TSUCHI_BUSY);
+    tsuchi::frame(0.03f);
+    CHECK(log_is("speed:10 ") && speed_of(body) == 8);
+    // The game sets its own speed between frames: that is what goes back when the hold ends.
+    fake::put<float>(blueprint + t::motion_blueprint::speed, 4);
+    tsuchi::frame(0.03f);
+    CHECK(log_is("speed:10 ") && speed_of(body) == 7);
+    blueprint_eases = false;
+    CHECK(anim.release_speed(mod, part(body)) == TSUCHI_OK && log_is("speed:4 ") && speed_of(body) == 4 && anim.release_speed(mod, part(body)) == TSUCHI_NOT_FOUND);
+
+    // A clip held on the mesh: no blueprint of the game's own runs, so the reads are refused and the holds wait. The
+    // blueprint that runs once the clip's hold ends starts from its first state, and is given the held motion.
+    CHECK(anim.hold_motion(mod, part(tail), "TailSM", "Wag") == TSUCHI_OK && anim.hold_move_motion(mod, part(tail), "Trot") == TSUCHI_OK &&
+          anim.hold_speed(mod, part(tail), 3) == TSUCHI_OK && log_is("motion:TailSM=Wag move:Trot speed:3 "));
+    const uint64_t first_tail = fake::get<uint64_t>(tail + t::skeletal_mesh::blueprint);
+    CHECK(anim.hold_clip(mod, part(tail), TSUCHI_Object{to_handle(walk_clip)}, true, 1) == TSUCHI_OK && !fake::get<uint64_t>(tail + t::skeletal_mesh::blueprint));
+    tsuchi::frame(0.03f);
+    CHECK(log_is("") && anim.motion(mod, part(tail), "TailSM", text, sizeof text, &needed) == TSUCHI_UNSUPPORTED && tsuchi::motion_holds() == 4);
+    CHECK(anim.hold_motion(mod, part(tail), "TailSM", "Curl") == TSUCHI_UNSUPPORTED && anim.release_motion(mod, part(tail), "TailSM") == TSUCHI_OK && tsuchi::motion_holds() == 3);
+    CHECK(anim.hold_motion(mod, part(tail), "TailSM", "Wag") == TSUCHI_UNSUPPORTED); // a new hold needs a blueprint to look at
+    CHECK(anim.release_clip(mod, part(tail)) == TSUCHI_OK);
+    const uint64_t second_tail = fake::get<uint64_t>(tail + t::skeletal_mesh::blueprint);
+    CHECK(second_tail && second_tail != first_tail && move_is(tail, "Stand"));
+    blueprint_log.clear();
+    tsuchi::frame(0.03f);
+    CHECK(log_is("move:Trot speed:3 ") && move_is(tail, "Trot") && motion_is(mod, tail, "TailSM", "Wait"));
+
+    // Mod-caused and game-caused changes are told for the body of each actor in play, after the first look.
+    heard_motions.clear();
+    TSUCHI_Subscription changes{}, moves{};
+    tsuchi::frame(0.03f);
+    CHECK(tsuchi::motion_watched() == 0);
+    CHECK(anim.on_motion_changed(mod, on_motion_changed, nullptr, &changes) == TSUCHI_OK && anim.on_move_motion_changed(mod, on_move_motion_changed, nullptr, &moves) == TSUCHI_OK);
+    tsuchi::frame(0.03f);
+    CHECK(heard_motions.empty() && tsuchi::motion_watched() == 1);
+    CHECK(anim.hold_motion(mod, part(body), "Default", "Jump") == TSUCHI_BUSY && anim.hold_motion(mod, part(body), "FacialSM", "Smile") == TSUCHI_OK);
+    blueprint_set_motion(reinterpret_cast<void*>(blueprint), named(u"Bow"), named(u"UpperSM"));
+    blueprint_set_move(reinterpret_cast<void*>(blueprint), named(u"Hop"));
+    blueprint_set_motion(reinterpret_cast<void*>(fake::get<uint64_t>(tail + t::skeletal_mesh::blueprint)), named(u"Swish"), named(u"TailSM")); // no actor's body
+    blueprint_log.clear();
+    tsuchi::frame(0.03f);
+    CHECK(heard_motions.size() == 3);
+    if (heard_motions.size() == 3) {
+        CHECK(heard_motions[0].mesh == to_handle(body) && heard_motions[0].machine == "UpperSM" && heard_motions[0].motion == "Bow" && heard_motions[0].previous == "Cheer");
+        CHECK(heard_motions[1].machine == "FacialSM" && heard_motions[1].motion == "Smile" && heard_motions[1].previous == "");
+        CHECK(heard_motions[2].mesh == to_handle(body) && heard_motions[2].machine == "" && heard_motions[2].motion == "Hop" && heard_motions[2].previous == "Walk");
+    }
+    tsuchi::frame(0.03f);
+    CHECK(heard_motions.size() == 3);
+    // A blueprint that runs anew is looked at from its first state, without a change told.
+    CHECK(anim.release_motion(rival, part(body), "Default") == TSUCHI_OK && anim.release_motion(mod, part(body), "FacialSM") == TSUCHI_OK);
+    CHECK(anim.hold_clip(mod, part(body), TSUCHI_Object{to_handle(walk_clip)}, true, 1) == TSUCHI_OK && anim.release_clip(mod, part(body)) == TSUCHI_OK);
+    heard_motions.clear();
+    tsuchi::frame(0.03f);
+    tsuchi::frame(0.03f);
+    CHECK(heard_motions.empty() && tsuchi::motion_watched() == 1);
+    CHECK(tsuchi::host.cancel(mod, changes) == TSUCHI_OK && tsuchi::host.cancel(mod, moves) == TSUCHI_OK);
+    tsuchi::frame(0.03f);
+    CHECK(tsuchi::motion_watched() == 0);
+
+    // A mod that stops: its holds end, and what the game last set goes back.
+    blueprint_log.clear();
+    CHECK(anim.hold_motion(rival, part(body), "UpperSM", "Kneel") == TSUCHI_OK && log_is("motion:UpperSM=Kneel "));
+    tsuchi::mod_stop(rival);
+    CHECK(log_is("motion:UpperSM=Wait ") && motion_is(mod, body, "UpperSM", "Wait") && tsuchi::motion_holds() == 2);
+    // The actor leaves play: the tail's holds end and put back what its blueprint started with.
+    ends_play(performer);
+    CHECK(tsuchi::motion_holds() == 0 && log_is("move:Stand speed:0 ") && tsuchi::owned_count(mod) == owned);
+    // A mesh that is destroyed while held: the hold ends at the next frame, and nothing is asked of what is gone.
+    registers(performer);
+    const uint64_t wing = skeletal_part(u"Wing", root, performer);
+    choreograph(wing, {u"Default"});
+    CHECK(anim.hold_motion(mod, part(wing), "Default", "Flap") == TSUCHI_OK && tsuchi::motion_holds() == 1);
+    blueprint_log.clear();
+    fake::destroy(wing);
+    tsuchi::frame(0.03f);
+    CHECK(tsuchi::motion_holds() == 0 && tsuchi::owned_count(mod) == owned && log_is(""));
+    ends_play(performer);
 }
 
 // ---- A slot's files, and a stand-in for a slot ---------------------------------------------
@@ -10403,6 +10703,7 @@ int main(int argc, char** argv) {
     journeying();
     saving();
     animating();
+    blueprint_motions();
     filing();
     scripting();
     compiling();
