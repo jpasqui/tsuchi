@@ -3939,39 +3939,39 @@ void playing() {
 
     // Back in the story. Switching: through the game's own switch, when its rules allow.
     list_actors(t::player_block::captains, {hero}), list_actors(t::player_block::dogs, {steed, hound});
-    CHECK(players_api.set_character(mod, 0, handle(hero)) == TSUCHI_OK && people.log.empty()); // steered already
-    CHECK(players_api.set_character(mod, 0, handle(hound)) == TSUCHI_OK && people.log == "switch" + std::to_string(sideless) + " " && people.steered[sideless] == hound);
+    CHECK(players_api.set_character(mod, 0, handle(hero), false) == TSUCHI_OK && people.log.empty()); // steered already
+    CHECK(players_api.set_character(mod, 0, handle(hound), false) == TSUCHI_OK && people.log == "switch" + std::to_string(sideless) + " " && people.steered[sideless] == hound);
     people.log.clear();
-    CHECK(players_api.set_character(mod, 0, handle(red_captain)) == TSUCHI_INVALID && players_api.set_character(mod, 1, handle(hero)) == TSUCHI_NOT_FOUND &&
-          players_api.set_character(mod, 0, handle(running.world)) == TSUCHI_INVALID);
+    CHECK(players_api.set_character(mod, 0, handle(red_captain), false) == TSUCHI_INVALID && players_api.set_character(mod, 1, handle(hero), false) == TSUCHI_NOT_FOUND &&
+          players_api.set_character(mod, 0, handle(running.world), false) == TSUCHI_INVALID);
     const uint64_t passerby = person(u"Passerby", sideless);
     const TSUCHI_Actor gone = handle(passerby);
     fake::destroy(passerby);
-    CHECK(players_api.set_character(mod, 0, gone) == TSUCHI_NOT_FOUND && people.log.empty());
+    CHECK(players_api.set_character(mod, 0, gone, false) == TSUCHI_NOT_FOUND && people.log.empty());
     // A switch already fading in; two people playing the story; switching not yet unlocked; the
     // character on its way out; the captain riding; the game saying no; the game not to be asked.
     fake::put<uint8_t>(people.block + t::player_block::switch_pending, 1);
-    CHECK(players_api.set_character(mod, 0, handle(hero)) == TSUCHI_BUSY);
+    CHECK(players_api.set_character(mod, 0, handle(hero), false) == TSUCHI_BUSY);
     fake::put<uint8_t>(people.block + t::player_block::switch_pending, 0);
     fake::put<uint8_t>(people.config + t::config_save::play_mode, uint8_t(t::constant::play_mode_two));
-    CHECK(players_api.set_character(mod, 0, handle(hero)) == TSUCHI_NOT_READY);
+    CHECK(players_api.set_character(mod, 0, handle(hero), false) == TSUCHI_NOT_READY);
     fake::put<uint8_t>(people.config + t::config_save::play_mode, 0);
     fake::put<uint8_t>(people.story + t::story_save::switch_unlocked, 0);
-    CHECK(players_api.set_character(mod, 0, handle(hero)) == TSUCHI_NOT_READY);
+    CHECK(players_api.set_character(mod, 0, handle(hero), false) == TSUCHI_NOT_READY);
     fake::put<uint8_t>(people.story + t::story_save::switch_unlocked, 1);
     fake::put<uint8_t>(hero + t::game_actor::removed, 1);
-    CHECK(players_api.set_character(mod, 0, handle(hero)) == TSUCHI_NOT_READY);
+    CHECK(players_api.set_character(mod, 0, handle(hero), false) == TSUCHI_NOT_READY);
     fake::put<uint8_t>(hero + t::game_actor::removed, 0);
     const uint64_t grip = fake::get<uint64_t>(hero + t::game_actor::stick), seat = fake::get<uint64_t>(hero + t::game_actor::player);
     fake::put(grip + t::stick_component::target, hound), fake::put(seat + t::player_component::ridden_dog, hound);
-    CHECK(players_api.set_character(mod, 0, handle(hero)) == TSUCHI_NOT_READY);
+    CHECK(players_api.set_character(mod, 0, handle(hero), false) == TSUCHI_NOT_READY);
     fake::put(grip + t::stick_component::target, red_dog); // holding on to something that is not its mount
     people.game_switches = false;
-    CHECK(people.log.empty() && players_api.set_character(mod, 0, handle(hero)) == TSUCHI_NOT_READY && people.log == "switch" + std::to_string(sideless) + " ");
+    CHECK(people.log.empty() && players_api.set_character(mod, 0, handle(hero), false) == TSUCHI_NOT_READY && people.log == "switch" + std::to_string(sideless) + " ");
     people.game_switches = true;
     fake::put<uint64_t>(grip + t::stick_component::target, 0);
     t::fn::request_control_switch = nullptr;
-    CHECK(players_api.set_character(mod, 0, handle(hero)) == TSUCHI_NOT_READY);
+    CHECK(players_api.set_character(mod, 0, handle(hero), false) == TSUCHI_NOT_READY);
     t::fn::request_control_switch = game_request_switch;
     people.log.clear();
 
@@ -4077,10 +4077,10 @@ void playing() {
     CHECK(tsuchi::host.cancel(mod, steering) == TSUCHI_OK);
     tsuchi::frame(0.03f);
     // The game switches at once, and one that begins to listen and asks for the switch before a frame passes is told of it.
-    CHECK(players_api.on_character_changed(mod, on_controlled_changed, nullptr, &steering) == TSUCHI_OK && players_api.set_character(mod, 0, handle(hound)) == TSUCHI_OK);
+    CHECK(players_api.on_character_changed(mod, on_controlled_changed, nullptr, &steering) == TSUCHI_OK && players_api.set_character(mod, 0, handle(hound), false) == TSUCHI_OK);
     tsuchi::frame(0.03f);
     CHECK(heard_steers.size() == 5 && heard_steers[4].actor == to_handle(hound) && heard_steers[4].previous == to_handle(hero));
-    CHECK(players_api.set_character(mod, 0, handle(hero)) == TSUCHI_OK);
+    CHECK(players_api.set_character(mod, 0, handle(hero), false) == TSUCHI_OK);
     tsuchi::frame(0.03f);
     CHECK(heard_steers.size() == 6 && heard_steers[5].actor == to_handle(hero));
     CHECK(tsuchi::host.cancel(mod, steering) == TSUCHI_OK);
