@@ -138,7 +138,9 @@
    "info",
    "carriers",
    "carried_by",
-   "on_delivered"
+   "on_delivered",
+   "hold_count",
+   "release_count"
   ],
   "collision": [
    "hold_off",
@@ -243,7 +245,17 @@
    "destroy",
    "grounded",
    "on_spawned",
-   "on_destroyed"
+   "on_destroyed",
+   "hold_track",
+   "release_track",
+   "feed_tracks",
+   "show_tracks",
+   "track",
+   "forget_track",
+   "parts",
+   "read_poses",
+   "hold_awake",
+   "release_awake"
   ],
   "file": [
    "read",
@@ -303,7 +315,11 @@
    "wrap_call"
   ],
   "hud": [
-   "banner"
+   "banner",
+   "radio",
+   "prompts_shown",
+   "hold_hidden_prompts",
+   "release_hidden_prompts"
   ],
   "input": [
    "pad",
@@ -456,7 +472,11 @@
    "hold_selection",
    "release_selection",
    "type_name",
-   "on_membership_changed"
+   "on_membership_changed",
+   "selected_pikmin_type",
+   "select_type_of",
+   "hold_hud_leader",
+   "release_hud_leader"
   ],
   "storage": [
    "write",
@@ -545,7 +565,9 @@
    "release_texture",
    "decode_texture",
    "hold_menu_input",
-   "release_menu_input"
+   "release_menu_input",
+   "hold_mark",
+   "release_mark"
   ],
   "world": [
    "ground",

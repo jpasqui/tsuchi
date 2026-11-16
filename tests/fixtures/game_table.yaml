@@ -507,7 +507,7 @@ structs:
   texture_platform_data: {fields: {width: 0x0, height: 0x4, format: 0xC, mips: 0x18, mip_count: 0x20}}
   texture_mip: {fields: {bulk_data: 0x10}}
   ui_widget:
-    fields: {render_x: 0xA0, render_y: 0xA4, render_scale_x: 0xA8, render_scale_y: 0xAC, render_pivot_x: 0xBC, render_pivot_y: 0xC0, clipping: 0xD2, cached_slate: 0xD8, remove_from_parent: {at: 0x298, args: [pointer]}}
+    fields: {render_x: 0xA0, render_y: 0xA4, render_scale_x: 0xA8, render_scale_y: 0xAC, render_pivot_x: 0xBC, render_pivot_y: 0xC0, clipping: 0xD2, cached_slate: 0xD8, remove_from_parent: {at: 0x298, args: [pointer]}, visibility: 0xD3}
   ui_user_widget:
     fields: {tree: 0x1E8}
   ui_widget_tree:
@@ -735,7 +735,11 @@ structs:
   dialog_widget:
     fields: {text: 0x50, kind: 0x60}
   ui_manager:
-    fields: {announcer: 0x48, open_dialog: 0x70, academy_courses: absent, academy_data: absent}
+    fields: {announcer: 0x48, actor_access: 0x58, open_dialog: 0x70, face_messages: 0x78, academy_courses: absent, academy_data: absent}
+  face_message_manager:
+    fields: {labels: 0x30, label_buckets: 0x68}
+  ui_actor_access:
+    fields: {captain: 0x30}
   announcer:
     fields: {banner: 0x50}
   banner_widget:
@@ -916,6 +920,10 @@ structs:
     fields: {drawer: 0x8}
   instance_drawer:
     fields: {components: 0x10, count: 0x18}
+  carry_numbers:
+    fields: {entries: 0x30, count: 0x38}
+  carry_number:
+    fields: {place: 0xC}
   instanced_mesh:
     fields: {instances: 0x40, count: 0x48, edits: 0x4C}
   scene_renderer:
@@ -926,6 +934,8 @@ structs:
     fields: {anchor: 0x720, shown: 0x730, position: 0x230}
   life_bar:
     fields: {anchor: 0x6B0, shown: 0x69C, position: 0x230}
+  action_marker:
+    fields: {actor: 0x9C8}
   canvas_slot:
     fields: {content: 0x30, position: 0x38}
   material_instance_values:         # a material instance's own parameter values, which its setters keep
@@ -944,7 +954,7 @@ structs:
   skinned_pose:
     fields: {master: 0x4D0, arrays: 0x4F8, read_index: 0x53C, revision: 0x540}
   game_framework:
-    fields: {actor_list: 0x50, instance_holder: 0xD0, ground_query: 0x70, world_begun: 0x78, events: 0x80, pikmin_list: 0x88, ui: 0xA8, clock: 0xB0, generators: 0xB8, pikmin_counters: 0xC0}
+    fields: {actor_list: 0x50, instance_holder: 0xD0, ground_query: 0x70, world_begun: 0x78, events: 0x80, pikmin_list: 0x88, ui: 0xA8, clock: 0xB0, generators: 0xB8, pikmin_counters: 0xC0, carry_numbers: 0xC8}
   engine_actor:
     fields: {root: 0x48, play_state: 0x69}
   actor_component:
@@ -1095,7 +1105,7 @@ structs:
   carry_actor:                      # inside the made-up game's 0x100-byte actors
     fields: {component: 0x40}
   carry_component:
-    fields: {weight: 0x560, maximum: 0x564, carriers: 0x600, info: 0x620}
+    fields: {weight: 0x560, maximum: 0x564, carriers: 0x600, info: 0x620, shown_count: 0x6B0}
   carry_info:
     fields: {destination: 0xE0, arrival_destination: 0xF0}
   carry_stick:
@@ -1348,6 +1358,7 @@ functions:
   options_button_icon: {address: 0x9750, returns: void, args: [pointer, i32]}
   options_direction: {address: 0x9700, returns: bool, args: [pointer, bool]}
   options_confirm: {address: 0x9710, returns: bool, args: [pointer]}
+  face_message_request: {address: 0x9738, returns: void, args: [pointer, pointer, u32, u32]}
   options_gate: {address: 0x9720, returns: bool, args: [pointer]}
   options_list_grow: {address: 0x9730, returns: void, args: [pointer]}
   options_button_highlight: {address: 0x9740, returns: void, args: [pointer, bool, bool]}
@@ -1631,6 +1642,7 @@ functions:
   npad_handheld_state: {address: 0x40C0, args: [pointer, const_pointer]}
   npad_joy_dual_state: {address: 0x4180, args: [pointer, const_pointer]}
   mark_end_of_frame: {address: 0x4500, args: [pointer]}
+  actor_sleep_decision: {address: 0x46A0, args: [pointer]}
   mark_pose_dirty: {address: 0x4540, args: [pointer]}
   mark_render_state: {address: 0x4580, args: [pointer]}
   widget_scale: {address: 0x45C0, returns: f32, args: [pointer]}

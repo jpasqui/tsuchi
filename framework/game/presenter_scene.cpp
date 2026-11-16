@@ -16,6 +16,7 @@
 #include "native_routes.h"
 #include "objects.h"
 #include "presenter_logic.h"
+#include "presenter_markers.h"
 #include "registry.h"
 
 namespace tsuchi {
@@ -86,8 +87,8 @@ struct Place {
 struct Root {
     uint64_t part, weak, proxy, scene, from, to, sent_frame, drawn_frame;
     uint32_t drawn;
-    float move, sent;
-    bool used, pair, cut;
+    float move, sent, turn, size; // turn, size: a step's change of each across the last two steps
+    bool used, pair, cut, measured; // measured: turn and size were
     Place a, b;
 };
 constexpr unsigned kRoots = 512;
@@ -102,9 +103,10 @@ struct Pose {
     int32_t lod;
     uint32_t count, room;
     float sent;
-    bool used, pair, cut, native_known, endpoint_due;
+    bool used, pair, cut, native_known, endpoint_due, before_known; // before_known: `a` holds the step before `to`
     uint64_t submission;
     BonePose *a, *b; // two halves of one block of 2 * room bones
+    BoneMotion* motion; // room bones' changes across their last two steps
 };
 constexpr unsigned kPoses = 256;
 Pose poses[kPoses] = {};
@@ -202,7 +204,7 @@ void on_publish(NativeFrame& frame) {
     const uint64_t step = moment.steps;
     const bool same = root->to && !memcmp(&root->b, &now, offsetof(Place, trs));
     if (!root->to) {
-        root->b = now, root->to = step, root->move = 0;
+        root->b = now, root->to = step, root->move = root->turn = root->size = 0, root->measured = false;
     } else if (!same) {
         if (step == root->to) {
             root->b = now; // moved again in the same step: the newest is the step's
@@ -210,7 +212,12 @@ void on_publish(NativeFrame& frame) {
             float move = 0;
             const bool jump = jumped(root->b.trs.t, now.trs.t, root->move, move);
             if (jump) count(counts.jumps);
-            root->pair = !root->cut && !jump && step - root->to <= kGap && (root->b.trs.s[0] < 0) == (now.trs.s[0] < 0);
+            // A turn or a size that snapped is shown at once too (presenter_logic.h, "Snaps").
+            const Change change = change_between(root->b.trs.q, root->b.trs.t, root->b.trs.s, now.trs.q, now.trs.t, now.trs.s, step - root->to);
+            const bool snap = root->measured && (beyond(change.turn, root->turn, kSnapTurn) || beyond(change.size, root->size, kSnapSize));
+            if (snap && !jump) count(counts.snaps);
+            root->turn = change.turn, root->size = change.size, root->measured = true;
+            root->pair = !root->cut && !jump && !snap && step - root->to <= kGap && (root->b.trs.s[0] < 0) == (now.trs.s[0] < 0);
             root->a = root->b, root->from = root->to, root->b = now, root->to = step, root->move = root->pair ? move : 0;
         }
         root->cut = false;
@@ -262,10 +269,13 @@ bool make_room(BonePose*& buffer, uint32_t& room, uint32_t count) {
 // A pose's two halves, with room for `count` bones each. What they held is lost when they grow.
 bool make_halves(Pose& pose, uint32_t count) {
     if (count <= pose.room) return true;
+    auto* motion = static_cast<BoneMotion*>(allocate(sizeof(BoneMotion) * count));
+    if (!motion) return false;
     BonePose* low = pose.a < pose.b ? pose.a : pose.b;
     uint32_t room = pose.room * 2;
-    if (!make_room(low, room, count * 2)) return false;
-    pose.a = low, pose.b = low + count, pose.room = count, pose.to = 0, pose.pair = false;
+    if (!make_room(low, room, count * 2)) return release(motion), false;
+    release(pose.motion);
+    pose.a = low, pose.b = low + count, pose.motion = motion, pose.room = count, pose.to = 0, pose.pair = false;
     return true;
 }
 
@@ -378,13 +388,20 @@ bool choose_pose(ThreadPart* slot, uint64_t part, uint64_t array, PoseChoice& c,
                 const bool advancing = pose->to && step != pose->to;
                 if (!pose->to) {
                     memcpy(pose->b, now, sizeof(BonePose) * bones), pose->to = step, pose->count = bones, pose->lod = slot->lod;
+                    memset(pose->motion, 0, sizeof(BoneMotion) * bones), pose->before_known = false; // no bone seen moving yet
                 } else if (fresh || (!qualified && changed)) {
-                    if (step != pose->to) {
+                    const bool advanced = step != pose->to;
+                    if (advanced) {
                         pose->pair = !pose->cut && step - pose->to <= kGap;
                         BonePose* swap = pose->a;
-                        pose->a = pose->b, pose->b = swap, pose->from = pose->to, pose->to = step;
+                        pose->a = pose->b, pose->b = swap, pose->from = pose->to, pose->to = step, pose->before_known = true;
                     }
                     memcpy(pose->b, now, sizeof(BonePose) * bones);
+                    // Each bone's change across this step against the step before's: a bone that snapped is shown
+                    // at this step at once (presenter_logic.h, "Snaps").
+                    if (pose->before_known && pose->to > pose->from &&
+                        mark_snaps(pose->a, pose->b, bones, pose->to - pose->from, advanced, pose->motion) && advanced)
+                        count(counts.snaps);
                     pose->cut = false;
                 } else if (qualified && changed) {
                     // Unfinalized edits under an unchanged revision cannot establish an evaluation cadence.
@@ -398,7 +415,7 @@ bool choose_pose(ThreadPart* slot, uint64_t part, uint64_t array, PoseChoice& c,
                 if (fresh && advancing && !changed) pose->pair = false;
                 if (pose_cadence(*pose) != PoseCadence::interpolated) pose->pair = false;
                 f = pose->pair && !pose->endpoint_due ? place_between(pose->from, pose->to, at()) : 1;
-                if (f < 1 && make_room(slot->scratch, slot->room, bones)) blend_bones(pose->a, pose->b, bones, f, slot->scratch);
+                if (f < 1 && make_room(slot->scratch, slot->room, bones)) blend_bones(pose->a, pose->b, bones, f, slot->scratch, pose->motion);
                 else f = 1;
                 pose->sent = f, pose->sent_frame = moment.frame;
             }
@@ -559,6 +576,7 @@ void presenter_cut(uint64_t actor) {
     if (!actor || !moment.active) return;
     count(counts.cuts);
     presenter_cut_camera(actor);
+    markers_cut(actor);
     uint64_t waiting[256];
     unsigned left = 0, seen = 0;
     const uint64_t root = game::read_or<uint64_t>(actor + t::engine_actor::root);

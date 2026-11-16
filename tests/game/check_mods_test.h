@@ -758,8 +758,7 @@ void check_world() {
     // A carryable object for the carry check, beside the first captain: the game's carry component with a weight
     // of one and empty carrier records.
     {
-        const uint64_t carry_class = fake::object(u"TestCarryAffordanceComponent", w.root);
-        fake::set_super(carry_class, w.component_class);
+        const uint64_t carry_class = carry_part_class();
         const uint64_t chief_root = fake::get<uint64_t>(w.chief + t::game_actor::root);
         const float x = chief_root ? fake::get<float>(chief_root + t::scene_component::location) + 100.0f : 100.0f;
         const uint64_t pellet = tabled(table_a(), u"Pellet", u"Pellet", 0, x);

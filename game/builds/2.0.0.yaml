@@ -358,6 +358,7 @@ structs:
       clipping: 194
       cached_slate: 216
       remove_from_parent: 664
+      visibility: absent
   ui_user_widget:
     fields:
       tree: 488
@@ -673,7 +674,11 @@ structs:
       open_dialog: absent
       academy_data: absent
       academy_courses: absent
+      face_messages: absent
+      actor_access: absent
       announcer: 752
+  face_message_manager: {fields: {labels: absent, label_buckets: absent}}
+  ui_actor_access: {fields: {captain: absent}}
   announcer:
     fields:
       banner: 704
@@ -1029,6 +1034,13 @@ structs:
     fields:
       components: 552
       count: 560
+  carry_numbers:
+    fields:
+      entries: absent
+      count: absent
+  carry_number:
+    fields:
+      place: absent
   instanced_mesh:
     fields:
       instances: 1392
@@ -1047,6 +1059,9 @@ structs:
       anchor: 1712
       shown: 1692
       position: 560
+  action_marker:
+    fields:
+      actor: absent
   material_instance_values:
     fields:
       scalars: 224
@@ -1100,6 +1115,7 @@ structs:
       actor_list: 3968
       pikmin_list: 4016
       pikmin_counters: 3928
+      carry_numbers: absent
   actor_node:
     size: 24
     fields:
@@ -1489,6 +1505,7 @@ structs:
       maximum: 1380
       carriers: 1536
       info: 1568
+      shown_count: absent
   carry_info:
     fields:
       destination: 224
@@ -1793,6 +1810,7 @@ functions:
   ui_presenter_find: absent
   presenter_begin: absent
   game_menu_open_page: absent
+  face_message_request: absent
   options_gate: absent
   options_list_grow: absent
   options_button_highlight: absent
@@ -1985,6 +2003,7 @@ functions:
   npad_handheld_state: 104120464
   npad_joy_dual_state: 104120480
   mark_end_of_frame: 86731152
+  actor_sleep_decision: absent
   mark_pose_dirty: 86731696
   mark_render_state: 86729680
   widget_scale: 80617680

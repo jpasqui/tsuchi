@@ -555,7 +555,8 @@ structs:
       set: {at: 0x88, args: [pointer, const_pointer, u32]}
       value: {at: 0xa0, returns: f32, args: [pointer]}
   ui_widget:
-    fields: {render_x: 0x90, render_y: 0x94, render_scale_x: 0x98, render_scale_y: 0x9C, render_pivot_x: 0xAC, render_pivot_y: 0xB0, clipping: 0xC2, cached_slate: 0xD8, remove_from_parent: {at: 0x298, args: [pointer]}}
+    fields: {render_x: 0x90, render_y: 0x94, render_scale_x: 0x98, render_scale_y: 0x9C, render_pivot_x: 0xAC, render_pivot_y: 0xB0, clipping: 0xC2, cached_slate: 0xD8, remove_from_parent: {at: 0x298, args: [pointer]},
+             visibility: 0xC3}         # a byte: 0 visible, 1 collapsed, 2 hidden, 3 and 4 visible but not hit (UWidget.Visibility)
   ui_user_widget:
     fields: {tree: 0x1E8}
   ui_widget_tree:
@@ -801,12 +802,19 @@ structs:
              kind: 0x5F4}             # which of the game's dialogs it shows
   ui_manager:
     fields: {announcer: 0x2F0,        # what shows the game's announcements
+             actor_access: 0x3B0,     # UIActorAccessMgr: the characters the screens are about
              open_dialog: 0x980,      # the dialog on the screen
+             face_messages: 0xBB0,     # FaceMessageMgr: the crew's radio messages, by the names of its table's rows
              academy_courses: absent,  # Switch 2 Edition: a sparse_array of academy_course_entry, the Academy's copy of
                                        # each exam period's row of its course table, made once as the game starts
              academy_data: absent}     # pointer to the Academy's data asset
   academy_data:                     # the Academy's data asset: its tables and limits
     fields: {test_courses: absent}   # a soft pointer to the table of exam courses; it starts with a weak reference
+  face_message_manager:             # FaceMessageMgr
+    fields: {labels: 0x30,            # its labels, each with what it knows of one: elements (label, info, next in chain)
+             label_buckets: 0x68}     # and their hash: inline bucket, then the heap's buckets at +8 and their count at +0x10
+  ui_actor_access:
+    fields: {captain: 0x30}           # Orima, the reflected captain the throw-type HUD binds each update (0x2557270)
   announcer:
     fields: {banner: 0x2C0}           # the banner's widget, once the game has made it
   banner_widget:
@@ -1040,6 +1048,11 @@ structs:
     fields: {drawer: 0xA8}
   instance_drawer:                  # the game's one drawer of instances, which clears and adds them all each step
     fields: {components: 0x228, count: 0x230}
+  carry_numbers:                    # the component that draws the carry counters: one set of quads in the world
+    fields: {entries: 0xC0,           # its counters, 0x18 bytes each, the counter first
+             count: 0xC8}
+  carry_number:                     # one counter, in the part of what is carried that counts its carriers
+    fields: {place: 0xC}              # the point in the world its number is drawn at, put there each step
   instanced_mesh:                   # one of its parts: an instanced static mesh
     fields: {instances: 0x570,        # each a 64-byte matrix
              count: 0x578,
@@ -1054,6 +1067,8 @@ structs:
     fields: {anchor: 0x6B0,           # the world point it hangs from
              shown: 0x69C,            # nonzero while it is shown; it is placed only then
              position: 0x230}
+  action_marker:                    # an action prompt over an actor, such as Ride over Oatchi (CarrotActionMarkerWidget)
+    fields: {actor: 0x9C8}            # MarkerActor, the actor it points at (an object property)
   material_instance_values:         # a material instance's own parameter values, which its setters keep
     fields: {scalars: 0xE0, vectors: 0xF0}
   material_scalar_value:            # one of them: the parameter's info, its value at material_parameter.value
@@ -1089,7 +1104,8 @@ structs:
              events: 0x4C0,           # what runs the level's scripted events
              actor_list: 0xEF8,       # the first link of the ring of actors in play
              pikmin_list: 0xF28,      # and of the ring of Pikmin, the dying among them
-             pikmin_counters: 0xED0}  # the game's counts of its Pikmin by type, leaf, state and player
+             pikmin_counters: 0xED0,  # the game's counts of its Pikmin by type, leaf, state and player
+             carry_numbers: 0x4F0}    # the component that draws every carry counter (UInstancedCarryNumMgrComponent)
   actor_node:                       # one link of that ring; each actor carries its own
     size: 0x18
     fields: {next: 0x8, actor: 0x10}
@@ -1343,7 +1359,8 @@ structs:
   carry_actor:
     fields: {component: 0x310}
   carry_component:
-    fields: {weight: 0x560, maximum: 0x564, carriers: 0x600, info: 0x620}
+    fields: {weight: 0x560, maximum: 0x564, carriers: 0x600, info: 0x620,
+             shown_count: 0xC24}      # the count its counter shows in place of the carriers' (0xD4BA10), or -1 for theirs
   carry_info:
     fields: {destination: 0xE0, arrival_destination: 0xF0}
   carry_stick:
@@ -1473,6 +1490,7 @@ functions:
   options_button_icon: {address: 0x24170A0, returns: void, args: [pointer, i32]}  # a menu button's icon, which also places its label
   options_direction: {address: 0x28E2E40, returns: bool, args: [pointer, bool]}  # the Options menu's Up and Down (presenter, down)
   options_confirm: {address: 0x28E2E90, returns: bool, args: [pointer]}          # and its Confirm
+  face_message_request: {address: 0x2778100, returns: void, args: [pointer, pointer, u32, u32]}  # (FaceMessageMgr, a row's name, 0, 0): a missing or turned-off row is dropped; both of the game's callers pass 0, 0
   options_gate: {address: 0x2D38910, returns: bool, args: [pointer]}             # whether its widget takes input now
   options_list_grow: {address: 0x2489150, returns: void, args: [pointer]}        # grows its button list to fit its count
   options_button_highlight: {address: 0x2416C30, returns: void, args: [pointer, bool, bool]}  # a menu button selected or not
@@ -1775,6 +1793,9 @@ functions:
   npad_joy_dual_state: {address: 0x62EF200, args: [pointer, const_pointer]}
   # A part: it is put on its world's list of what the end of the frame sends; its pose is to be sent, and it is put there.
   mark_end_of_frame: {address: 0x5259D50, args: [pointer]}
+  # An actor: whether it sleeps (no player sees it and no Pikmin are near) or wakes, decided and done as its own
+  # update does each frame (GActor_UpdatePhysicsFreeze, from GActor_TickPre). awake_holds keeps it awake.
+  actor_sleep_decision: {address: 0x1B81160, args: [pointer]}
   mark_pose_dirty: {address: 0x5259F70, args: [pointer]}
   # A part: the renderer's copy of it is made again at the end of the frame.
   mark_render_state: {address: 0x52597B0, args: [pointer]}

@@ -3,6 +3,7 @@
 #include <string.h>
 #include <vector>
 #include "actors.h"
+#include "carry_count.h"
 #include "carry_service.h"
 #include "content.h"
 #include "game.h"
@@ -60,6 +61,9 @@ void on_delivered(void*, const TSUCHI_CarryDelivered* event) {
 }
 namespace tsuchi {
 bool each_frame(void (*step)()) { delivery_step = step; return true; }
+// The held count is carry_count.cpp's, which the objects test covers.
+TSUCHI_Result hold_count(TSUCHI_Mod*, TSUCHI_Actor, int32_t) { return TSUCHI_UNSUPPORTED; }
+TSUCHI_Result release_count(TSUCHI_Mod*, TSUCHI_Actor) { return TSUCHI_NOT_FOUND; }
 TSUCHI_Result hook_code_site(TSUCHI_Mod*, uint32_t site, void* function, uint64_t* id, void** original) {
     CHECK(site == t::code_site::carry_credit.number);
     credit_hook = reinterpret_cast<Credit>(function);

@@ -58,6 +58,7 @@ struct SceneCounts {
     uint32_t roots, root_blends, root_sends, bones, bone_blends, bone_sends, cuts, jumps, off_thread;
     uint32_t unseen, reduced, small; // not sent between steps: not drawn lately, a pose made less often, one small on the screen
     uint32_t small_roots, still_roots; // parts not sent between steps: small on the screen, or moving less than a pixel
+    uint32_t snaps; // places and poses whose turn, move or size snapped across a step (presenter_logic.h), shown at once
 };
 SceneCounts scene_counts(bool clear);
 

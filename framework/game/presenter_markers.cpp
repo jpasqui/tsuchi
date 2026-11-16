@@ -75,6 +75,8 @@ struct Projection {
     float point[3], screen[3];
 } last{};
 bool presenting = false; // the presenter's own projections and placements are not noted
+bool watching_prompts = false; // a mod asked about the game's action prompts: they are kept at any frame rate
+void note_prompt(uint64_t widget, const Projection& seen);
 
 using WorldToScreen = decltype(t::code_site::world_to_screen)::Function;
 using ViewportPosition = decltype(t::code_site::viewport_position)::Function;
@@ -153,7 +155,7 @@ bool project(uint64_t controller, bool relative, const float point[3], float scr
 
 bool world_to_screen(float x, float y, float z, void* controller, void* out, bool relative) {
     const bool front = next_project(x, y, z, controller, out, relative);
-    if (presenting || !moment.active || !on_game_thread()) return front;
+    if (presenting || !(moment.active || watching_prompts) || !on_game_thread()) return front;
     last.valid = front && out;
     last.counted = -1;
     last.caller = hook_invocation(project_hook).caller;
@@ -258,6 +260,7 @@ void bar_place(void* gauge, float seconds) {
 void marker_place(void* marker) {
     last.valid = false;
     next_marker(marker);
+    if (!presenting) note_prompt(reinterpret_cast<uint64_t>(marker), last);
     placed_inline(MarkKind::inline_place, reinterpret_cast<uint64_t>(marker));
 }
 
@@ -332,11 +335,303 @@ bool cursor_alive(const Mark& mark) {
            !memcmp(&now, &mark.cursor, sizeof now);
 }
 
+// ---- A mod's widgets hung from an actor ---------------------------------------------------------------------
+//
+// A mod's widget goes through none of the game's projections or placements, so it is placed here, on every picture,
+// the way a mark of the game's is moved: the point at the last two steps it moved at, put between them as far as
+// the picture is, and projected through the picture's own view. At 30, or with the marks left out, each picture is a
+// step's and the point is the step's.
+
+struct Hung {
+    uint64_t slot, slot_weak, actor, actor_weak, controller, controller_weak, from, to;
+    float offset[3], a[3], b[3];
+    uint32_t visibility; // what its widget had when it was hidden
+    bool used, pair, hidden;
+};
+constexpr unsigned kHungRoom = 64;
+constexpr uint32_t kCollapsed = 1, kHidden = 2; // the engine's visibilities: not laid out, and laid out but not drawn
+Hung hung_marks[kHungRoom] = {};
+
+Hung* hung_of(uint64_t slot) {
+    for (Hung& entry : hung_marks)
+        if (entry.used && entry.slot == slot) return &entry;
+    return nullptr;
+}
+
+bool alive(uint64_t object, uint64_t weak) { return object && weak && game::from_weak_value(weak) == object; }
+
+// The game's own function at a code site, for when the presenter has not hooked it: at 30 only the world's update
+// and the drawing are.
+template <class F>
+F site_function(uint32_t number) {
+    const auto site = t::code_sites[number].address;
+    return t::present(site) && game::main_base() ? reinterpret_cast<F>(game::main_base() + uint64_t(site)) : nullptr;
+}
+
+uint64_t content_of(uint64_t slot) { return game::read_or<uint64_t>(slot + t::canvas_slot::content); }
+
+// Hides the slot's widget while its point is behind the camera, and gives it back what it had after. A widget the
+// mod hid or collapsed itself is left as it is.
+void show_hung(Hung& entry, bool shown) {
+    const uint64_t widget = content_of(entry.slot);
+    const auto set = widget ? game::method(widget, t::widget_table::set_visibility) : nullptr;
+    if (!set || shown != entry.hidden) return;
+    if (!shown) {
+        if (!t::bound(t::fn::ui_get_visibility)) return;
+        entry.visibility = t::fn::ui_get_visibility(reinterpret_cast<void*>(widget));
+        if (entry.visibility == kHidden || entry.visibility == kCollapsed) return;
+        set(reinterpret_cast<void*>(widget), kHidden);
+        entry.hidden = true;
+        count(counts.hung_hidden);
+    } else {
+        set(reinterpret_cast<void*>(widget), entry.visibility);
+        entry.hidden = false;
+    }
+}
+
+void drop_hung(Hung& entry) {
+    if (entry.hidden && alive(entry.slot, entry.slot_weak)) show_hung(entry, true);
+    entry = {};
+}
+
+bool hung_point(const Hung& entry, float out[3]) {
+    const uint64_t root = game::read_or<uint64_t>(entry.actor + t::engine_actor::root);
+    float place[3];
+    if (!root || !game::read(root + t::scene_component::location, place)) return false;
+    for (unsigned i = 0; i < 3; ++i) {
+        out[i] = place[i] + entry.offset[i];
+        if (!finite(out[i])) return false;
+    }
+    return true;
+}
+
+void hung_present() {
+    const bool between = moment.active && (moment.parts & kPartMarkers);
+    const double place = at();
+    const auto projection = next_project ? next_project : site_function<WorldToScreen>(t::code_site::world_to_screen.number);
+    const auto placement = next_canvas ? next_canvas : site_function<CanvasPosition>(t::code_site::canvas_position.number);
+    for (Hung& entry : hung_marks) {
+        if (!entry.used) continue;
+        if (!alive(entry.slot, entry.slot_weak) || !alive(entry.actor, entry.actor_weak) || !alive(entry.controller, entry.controller_weak)) {
+            drop_hung(entry);
+            continue;
+        }
+        float point[3];
+        if (!hung_point(entry, point)) continue;
+        // The newest step's point, kept as the game's marks keep theirs: the last two steps it moved at.
+        if (!between || !entry.to) {
+            memcpy(entry.b, point, sizeof point), entry.to = moment.steps, entry.pair = false;
+        } else if (memcmp(entry.b, point, sizeof point)) {
+            if (moment.steps != entry.to) {
+                float move = 0;
+                entry.pair = moment.steps - entry.to <= 4 && !jumped(entry.b, point, kFarthest / 4, move);
+                memcpy(entry.a, entry.b, sizeof point), entry.from = entry.to, entry.to = moment.steps;
+            }
+            memcpy(entry.b, point, sizeof point);
+        }
+        const float f = between && entry.pair ? place_between(entry.from, entry.to, place) : 1;
+        float shown[3], out[3] = {};
+        for (unsigned i = 0; i < 3; ++i) shown[i] = f < 1 ? entry.a[i] + (entry.b[i] - entry.a[i]) * f : entry.b[i];
+        if (!projection || !placement) continue;
+        presenting = true;
+        const bool front = projection(shown[0], shown[1], shown[2], reinterpret_cast<void*>(entry.controller), out, false);
+        presenting = false;
+        if (!front || !finite(out[0]) || !finite(out[1])) {
+            show_hung(entry, false);
+            continue;
+        }
+        // The slot's place is in its canvas's units: the screen's over the scale its widget is drawn at.
+        const float scale = scale_of(content_of(entry.slot));
+        presenting = true;
+        placement(out[0] / scale, out[1] / scale, reinterpret_cast<void*>(entry.slot));
+        presenting = false;
+        show_hung(entry, true);
+        count(counts.hung_moved);
+    }
+}
+
+// ---- The game's action prompts --------------------------------------------------------------------------
+//
+// An action prompt, such as Ride over Oatchi, is a widget the game places every frame through its own placement, a
+// code site, after projecting the actor it points at through a player's view. Each one placed is kept: its actor,
+// that player, and the visibility the game gave it. A hold of a mod's hides those of an actor on some players'
+// screens through the engine's setter of a widget's visibility. It sets Hidden, which the game never sets itself, so
+// a visibility the game sets afterwards is told apart from the hold's and taken as the game's.
+
+struct Prompt {
+    uint64_t widget, weak, actor, frame;
+    uint32_t player; // a bit
+    uint8_t wish;    // the visibility the game gave it
+    bool used, ours; // ours: the hold hid it, and the game has not set it since
+};
+struct PromptHide {
+    uint64_t key, actor;
+    uint32_t players;
+    bool used;
+};
+constexpr unsigned kPromptRoom = 64, kHideRoom = 32;
+constexpr uint64_t kPromptForget = 60; // frames without a placement before a prompt is forgotten
+Prompt prompts[kPromptRoom] = {};
+PromptHide hides[kHideRoom] = {};
+
+bool prompt_shown(uint8_t visibility) { return visibility == 0 || visibility == 3 || visibility == 4; }
+
+// The player whose view the controller is, as a bit; the first player's when it cannot be told.
+uint32_t player_bit(uint64_t controller) {
+    const uint64_t framework = game::global<uint64_t>(t::data::game_framework);
+    for (int32_t p = 0; controller && framework && t::bound(t::fn::camera_controller) && p < int32_t(t::constant::player_slots); ++p)
+        if (reinterpret_cast<uint64_t>(t::fn::camera_controller(reinterpret_cast<void*>(framework), p)) == controller) return 1u << p;
+    return 1;
+}
+
+bool hidden_for(const Prompt& prompt) {
+    for (const PromptHide& hide : hides)
+        if (hide.used && hide.actor == prompt.actor && (hide.players & prompt.player)) return true;
+    return false;
+}
+
+void set_visibility(uint64_t widget, uint8_t visibility) {
+    if (const auto set = game::method(widget, t::widget_table::set_visibility)) set(reinterpret_cast<void*>(widget), visibility);
+}
+
+// Gives the prompt back what the game gave it, if the hold's Hidden is still on it.
+void give_back(Prompt& prompt) {
+    if (prompt.ours && game::read_or<uint8_t>(prompt.widget + t::ui_widget::visibility) == kHidden) set_visibility(prompt.widget, prompt.wish);
+    prompt.ours = false;
+}
+
+// What the game has set since, and whether a hold hides it now.
+void keep_prompt(Prompt& prompt) {
+    const uint8_t now = game::read_or<uint8_t>(prompt.widget + t::ui_widget::visibility);
+    if (!(prompt.ours && now == kHidden)) prompt.wish = now, prompt.ours = false;
+    if (hidden_for(prompt)) {
+        if (!prompt.ours && prompt_shown(prompt.wish)) set_visibility(prompt.widget, uint8_t(kHidden)), prompt.ours = true;
+    } else if (prompt.ours) {
+        give_back(prompt);
+    }
+}
+
+// The game placed a prompt, with `seen` the projection it made for it.
+void note_prompt(uint64_t widget, const Projection& seen) {
+    if (!watching_prompts || !widget || !on_game_thread() || !t::present(t::action_marker::actor) || !t::present(t::ui_widget::visibility)) return;
+    Prompt* prompt = nullptr;
+    for (unsigned i = 0; i < kPromptRoom && !prompt; ++i)
+        if (prompts[i].used && prompts[i].widget == widget) prompt = &prompts[i];
+    for (unsigned i = 0; i < kPromptRoom && !prompt; ++i)
+        if (!prompts[i].used) prompt = &prompts[i], *prompt = {}, prompt->used = true, prompt->widget = widget;
+    if (!prompt) return;
+    const uint64_t actor = game::read_or<uint64_t>(widget + t::action_marker::actor);
+    if (actor != prompt->actor) give_back(*prompt);
+    prompt->weak = game::to_weak_value(widget), prompt->actor = actor, prompt->frame = moment.frame;
+    if (seen.valid && seen.frame == moment.frame) prompt->player = player_bit(seen.controller);
+    else if (!prompt->player) prompt->player = 1;
+    keep_prompt(*prompt);
+}
+
+// Before each picture: a prompt the game showed again since it was placed is hidden again.
+void prompts_present() {
+    for (Prompt& prompt : prompts) {
+        if (!prompt.used) continue;
+        if (!alive(prompt.widget, prompt.weak)) {
+            prompt = {};
+            continue;
+        }
+        if (prompt.frame + kPromptForget < moment.frame) {
+            give_back(prompt);
+            prompt = {};
+            continue;
+        }
+        // Pointed at another actor since its placement: what a hold did to it ends, and the new actor's holds apply.
+        const uint64_t actor = game::read_or<uint64_t>(prompt.widget + t::action_marker::actor);
+        if (actor != prompt.actor) give_back(prompt), prompt.actor = actor;
+        keep_prompt(prompt);
+    }
+}
+
 } // namespace
+
+int markers_watch_prompts(TSUCHI_Mod* self) {
+    if (watching_prompts && next_marker && next_project) return 1;
+    if ((!next_project || !next_marker) && !self) return 0;
+    uint64_t id = 0;
+    if (!next_project) hook_site(self, t::code_site::world_to_screen, &world_to_screen, &next_project, &project_hook);
+    if (!next_marker) hook_site(self, t::code_site::action_marker_place, &marker_place, &next_marker, &id);
+    if (!next_marker || !t::present(t::action_marker::actor) || !t::present(t::ui_widget::visibility)) return 0;
+    watching_prompts = true;
+    return 2;
+}
+
+uint32_t markers_prompt_screens(uint64_t actor) {
+    uint32_t players = 0;
+    // A prompt keeps the state it was last seen in until the game places it again, changes its visibility (looked at
+    // before every picture) or lets it go: the game does not place every prompt on every frame. Above 30 its
+    // placement runs once a step, as the widgets that count frames do, so a prompt placed on the step's frame only
+    // read as gone on a frame between when steps came four frames apart.
+    for (const Prompt& prompt : prompts)
+        if (prompt.used && prompt.actor == actor && alive(prompt.widget, prompt.weak) && prompt_shown(prompt.wish))
+            players |= prompt.player;
+    return players;
+}
+
+bool markers_hide_prompts(uint64_t key, uint64_t actor, uint32_t players) {
+    if (!key || !actor || !players) return false;
+    PromptHide* hide = nullptr;
+    for (unsigned i = 0; i < kHideRoom && !hide; ++i)
+        if (hides[i].used && hides[i].key == key) hide = &hides[i];
+    for (unsigned i = 0; i < kHideRoom && !hide; ++i)
+        if (!hides[i].used) hide = &hides[i];
+    if (!hide) return false;
+    *hide = {key, actor, players, true};
+    for (Prompt& prompt : prompts)
+        if (prompt.used && alive(prompt.widget, prompt.weak)) keep_prompt(prompt);
+    return true;
+}
+
+void markers_show_prompts(uint64_t key) {
+    for (PromptHide& hide : hides)
+        if (hide.used && hide.key == key) hide = {};
+    for (Prompt& prompt : prompts)
+        if (prompt.used && alive(prompt.widget, prompt.weak)) keep_prompt(prompt);
+}
+
+bool markers_hang(uint64_t slot, uint64_t actor, uint64_t controller, const float offset[3]) {
+    if (!slot || !actor || !controller || !offset) return false;
+    for (unsigned i = 0; i < 3; ++i)
+        if (!finite(offset[i])) return false;
+    Hung* entry = hung_of(slot);
+    if (entry && (entry->actor != actor || memcmp(entry->offset, offset, sizeof entry->offset))) entry->to = 0, entry->pair = false;
+    for (unsigned i = 0; !entry && i < kHungRoom; ++i)
+        if (!hung_marks[i].used) entry = &hung_marks[i], *entry = {}, entry->used = true;
+    if (!entry) return false;
+    entry->slot = slot, entry->slot_weak = game::to_weak_value(slot);
+    entry->actor = actor, entry->actor_weak = game::to_weak_value(actor);
+    entry->controller = controller, entry->controller_weak = game::to_weak_value(controller);
+    memcpy(entry->offset, offset, sizeof entry->offset);
+    return true;
+}
+
+bool markers_unhang(uint64_t slot) {
+    Hung* entry = hung_of(slot);
+    if (!entry) return false;
+    drop_hung(*entry);
+    return true;
+}
+
+bool markers_hung(uint64_t slot) {
+    const Hung* entry = hung_of(slot);
+    return entry && alive(entry->slot, entry->slot_weak) && alive(entry->actor, entry->actor_weak) &&
+           alive(entry->controller, entry->controller_weak);
+}
+
+void markers_cut(uint64_t actor) {
+    for (Hung& entry : hung_marks)
+        if (entry.used && entry.actor == actor) entry.to = 0, entry.pair = false;
+}
 
 bool markers_start(TSUCHI_Mod* self) {
     uint64_t id = 0;
-    bool all = hook_site(self, t::code_site::world_to_screen, &world_to_screen, &next_project, &project_hook) == TSUCHI_OK;
+    // The projection and the action prompts' placement may be hooked already, for a mod that asked about prompts.
+    bool all = next_project || hook_site(self, t::code_site::world_to_screen, &world_to_screen, &next_project, &project_hook) == TSUCHI_OK;
     // Without the projection there is nothing to place from.
     if (!next_project) return false;
     all = hook_site(self, t::code_site::viewport_position, &viewport_position, &next_position, &id) == TSUCHI_OK && all;
@@ -344,7 +639,7 @@ bool markers_start(TSUCHI_Mod* self) {
     all = hook_slot(self, t::slot::life_gauge_place, &gauge_place, &next_gauge, kHookNeedsStock, &id) == TSUCHI_OK && all;
     all = hook_slot(self, t::slot::life_bar_place, &bar_place, &next_bar, kHookNeedsStock, &id) == TSUCHI_OK && all;
     all = hook_site(self, t::code_site::canvas_position, &canvas_position, &next_canvas, &canvas_hook) == TSUCHI_OK && all;
-    all = hook_site(self, t::code_site::action_marker_place, &marker_place, &next_marker, &id) == TSUCHI_OK && all;
+    all = (next_marker || hook_site(self, t::code_site::action_marker_place, &marker_place, &next_marker, &id) == TSUCHI_OK) && all;
     // A build whose written route sits after the whole placement has no unchanged path of its own to observe.
     if (t::present(t::native_routes[t::native_route::cursor_unchanged].address))
         all = native_route(t::native_route::cursor_unchanged, &cursor_unchanged) && all;
@@ -358,6 +653,8 @@ void markers_moment(const PresentedMoment& now) {
 }
 
 void markers_present() {
+    prompts_present();
+    hung_present();
     if (!moment.active || !(moment.parts & kPartMarkers) || !next_project) return;
     const double place = at();
     for (Mark& mark : marks) {
@@ -392,6 +689,7 @@ void markers_present() {
 
 void markers_forget() {
     for (Mark& mark : marks) mark.used = false;
+    for (Hung& entry : hung_marks) entry.to = 0, entry.pair = false; // hung still, from its next step
     last = {};
 }
 
@@ -415,8 +713,9 @@ void marker_callers(char* text, unsigned capacity) {
 
 MarkerCounts marker_counts(bool clear) {
     MarkerCounts out = counts;
-    out.marks = 0;
+    out.marks = out.hung = 0;
     for (const Mark& mark : marks) out.marks += mark.used;
+    for (const Hung& entry : hung_marks) out.hung += entry.used;
     if (clear) counts = {};
     return out;
 }
