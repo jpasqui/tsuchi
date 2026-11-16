@@ -38,6 +38,7 @@
 namespace tsuchi_js { void register_script_mods(); }
 extern "C" unsigned long long tsuchi_libc_ticks(); // script_library.cpp
 #include "services.h"
+#include "memory_backend.h"
 #include "network_transport.h"
 #include "https_jobs.h"
 #include "hidden.h"
@@ -372,6 +373,7 @@ extern "C" void tsuchi_initialize() {
     if (serves(t::family::input)) input_start(self);
     if (serves(t::family::character)) characters_start(self);
     if (serves(t::family::storage)) storage_start();
+    memory_start();
     if (serves(t::family::sd_card)) log_file_start();
     dev_folders_start();
     settings_start();

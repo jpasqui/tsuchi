@@ -5,6 +5,7 @@
 #include "objects.h"
 #include "tsuchi_js.h"
 #include "reflect_world.h"
+#include "memory_backend.h"
 #include "reflection.h"
 #include "registry.h"
 void global_handle(JSContext* ctx, const char* name, const char* kind, uint64_t id) {
@@ -14,7 +15,7 @@ void global_handle(JSContext* ctx, const char* name, const char* kind, uint64_t 
 int main(int argc,char** argv) {
     if(argc!=2) return 2;
     tsuchi_js::set_error_handler([](const char* message) { std::fprintf(stderr,"%s\n",message); });
-    build_world(); tsuchi::reflect_start();
+    build_world(); tsuchi::reflect_start(); tsuchi::memory_start();
     TSUCHI_Mod* mod=tsuchi::mod_create("reflection.javascript");
     auto* state=tsuchi_js::create(mod,&tsuchi::host); if(!state) return 1;
     auto* ctx=tsuchi_js::context(state);

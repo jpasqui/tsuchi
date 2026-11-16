@@ -44,6 +44,7 @@
   "world",
   "packages",
   "voice",
+  "memory",
   "character"
  ],
  "tables": {
@@ -622,6 +623,15 @@
    "play_packet",
    "set_volume",
    "stop_stream"
+  ],
+  "memory": [
+   "main",
+   "allocate",
+   "address",
+   "free",
+   "read",
+   "write",
+   "read_name"
   ],
   "character": [
    "hold_input",

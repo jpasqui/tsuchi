@@ -91,6 +91,14 @@ for (const [code,fn] of [["not_found",()=>reflection.call(red,"Fly")],["not_foun
 for (const fn of [()=>reflection.call(red,"Heal",5),()=>reflection.call(red),()=>reflection.get(5,"Health"),()=>reflection.get(red),()=>reflection.set(red,"Health"),()=>combat.life(body)]) check(fails("TypeError",fn));
 check(reflection.field_at(red,"",0)==="Anger" && reflection.field_at(red,"",3)==="Health" && reflection.field_at(red,"Location",2)==="Z");
 check(fails("not_found",()=>reflection.field_at(red,"Location",3)) && fails("invalid",()=>reflection.field_at(red,"Health",0)));
+check(memory.main() > 0n);
+const block=memory.allocate(16n,8,false), at=memory.address(block);
+check(typeof at==="bigint" && new Uint8Array(memory.read(at,16n)).every(b=>b===0));
+const packed=new DataView(new ArrayBuffer(6)); packed.setUint32(0,4242,true); packed.setInt16(4,-7,true);
+check(memory.write(at,new Uint8Array(packed.buffer))===true);
+const back=new DataView(new Uint8Array(memory.read(at,6n)).buffer); check(back.getUint32(0,true)===4242 && back.getInt16(4,true)===-7);
+check(fails("not_found",()=>memory.read(16n,4n)) && fails("invalid",()=>memory.write(memory.main(),new Uint8Array(4))));
+check(memory.free(block)===true && fails("not_found",()=>memory.address(block)));
 const originalHealth = reflection.get(red,"Health");
 const heldField = reflection.hold_field(red,"Health",0.1,"");
 check(reflection.get(red,"Health") > 0.09);
