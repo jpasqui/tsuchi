@@ -400,21 +400,23 @@ functions:
       notify the game or change copies already written to save data.
 
       Paths may traverse structs but not object references. An array path must
-      contain exactly one index and name an integer identity field within its
-      element. The identity must be unique and must not be changed while held.
-      Updates and restoration find that identity again if rows move. For a field
-      outside an array, pass empty text for identity. Nested arrays aren't supported.
+      contain exactly one index and name an identity field within its element.
+      The identity is an integer field or a name field. It must be unique in the
+      array and must not be changed while held. Names that differ only by case are
+      the same name. Updates and restoration find that identity again if rows
+      move. For a field outside an array, pass empty text for identity. Nested
+      arrays aren't supported.
     owns: true
     params:
       - {name: object, type: handle<object>, doc: "The object containing the field."}
       - {name: path, type: text, doc: "The field path, such as GameFlowConfig.CaveTimeAddRate."}
       - {name: value, type: value, doc: "The boolean, integer, or finite number to write. It must fit the field's storage."}
-      - {name: identity, type: text, doc: "An integer field path relative to an array element, or empty text."}
+      - {name: identity, type: text, doc: "The path of an integer field or a name field, relative to an array element, or empty text."}
     returns: {type: handle<field_hold>, doc: "The hold to update or release."}
     fails:
       not_found: The object or field is absent.
       invalid: The value or path is invalid.
-      unsupported: The path traverses objects or nested arrays, or the field isn't scalar.
+      unsupported: The path traverses objects or nested arrays, the field isn't scalar, or the identity is neither an integer nor a name.
       busy: The field is held already, or the array identity isn't unique.
       no_memory: The hold could not be recorded.
       capacity: A path exceeds 1023 bytes, an array exceeds 1000000 rows, or there are already 4096 field holds.

@@ -70,6 +70,70 @@ void owned_fields() {
     CHECK(api.update_field(owner, hold, &wanted) == TSUCHI_NOT_FOUND);
     CHECK(api.release_field(owner, hold) == TSUCHI_OK); // deletion doesn't touch the remaining row
     CHECK(fake::get<int32_t>(moved + 8) == 4);
+    CHECK(api.release_field(owner, hold) == TSUCHI_NOT_FOUND);
+
+    // Rows that share every integer and differ by name: the name is the identity.
+    const auto part_type = fake::memory(0x80);
+    fake::put<uint64_t>(part_type, fake::engine().vtable);
+    fake::field(part_type, u"Mask", u"UInt32Property", 0, 4);
+    fake::field(part_type, u"Stop", u"IntProperty", 4, 4);
+    fake::field(part_type, u"Part", u"NameProperty", 8, 8);
+    fake::field(part_type, u"Label", u"StrProperty", 16, 16);
+    fake::field(part_type, u"Scale", u"FloatProperty", 32, 4);
+    const auto target_type = fake::engine_object(u"FieldTarget", w.root);
+    fake::field(target_type, u"Parts", u"ArrayProperty", 0x40, 0x10, fake::loose_field(u"StructProperty", 40, part_type));
+    const auto target = fake::engine_object(u"Target", target_type, 0x80);
+    const auto parts = fake::memory(120), shuffled = fake::memory(120);
+    const auto dial = fake::name(u"Dial");
+    const tsuchi::game::Name dials[] = {dial, {dial.index, 2}, fake::name(u"Button")}; // Dial, Dial_1, Button
+    for (uint32_t i = 0; i < 3; ++i) {
+        fake::put<uint32_t>(parts + 40 * i, 0xFFFFBFFFu); fake::put<int32_t>(parts + 40 * i + 4, -1);
+        fake::put<tsuchi::game::Name>(parts + 40 * i + 8, dials[i]);
+    }
+    fake::put<uint64_t>(target + 0x40, parts); fake::put<int32_t>(target + 0x48, 3); fake::put<int32_t>(target + 0x4c, 3);
+    TSUCHI_FieldHold first{}, second{}, third{};
+    wanted = integer(1000000);
+    CHECK(api.hold_field(owner, handle(target), "Parts[0].Stop", &wanted, "Mask", &first) == TSUCHI_BUSY);
+    CHECK(fake::get<int32_t>(parts + 4) == -1 && !tsuchi::owned_count(owner));
+    CHECK(api.hold_field(owner, handle(target), "Parts[0].Stop", &wanted, "Label", &first) == TSUCHI_UNSUPPORTED);
+    CHECK(api.hold_field(owner, handle(target), "Parts[0].Stop", &wanted, "Scale", &first) == TSUCHI_UNSUPPORTED);
+    CHECK(api.hold_field(owner, handle(target), "Parts[0].Stop", &wanted, "Absent", &first) == TSUCHI_NOT_FOUND);
+    CHECK(fake::get<int32_t>(parts + 4) == -1 && !tsuchi::owned_count(owner));
+    // A name with a number is another name than the same text without one.
+    CHECK(api.hold_field(owner, handle(target), "Parts[0].Stop", &wanted, "Part", &first) == TSUCHI_OK);
+    CHECK(api.hold_field(owner, handle(target), "Parts[1].Stop", &wanted, "pArT", &second) == TSUCHI_OK);
+    CHECK(api.hold_field(owner, handle(target), "Parts[2].Stop", &wanted, "Part", &third) == TSUCHI_OK);
+    CHECK(api.hold_field(other, handle(target), "Parts[1].Stop", &wanted, "Part", &duplicate) == TSUCHI_BUSY);
+    for (uint32_t i = 0; i < 3; ++i) CHECK(fake::get<int32_t>(parts + 40 * i + 4) == 1000000);
+    // The rows in another order, in other memory: each hold follows its name.
+    for (uint32_t i = 0; i < 3; ++i)
+        for (uint32_t byte = 0; byte < 40; ++byte)
+            fake::put<uint8_t>(shuffled + 40 * ((i + 1) % 3) + byte, fake::get<uint8_t>(parts + 40 * i + byte));
+    fake::put<uint64_t>(target + 0x40, shuffled);
+    wanted = integer(5);
+    CHECK(api.update_field(owner, second, &wanted) == TSUCHI_OK && fake::get<int32_t>(shuffled + 40 * 2 + 4) == 5);
+    CHECK(fake::get<int32_t>(shuffled + 4) == 1000000 && fake::get<int32_t>(shuffled + 40 + 4) == 1000000);
+    CHECK(api.release_field(owner, first) == TSUCHI_OK && fake::get<int32_t>(shuffled + 40 + 4) == -1);
+    // Two rows with one name: neither is written until the names differ again.
+    fake::put<tsuchi::game::Name>(shuffled + 8, dials[1]);
+    CHECK(api.update_field(owner, second, &wanted) == TSUCHI_BUSY && api.release_field(owner, second) == TSUCHI_BUSY);
+    CHECK(api.hold_field(owner, handle(target), "Parts[0].Stop", &wanted, "Part", &first) == TSUCHI_BUSY);
+    fake::put<tsuchi::game::Name>(shuffled + 8, dials[2]);
+    // The identity itself is never the held field.
+    CHECK(api.hold_field(other, handle(target), "Parts[1].Part", &wanted, "Part", &duplicate) == TSUCHI_INVALID);
+    // A field held by a name is the same field when another hold names its row by an integer.
+    fake::put<uint32_t>(shuffled, 7);
+    CHECK(api.hold_field(other, handle(target), "Parts[0].Stop", &wanted, "Mask", &duplicate) == TSUCHI_BUSY);
+    CHECK(api.hold_field(other, handle(target), "Parts[1].Stop", &wanted, "Mask", &duplicate) == TSUCHI_BUSY);
+    fake::put<uint32_t>(shuffled, 0xFFFFBFFFu);
+    CHECK(fake::get<int32_t>(shuffled + 4) == 1000000 && fake::get<int32_t>(shuffled + 40 + 4) == -1);
+    // A row removed: its hold ends without a write to the rows that stay.
+    fake::put<int32_t>(target + 0x40 + fake::t::array::count, 2);
+    CHECK(api.update_field(owner, second, &wanted) == TSUCHI_NOT_FOUND && api.release_field(owner, second) == TSUCHI_OK);
+    CHECK(fake::get<int32_t>(shuffled + 4) == 1000000 && fake::get<int32_t>(shuffled + 40 + 4) == -1);
+    tsuchi::mod_stop(owner);
+    CHECK(fake::get<int32_t>(shuffled + 4) == -1 && fake::get<int32_t>(shuffled + 40 * 2 + 4) == 5);
+    owner = tsuchi::mod_create("fields.owner");
     tsuchi::set_allocator({[](size_t)->void* { return nullptr; }, std::free});
     CHECK(api.hold_field(owner, object, "Health", &wanted, "", &hold) == TSUCHI_NO_MEMORY);
     tsuchi::set_allocator({std::malloc, std::free});

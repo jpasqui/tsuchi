@@ -15,7 +15,8 @@ struct Record {
     uint64_t id = 0, object = 0, property = 0;
     TSUCHI_Mod* mod = nullptr;
     Text path, array, tail, identity;
-    int64_t key = 0;
+    int64_t key = 0;    // the row's identity: an integer, or both numbers of a name
+    bool named = false; // the identity is a name field
     Value original, written;
 };
 inline List<Record*> records;
@@ -90,6 +91,20 @@ inline TSUCHI_Result array_element(uint64_t type, uint64_t base, const char* arr
     const auto result = game::find_place(type, base, path, element);
     return result == TSUCHI_OK ? game::struct_at(element, row_type, row_base) : result;
 }
+// What tells a row from the others: an integer field's value, or a name field's name. A name is kept
+// as the game stores it, so two rows have the same name when the engine would say so.
+inline TSUCHI_Result identity_key(const Place& place, int64_t& key, bool& named) {
+    game::Name name{};
+    auto result = game::read_name(place, name);
+    if (result == TSUCHI_OK) { key = int64_t(uint64_t(name.number) << 32 | name.index); named = true; return TSUCHI_OK; }
+    if (result != TSUCHI_INVALID) return result;
+    Value value;
+    result = game::read_value(place, value);
+    if (result != TSUCHI_OK) return result;
+    if (value.kind != ValueKind::integer) return TSUCHI_UNSUPPORTED;
+    key = value.integer; named = false;
+    return TSUCHI_OK;
+}
 inline TSUCHI_Result locate(const Record& record, Place& out) {
     const uint64_t base = game::from_handle(record.object), type = base ? game::type_of(base) : 0;
     if (!type) return TSUCHI_NOT_FOUND;
@@ -103,15 +118,15 @@ inline TSUCHI_Result locate(const Record& record, Place& out) {
     if (list.count > 1000000) return TSUCHI_CAPACITY;
     bool found = false;
     for (uint32_t i = 0; i < list.count; ++i) {
-        uint64_t row_type = 0, row_base = 0; Place key; Value value;
+        uint64_t row_type = 0, row_base = 0; Place key; int64_t value = 0; bool named = false;
         result = array_element(type, base, record.array.get(), i, row_type, row_base);
         if (result != TSUCHI_OK) return result;
         result = struct_path(row_type, row_base, record.identity.get(), key);
         if (result != TSUCHI_OK) return result;
-        result = game::read_value(key, value);
+        result = identity_key(key, value, named);
         if (result != TSUCHI_OK) return result;
-        if (value.kind != ValueKind::integer) return TSUCHI_UNSUPPORTED;
-        if (value.integer != record.key) continue;
+        if (named != record.named) return TSUCHI_UNSUPPORTED;
+        if (value != record.key) continue;
         if (found) return TSUCHI_BUSY;
         result = struct_path(row_type, row_base, record.tail.get(), out);
         if (result != TSUCHI_OK) return result;
@@ -142,16 +157,12 @@ inline TSUCHI_Result configure(Record& record, const char* path, const char* ide
     Place array;
     auto result = struct_path(type, base, prefix, array);
     if (result != TSUCHI_OK) return result;
-    uint64_t row_type = 0, row_base = 0; Place key; Value value;
+    uint64_t row_type = 0, row_base = 0; Place key;
     result = array_element(type, base, prefix, index, row_type, row_base);
     if (result != TSUCHI_OK) return result;
     result = struct_path(row_type, row_base, identity, key);
     if (result != TSUCHI_OK) return result;
-    result = game::read_value(key, value);
-    if (result != TSUCHI_OK) return result;
-    if (value.kind != ValueKind::integer) return TSUCHI_UNSUPPORTED;
-    record.key = value.integer;
-    return TSUCHI_OK;
+    return identity_key(key, record.key, record.named);
 }
 inline TSUCHI_Result unchanged(const Record& record, Place& place) {
     auto result = locate(record, place);
@@ -187,7 +198,7 @@ inline TSUCHI_Result hold(TSUCHI_Mod* mod, TSUCHI_Object object, const char* pat
         // Different root lives cannot alias: reference traversal is prohibited.
         if (existing.object != record->object) continue;
         // Different unique keys in the same array need no full row search.
-        if (*record->array.get() && record->key != existing.key &&
+        if (*record->array.get() && record->key != existing.key && record->named == existing.named &&
             same_path(record->array.get(), existing.array.get()) &&
             same_path(record->identity.get(), existing.identity.get())) continue;
         Place other;
