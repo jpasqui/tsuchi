@@ -101,6 +101,7 @@ def prepare():
     for own in (False, True):
         quickjs_build.objects(own)
         test_all.script_lua_objects(own)
+        test_all.Generated().host_lua(own)  # build/lua_host, which several modules run and test_all builds
     return time.perf_counter() - started
 
 
