@@ -10,6 +10,7 @@ identity:
 - offset: 54633456
   hash: 17676423334391457610
 data:
+  script_natives: absent
   options_direction_delegate_table: 124569840
   options_input_delegate_table: 124569952
   dialog_answer_yes: 134277568
@@ -134,6 +135,7 @@ data:
   gimmick_warp_stage_function: 52996080
   content_icon_size: 134350656
 constants:
+  script_end_parms: 22
   academy_points_session_instruction: 0x54000ae1
   academy_points_provider_instruction: 0x54000a81
   academy_points_blocked_instruction: 0x37000a4a
@@ -961,6 +963,25 @@ structs:
   function:
     fields:
       flags: 176
+      func: absent              # not checked in this build's code yet
+      event_graph: absent
+      event_graph_entry: absent
+  script_frame:
+    fields:
+      node: absent
+      object: absent
+      code: absent
+      locals: absent
+      most_recent_property: absent
+      most_recent_address: absent
+      out_parms: absent
+      property_chain: absent
+  out_parm:
+    size: absent
+    fields:
+      property: absent
+      address: absent
+      next: absent
   class_type:
     fields:
       default_object: 280

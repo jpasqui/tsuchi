@@ -10,6 +10,12 @@
 # `optional` lists entries the code using them asks t::bound about and goes on without, so a build lacking one loses
 # only that one path and no family.
 optional:
+  - structs.function.func            # core/engine_hooks.cpp asks t::present; without them hook.engine_function is unsupported
+  - structs.function.event_graph
+  - structs.function.event_graph_entry
+  - structs.script_frame
+  - structs.out_parm
+  - data.script_natives              # without it a Blueprint's call of a hooked C++ function skips the handlers
   - tables.character_remap_sites   # isolated action states check every extra read; older action calls keep their sites
   - tables.character_remap_words
   - tables.character_remap_registers
@@ -95,6 +101,7 @@ core:
     - base/shared.cpp
     - base/shared.h
     - core/families.h
+    - core/engine_hooks.cpp
     - core/hooks.cpp
     - core/hooks.h
     - core/native_hooks.cpp

@@ -82,6 +82,108 @@ Function and instruction targets need code access, which the release's `main.npd
 gives every installation (see [Port native hooks](/develop/native-hooks/)). Without
 it they fail with `not_ready`. Table-entry hooks need no code access.
 
+## Engine functions
+
+`hook.engine_function(path, handlers)` hooks one of the engine's reflected
+functions by its path. It needs no offsets and no code access, so it works on every
+install, and it keeps working across game updates while the function keeps its path
+and arguments. This is the same model as UE4SS's `RegisterHook`.
+
+The path is the class's path, a colon, and the function's name, as
+`reflection.path` gives it for the function. Case doesn't matter.
+
+```lua
+local id, why = hook.engine_function('/Script/Engine.PlayerController:ClientRestart', {
+    before = function(call)
+        -- call.object is the controller; call.args.NewPawn is the pawn
+    end,
+    after = function(call)
+        -- call.result is the result, or nil for a function without one
+    end,
+})
+```
+
+```javascript
+const id = hook.engine_function('/Script/Engine.PlayerController:ClientRestart', {
+    before(call) { /* call.object, call.args.NewPawn */ },
+});
+```
+
+`handlers` has `before`, `after`, or both. Each handler gets one table, `call`:
+
+- `call.object` is the object the function runs on.
+- `call.args` has the function's arguments by name. Values are the same as
+  `reflection.get` gives: objects are handles, structs are tables, and names and
+  strings are text.
+- `call.result` is the function's result, in `after` only.
+
+A change to `call.args` in `before` changes what the function gets. In `after`, a
+value that the handler returns replaces the result, and a change to `call.args`
+changes an argument that the function writes. Tsuchi writes a handler's changes
+after it returns, all of them or none. If the handler raises an error, or a value
+doesn't fit, none of its changes apply and the call goes on.
+
+When several hooks are on one function, `before` handlers run newest first and
+`after` handlers run oldest first.
+
+The rules of `hook.wrap` apply to the handlers. They run on the game thread only,
+with the same instruction budget. Every other Tsuchi call fails with `invalid`
+inside them. Lua handlers can't yield, and JavaScript handlers can't return a
+Promise.
+
+### What reaches the handlers
+
+The engine runs a reflected function through an entry in its description. Tsuchi
+puts its own function in that entry. The entry is data, so this needs no code
+access.
+
+These calls reach your handlers:
+
+- Calls that C++ code makes through `ProcessEvent`: events such as
+  `ReceiveBeginPlay`, input bindings, timers, delegates, network calls, and
+  `reflection.call`.
+- A Blueprint's calls of C++ functions. A Blueprint passes the arguments as
+  script code. Tsuchi runs that code first, the way the function's own code
+  would, so your handlers get the values. An argument passed by reference is the
+  Blueprint's own variable, so a change to it changes that variable.
+
+These calls skip your handlers:
+
+- A C++ function that other C++ code calls directly. UE4SS has the same limit.
+- A Blueprint function that another Blueprint function calls.
+
+Some C++ functions take a value of any type, such as the array functions. They
+read the type from the Blueprint's script code as it runs, and a hook would hand
+them arguments of the wrong size. `engine_function` returns `unsupported` for
+the engine's own:
+
+- every function of `KismetArrayLibrary`, `BlueprintMapLibrary`, and
+  `BlueprintSetLibrary`;
+- `KismetSystemLibrary:SetStructurePropertyByName` and
+  `KismetSystemLibrary:SetCollisionProfileNameProperty`;
+- `DataTableFunctionLibrary:GetDataTableRowFromName`.
+
+Tsuchi can't tell such a function from any other, so a plugin's or the game's
+own function of this kind isn't refused. Don't hook those.
+
+A Blueprint event without arguments runs as an entry point into its class's event
+graph. Tsuchi hooks the event graph for that event and runs your handlers for its
+entry point only.
+
+The function keeps Tsuchi's entry until the game closes. With no hooks left, the
+entry goes straight to the engine's own function. If the game unloads a class and
+loads it again, its functions are new objects, so hook them again.
+
+### Call a function by its path
+
+To call a function, use `reflection.call`. Pass an object, or for a function that
+belongs to the class, pass the class from `reflection.find_class`:
+
+```lua
+local class = reflection.find_class('GameplayStatics')
+local result = reflection.call(class, 'GetTimeSeconds', {WorldContextObject = some_actor})
+```
+
 ## Entries
 
 Use `hook.wrap_slot` for a function-table entry named in the game table. Use

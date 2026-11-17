@@ -155,44 +155,14 @@ int invoke(lua_State* L) {
 }
 bool ready(void* user) {
     Hook& hook = *static_cast<Hook*>(user);
-    Budget* used = budget(hook.L);
-    return !hook.disabled && stack_room() >= tsuchi_script::kHookStack &&
-           (!used || ((!used->depth || !turn_over(hook.L)) && used->hooks.remaining(engine_frame_number(), used->run)));
+    return tsuchi_lua::hook_ready(hook.L, hook.disabled);
 }
 bool run(Call& call) {
-    Hook& hook = *call.hook; lua_State* L = hook.L;
-    if (!lua_checkstack(L, 5)) return false;
-    Turn turn(L, tsuchi_script::kHookTurn);
-    Budget* used = budget(L);
-    const uint64_t old_limit = used ? used->limit : 0;
-    // Every call gets at most its own allowance, including one that continues a turn already running. The hook
-    // is switched off only when that allowance is what ran out, not the frame's or an outer turn's.
-    bool own_limit = false;
-    if (used) {
-        const uint64_t start = used->run;
-        const uint64_t own = start + tsuchi_script::kHookTurn;
-        const uint64_t frame = start + used->hooks.remaining(engine_frame_number(), start);
-        const uint64_t cap = own < frame ? own : frame;
-        if (cap < used->limit) used->limit = cap;
-        own_limit = used->limit == own && own <= frame;
-        used->hooks.enter(start);
-    }
-    const int top = lua_gettop(L);
+    Hook& hook = *call.hook;
     call.serial = next_call++; call.previous = active; active = &call;
-    lua_pushcfunction(L, invoke); lua_pushlightuserdata(L, &call);
-    const int status = lua_pcall(L, 1, 0, 0);
+    const bool ok = tsuchi_lua::run_hook(hook.L, invoke, &call, hook.disabled, hook.error, sizeof hook.error);
     active = call.previous; // escaped originals can no longer find this call
-    const bool over = turn_over(L);
-    if (status != LUA_OK || over) {
-        hook.disabled |= over && own_limit;
-        const char* message = over ? "script hook exhausted its instruction budget" :
-            (lua_type(L, -1) == LUA_TSTRING ? lua_tostring(L, -1) : "script hook raised an error");
-        size_t n = strlen(message); if (n >= sizeof hook.error) n = sizeof hook.error - 1;
-        memcpy(hook.error, message, n); hook.error[n] = 0;
-    }
-    lua_settop(L, top);
-    if (used) { used->hooks.leave(used->run); used->limit = old_limit; }
-    return status == LUA_OK && !over;
+    return ok;
 }
 bool wrap(void* user, CallFrame& frame, const DynamicOriginal& next) {
     Call call{static_cast<Hook*>(user), &frame, &next};
@@ -271,6 +241,45 @@ int install(lua_State* L, DynamicKind kind) {
     return 1;
 }
 } // namespace
+namespace tsuchi_lua {
+bool hook_ready(lua_State* L, bool disabled) {
+    Budget* used = budget(L);
+    return !disabled && tsuchi::stack_room() >= tsuchi_script::kHookStack &&
+           (!used || ((!used->depth || !turn_over(L)) && used->hooks.remaining(tsuchi::engine_frame_number(), used->run)));
+}
+bool run_hook(lua_State* L, lua_CFunction body, void* data, bool& disabled, char* error, size_t capacity) {
+    if (!lua_checkstack(L, 5)) return false;
+    Turn turn(L, tsuchi_script::kHookTurn);
+    Budget* used = budget(L);
+    const uint64_t old_limit = used ? used->limit : 0;
+    // Every call gets at most its own allowance, including one that continues a turn already running. The hook
+    // is switched off only when that allowance is what ran out, not the frame's or an outer turn's.
+    bool own_limit = false;
+    if (used) {
+        const uint64_t start = used->run;
+        const uint64_t own = start + tsuchi_script::kHookTurn;
+        const uint64_t frame = start + used->hooks.remaining(tsuchi::engine_frame_number(), start);
+        const uint64_t cap = own < frame ? own : frame;
+        if (cap < used->limit) used->limit = cap;
+        own_limit = used->limit == own && own <= frame;
+        used->hooks.enter(start);
+    }
+    const int top = lua_gettop(L);
+    lua_pushcfunction(L, body); lua_pushlightuserdata(L, data);
+    const int status = lua_pcall(L, 1, 0, 0);
+    const bool over = turn_over(L);
+    if (status != LUA_OK || over) {
+        disabled |= over && own_limit;
+        const char* message = over ? "script hook exhausted its instruction budget" :
+            (lua_type(L, -1) == LUA_TSTRING ? lua_tostring(L, -1) : "script hook raised an error");
+        size_t n = strlen(message); if (n >= capacity) n = capacity - 1;
+        memcpy(error, message, n); error[n] = 0;
+    }
+    lua_settop(L, top);
+    if (used) { used->hooks.leave(used->run); used->limit = old_limit; }
+    return status == LUA_OK && !over;
+}
+} // namespace tsuchi_lua
 int tsuchi_lua_hook_wrap(lua_State* L) { return install(L, tsuchi::DynamicKind::wrap); }
 int tsuchi_lua_hook_watch(lua_State* L) { return install(L, tsuchi::DynamicKind::watch); }
 int tsuchi_lua_hook_instruction(lua_State* L) { return install(L, tsuchi::DynamicKind::inline_hook); }

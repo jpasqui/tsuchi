@@ -183,52 +183,15 @@ bool invoke(Call& call) {
 }
 bool ready(void* user) {
     Hook& hook = *static_cast<Hook*>(user);
-    return !hook.disabled && (!turn_active(hook.ctx) || !turn_over(hook.ctx)) && stack_room() >= tsuchi_script::kHookStack &&
-           hook_allowance(hook.ctx).remaining(engine_frame_number(), turn_used(hook.ctx));
+    return tsuchi_js::hook_ready(hook.ctx, hook.disabled);
 }
+bool invoke_call(void* call) { return invoke(*static_cast<Call*>(call)); }
 bool run(Call& call) {
-    Hook& hook = *call.hook; JSContext* ctx = hook.ctx;
-    Turn turn(ctx, tsuchi_script::kHookTurn);
-    auto& allowance = hook_allowance(ctx);
-    const uint64_t old_limit = turn_limit(ctx);
-    // Every call gets at most its own allowance, including one that continues a turn already running. The hook
-    // is switched off only when that allowance is what ran out, not the frame's or an outer turn's.
-    const uint64_t start = turn_used(ctx);
-    const uint64_t own = start + tsuchi_script::kHookTurn;
-    const uint64_t frame = start + allowance.remaining(engine_frame_number(), start);
-    const uint64_t cap = own < frame ? own : frame;
-    if (cap < old_limit) set_turn_limit(ctx, cap);
-    const bool own_limit = turn_limit(ctx) == own && own <= frame;
-    allowance.enter(start);
+    Hook& hook = *call.hook;
     call.serial = next_call++; call.previous = active; active = &call;
-    const bool ok = invoke(call);
+    const bool ok = tsuchi_js::run_hook(hook.ctx, invoke_call, &call, hook.disabled, hook.error, sizeof hook.error);
     active = call.previous;
-    const bool over = turn_over(ctx);
-    if (!ok || over) {
-        hook.disabled |= over && own_limit;
-        // Converting an object or reading a property through a getter can run script code, so the hook path
-        // reads only a thrown string, or the message an Error holds as a plain data property of its own.
-        Value error(ctx, JS_GetException(ctx));
-        const char* message = over ? "script hook exhausted its instruction budget" : "script hook raised an error or returned asynchronously";
-        const char* string = nullptr;
-        if (!over && JS_IsString(error)) string = JS_ToCString(ctx, error);
-        else if (!over && JS_IsError(ctx, error)) {
-            const JSAtom atom = JS_NewAtom(ctx, "message");
-            JSPropertyDescriptor own{};
-            if (atom != JS_ATOM_NULL && JS_GetOwnProperty(ctx, &own, error, atom) > 0) {
-                if (!(own.flags & JS_PROP_GETSET) && JS_IsString(own.value)) string = JS_ToCString(ctx, own.value);
-                JS_FreeValue(ctx, own.value); JS_FreeValue(ctx, own.getter); JS_FreeValue(ctx, own.setter);
-            }
-            if (atom != JS_ATOM_NULL) JS_FreeAtom(ctx, atom);
-        }
-        if (string) message = string;
-        size_t n = strlen(message); if (n >= sizeof hook.error) n = sizeof hook.error - 1;
-        memcpy(hook.error, message, n); hook.error[n] = 0;
-        if (string) JS_FreeCString(ctx, string);
-        if (JS_HasException(ctx)) { Value ignored(ctx, JS_GetException(ctx)); }
-    }
-    allowance.leave(turn_used(ctx)); set_turn_limit(ctx, old_limit);
-    return ok && !over;
+    return ok;
 }
 bool wrap(void* user, CallFrame& frame, const DynamicOriginal& next) {
     Call call{static_cast<Hook*>(user), &frame, &next};
@@ -314,6 +277,54 @@ JSValue install(JSContext* ctx, int argc, JSValueConst* argv, DynamicKind kind) 
     return handle;
 }
 } // namespace
+namespace tsuchi_js {
+bool hook_ready(JSContext* ctx, bool disabled) {
+    return !disabled && (!turn_active(ctx) || !turn_over(ctx)) && tsuchi::stack_room() >= tsuchi_script::kHookStack &&
+           hook_allowance(ctx).remaining(tsuchi::engine_frame_number(), turn_used(ctx));
+}
+bool hook_returned(JSContext* ctx, JSValueConst returned) { return synchronous(ctx, returned); }
+bool run_hook(JSContext* ctx, bool (*body)(void*), void* data, bool& disabled, char* error, size_t capacity) {
+    Turn turn(ctx, tsuchi_script::kHookTurn);
+    auto& allowance = hook_allowance(ctx);
+    const uint64_t old_limit = turn_limit(ctx);
+    // Every call gets at most its own allowance, including one that continues a turn already running. The hook
+    // is switched off only when that allowance is what ran out, not the frame's or an outer turn's.
+    const uint64_t start = turn_used(ctx);
+    const uint64_t own = start + tsuchi_script::kHookTurn;
+    const uint64_t frame = start + allowance.remaining(tsuchi::engine_frame_number(), start);
+    const uint64_t cap = own < frame ? own : frame;
+    if (cap < old_limit) set_turn_limit(ctx, cap);
+    const bool own_limit = turn_limit(ctx) == own && own <= frame;
+    allowance.enter(start);
+    const bool ok = body(data);
+    const bool over = turn_over(ctx);
+    if (!ok || over) {
+        disabled |= over && own_limit;
+        // Converting an object or reading a property through a getter can run script code, so the hook path
+        // reads only a thrown string, or the message an Error holds as a plain data property of its own.
+        Value thrown(ctx, JS_GetException(ctx));
+        const char* message = over ? "script hook exhausted its instruction budget" : "script hook raised an error or returned asynchronously";
+        const char* string = nullptr;
+        if (!over && JS_IsString(thrown)) string = JS_ToCString(ctx, thrown);
+        else if (!over && JS_IsError(ctx, thrown)) {
+            const JSAtom atom = JS_NewAtom(ctx, "message");
+            JSPropertyDescriptor own{};
+            if (atom != JS_ATOM_NULL && JS_GetOwnProperty(ctx, &own, thrown, atom) > 0) {
+                if (!(own.flags & JS_PROP_GETSET) && JS_IsString(own.value)) string = JS_ToCString(ctx, own.value);
+                JS_FreeValue(ctx, own.value); JS_FreeValue(ctx, own.getter); JS_FreeValue(ctx, own.setter);
+            }
+            if (atom != JS_ATOM_NULL) JS_FreeAtom(ctx, atom);
+        }
+        if (string) message = string;
+        size_t n = strlen(message); if (n >= capacity) n = capacity - 1;
+        memcpy(error, message, n); error[n] = 0;
+        if (string) JS_FreeCString(ctx, string);
+        if (JS_HasException(ctx)) { Value ignored(ctx, JS_GetException(ctx)); }
+    }
+    allowance.leave(turn_used(ctx)); set_turn_limit(ctx, old_limit);
+    return ok && !over;
+}
+} // namespace tsuchi_js
 JSValue tsuchi_js_hook_wrap(JSContext* ctx, int argc, JSValueConst* argv) { return install(ctx, argc, argv, tsuchi::DynamicKind::wrap); }
 JSValue tsuchi_js_hook_watch(JSContext* ctx, int argc, JSValueConst* argv) { return install(ctx, argc, argv, tsuchi::DynamicKind::watch); }
 JSValue tsuchi_js_hook_instruction(JSContext* ctx, int argc, JSValueConst* argv) { return install(ctx, argc, argv, tsuchi::DynamicKind::inline_hook); }
