@@ -68,6 +68,15 @@ def run(command):
         sys.exit(f'{Path(str(command[0])).name} failed:\n{result.stdout}{result.stderr}')
 
 
+def compile_reused(command):
+    """One compile through tools/object_cache.py: kept while it is current, and a failure ends the build as run's does."""
+    import object_cache
+    try:
+        object_cache.compile(command)
+    except subprocess.CalledProcessError as error:
+        sys.exit(f'{Path(str(command[0])).name} failed:\n{error.stdout}{error.stderr}')
+
+
 def page_up(value):
     return (value + PAGE - 1) & ~(PAGE - 1)
 
@@ -239,8 +248,11 @@ def builds_digest(root=ROOT):
     return hashed.hexdigest()
 
 
-def build(out, name='subsdk9', selfcheck=False, native_npdm=None):
-    """`selfcheck` builds in the framework's own checks, which run in the game: never the build people run."""
+def build(out, name='subsdk9', selfcheck=False, native_npdm=None, reuse=False):
+    """`selfcheck` builds in the framework's own checks, which run in the game: never the build people run.
+
+    `reuse` keeps an object of the last build in `out` while its command and every file it was made from are as they
+    were (tools/object_cache.py); the checks ask for it. Without it every object is made again, as for a release."""
     if not isinstance(name, str) or not re.fullmatch(r'subsdk[0-9]', name):
         raise ValueError('module name must be subsdk0 through subsdk9')
     previous = module_output_preflight(out)
@@ -264,7 +276,10 @@ def build(out, name='subsdk9', selfcheck=False, native_npdm=None):
     sources = sorted((FRAMEWORK / 'core').glob('*.cpp')) + sorted((FRAMEWORK / 'base').glob('*.cpp'))
     sources += sorted((FRAMEWORK / 'game').glob('*.cpp'))
     roots = (MBEDTLS / 'cacert.pem').read_bytes()
-    (objects / 'https_roots.h').write_text('#pragma once\nstatic const unsigned char tsuchi_https_roots[] = {' + ','.join(str(b) for b in roots + b'\0') + '};\n', encoding='utf-8')
+    roots_header = objects / 'https_roots.h'
+    roots_text = '#pragma once\nstatic const unsigned char tsuchi_https_roots[] = {' + ','.join(str(b) for b in roots + b'\0') + '};\n'
+    if not roots_header.exists() or roots_header.read_text(encoding='utf-8') != roots_text:  # unchanged, what includes it stays current
+        roots_header.write_text(roots_text, encoding='utf-8')
     sources += sorted(HTTPS.glob('*.cpp'))
     sources += sorted((FRAMEWORK / 'target').glob('*.cpp')) + sorted((gen / 'framework').glob('*.cpp'))
     built, jobs = [], []  # every object compiles on its own, so they compile at once, and link in this order
@@ -310,7 +325,7 @@ def build(out, name='subsdk9', selfcheck=False, native_npdm=None):
     start = objects / 'start.o'
     jobs.append([clang, '--target=aarch64-none-elf', '-c', FRAMEWORK / 'target' / 'start.S', '-o', start])
     with ThreadPoolExecutor(build_jobs()) as pool:
-        list(pool.map(run, jobs))
+        list(pool.map(compile_reused if reuse else run, jobs))
     elf = objects / 'tsuchi.pending.elf'
     # A worktree path can put hundreds of object paths beyond Windows' command
     # line limit. LLVM accepts the same arguments through a UTF-8 response file.

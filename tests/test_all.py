@@ -1,5 +1,6 @@
 """The repository's checks. Run them all with: python tools/check.py"""
 import copy
+import hashlib
 import json
 import os
 import re
@@ -16,6 +17,7 @@ sys.path.insert(0, str(ROOT / 'tools'))
 
 import build_module  # noqa: E402
 import check_words  # noqa: E402
+import object_cache  # noqa: E402
 import generate  # noqa: E402
 import link_args  # noqa: E402
 import read_checks  # noqa: E402
@@ -44,19 +46,30 @@ def run(command):
     return result
 
 
+def compile_object(command):
+    """Compiles one object unless it is current (tools/object_cache.py); a failed compile fails the check with its output."""
+    try:
+        object_cache.compile(command)
+    except subprocess.CalledProcessError as error:
+        raise AssertionError(f'{" ".join(str(c) for c in command[:3])} ...\n{error.stdout}{error.stderr}') from None
+
+
 def build_program(program, flags, sources, extra_objects=()):
-    """Compiles each source on its own, all at once across the machine's cores, then links them into one program."""
+    """Compiles each source on its own, all at once across the machine's cores, then links them into one program.
+
+    An object whose source, headers and flags are as they were is kept from the last build, so a run after a small
+    change compiles only what the change touched."""
     from concurrent.futures import ThreadPoolExecutor
     out = BUILD / 'obj' / Path(program).stem
-    shutil.rmtree(out, ignore_errors=True)
-    out.mkdir(parents=True)
+    out.mkdir(parents=True, exist_ok=True)
     compiler = shutil.which('clang++')
     built = [Path(source) for source in sources if Path(source).suffix in ('.o', '.obj')]  # already compiled: linked as they are
     sources = [source for source in sources if Path(source).suffix not in ('.o', '.obj')]
     extra_objects = [*built, *extra_objects]
-    objects = [out / f'{number:03}-{Path(source).stem}.o' for number, source in enumerate(sources)]
+    # Named by the source's own path, so adding a source leaves the others' objects where they were.
+    objects = [out / f'{Path(source).stem}-{hashlib.sha256(str(Path(source).resolve()).encode()).hexdigest()[:8]}.o' for source in sources]
     with ThreadPoolExecutor(build_module.build_jobs()) as pool:
-        list(pool.map(lambda pair: run([compiler, *flags, '-c', pair[0], '-o', pair[1]]), zip(sources, objects)))
+        list(pool.map(lambda pair: compile_object([compiler, *flags, '-c', pair[0], '-o', pair[1]]), zip(sources, objects)))
     # A worktree adds enough path text for the full framework's link to exceed
     # Windows' command-line limit. LLVM reads the same arguments from a file.
     response = out / 'link.rsp'
@@ -188,7 +201,7 @@ def check_mods_for_host(fixture):
         for source in sources:
             compiler = [shutil.which('clang'), '-std=c11'] if source.suffix == '.c' else [shutil.which('clang++'), *CXX]
             obj = out / f'{mod}-{source.stem}.o'
-            run([*compiler, '-Wall', '-Wextra', '-Werror', '-I', GEN / 'include', '-I', SDK_CHECK, f'-Dtsuchi_mod_start={symbol}', '-c', source, '-o', obj])
+            compile_object([*compiler, '-Wall', '-Wextra', '-Werror', '-I', GEN / 'include', '-I', SDK_CHECK, f'-Dtsuchi_mod_start={symbol}', '-c', source, '-o', obj])
             objects.append(obj)
     js_files = [f for f in files if f[0] == 'check.javascript']
     files = [f for f in files if f[0] != 'check.javascript']
@@ -1076,12 +1089,12 @@ class Generated(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which('ld.lld'), 'needs ld.lld')
     def test_the_module_builds_for_the_game(self):
-        report = build_module.build(BUILD / 'module')
+        report = build_module.build(BUILD / 'module', reuse=True)
         self.assertGreater(report['bytes'], 0x100)
         self.assertTrue((BUILD / 'module' / 'exefs' / 'subsdk9').read_bytes().startswith(b'NSO0'))
         # The build with the framework's own checks is another file, and far the larger: the checks are
         # in no part of the build people run.
-        checking = build_module.build(BUILD / 'check-module', selfcheck=True)
+        checking = build_module.build(BUILD / 'check-module', selfcheck=True, reuse=True)
         self.assertGreater(checking['bytes'], report['bytes'] + 0x8000)
         self.assertNotIn(b'check.library', (BUILD / 'module' / 'exefs' / 'subsdk9').read_bytes())
 
