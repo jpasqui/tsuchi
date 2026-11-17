@@ -52,8 +52,7 @@ data:
   title_answer_load: absent
   save_slot_paths: absent
   dialog_answer_return: absent
-  dialog_result_table: absent
-  dialog_result_header: absent
+  dialog_result_table: 123324032
   title_input_delegate_table: absent
   title_direction_delegate_table: absent
   academy_schedule: absent
@@ -171,6 +170,7 @@ constants:
   fade_role_title: 1
   play_mode_one: 1
   dialog_result_message: 0x45
+  dialog_result_header: 0x1F00000001
   title_confirm_key: 0x16
   title_back_key: 0x17
   title_menu_state: 5
@@ -383,7 +383,7 @@ structs:
   presenter_table: {fields: {reset: absent}}
   options_view: {fields: {state: absent, buttons: absent, count: absent, room: absent, selected: absent}}
   title_flow: {fields: {state: absent, answered: absent, answer: absent, slot: absent}}
-  dialog_result: {size: absent, fields: {self: absent, header: absent, message: absent, dialog_kind: absent, as_flow: absent}}
+  dialog_result: {size: 0x50, fields: {self: 0x18, header: 0x28, message: 0x38, dialog_kind: 0x3C, as_flow: 0x4D}}
   title_presenter: {fields: {cursor: absent, view: absent, input: absent, state: absent}}
   title_view: {fields: {description: absent, buttons: absent, count: absent, room: absent, hidden_select: absent, hide: absent, hidden: absent, hidden_other: absent}}
   title_button: {fields: {id: absent, label: absent, mark: absent}}
@@ -822,7 +822,7 @@ structs:
       player: 480
   dialog_widget:
     fields:
-      kind: absent
+      kind: 1524
       text: 1416
   academy_data:
     fields:
@@ -830,7 +830,7 @@ structs:
       test_courses: absent
   ui_manager:
     fields:
-      open_dialog: absent
+      open_dialog: 2440
       academy_data: absent
       academy_training_courses: absent
       academy_courses: absent

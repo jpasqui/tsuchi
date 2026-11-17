@@ -306,7 +306,7 @@ TSUCHI_Result close(TSUCHI_Mod* mod, TSUCHI_Dialog handle) {
     if (!dialog) return TSUCHI_NOT_FOUND;
     if (!dialog->handed) { dialog->answered = true; dialog->accepted = false; dialog->choice = 2; return TSUCHI_OK; }
     if (dialog->closing) return TSUCHI_OK; // the game has the message that ends it, and answers it once
-    if (!t::present(t::data::dialog_result_table) || !t::present(t::data::dialog_result_header) || !t::present(t::ui_manager::open_dialog) ||
+    if (!t::present(t::data::dialog_result_table) || !t::present(t::ui_manager::open_dialog) ||
         !t::present(t::dialog_widget::kind) || !t::present(t::dialog_result::size)) return TSUCHI_UNSUPPORTED;
     const uint64_t widget = game::from_handle(dialog->widget);
     const uint64_t framework = game::game_framework();
@@ -317,7 +317,7 @@ TSUCHI_Result close(TSUCHI_Mod* mod, TSUCHI_Dialog handle) {
     if (!queue || !note) { if (note) game::release_engine_memory(note); return TSUCHI_NOT_READY; }
     memset(note, 0, t::dialog_result::size);
     const uint64_t table = game::main_base() + t::data::dialog_result_table, self = reinterpret_cast<uint64_t>(note);
-    const uint64_t header = game::read_or<uint64_t>(game::main_base() + t::data::dialog_result_header);
+    const uint64_t header = t::constant::dialog_result_header;
     const uint32_t kind = uint32_t(t::constant::dialog_result_message);
     memcpy(note, &table, 8); memcpy(note + t::dialog_result::self, &self, 8); memcpy(note + t::dialog_result::header, &header, 8);
     memcpy(note + t::dialog_result::message, &kind, 4);

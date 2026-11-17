@@ -75,7 +75,6 @@ data:
   save_slot_paths: 0x934F160                   # the title's path for each save slot, an engine string (16 bytes) each
   dialog_answer_return: 0x93514E0              # Back
   dialog_result_table: 0x89C07B8               # the function table of the message that ends a dialog
-  dialog_result_header: 0x7F19FE8              # the 8 bytes that message carries, as the game makes it
   title_direction_delegate_table: 0x8AA75D8      # and of its Up and Down handler
   title_input_delegate_table: 0x8AA7648          # the function table of the title presenter's Confirm and Back handlers
   wwise_index: 153997536
@@ -205,6 +204,7 @@ constants:
   fade_role_title: 1                           # and the sound role the title's save list gives that request
   play_mode_one: 1                             # one player
   dialog_result_message: 0x45                  # the kind of message that ends a dialog
+  dialog_result_header: 0x1F00000001           # the 8 bytes that message carries; the game writes them as a number
   title_confirm_key: 0x16                        # the title presenter's input map: Confirm
   title_back_key: 0x17                           # and Back
   title_menu_state: 5                            # title presenter state: the menu takes input
