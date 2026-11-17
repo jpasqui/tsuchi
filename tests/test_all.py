@@ -776,8 +776,13 @@ class Generated(unittest.TestCase):
     def host_lua(self, own_library):
         """The program that runs a script on the framework's Lua, on this machine's C library or on the framework's own."""
         program = BUILD / f'lua_{"own" if own_library else "host"}{EXE}'
-        run([shutil.which('clang'), '-std=c99', '-O1', '-w', '-I', LUA, *SCRIPT_CONFIG, ROOT / 'tests' / 'lua' / 'run_script.c',
-             *script_lua_objects(own_library), '-o', program])
+        objects = script_lua_objects(own_library)
+        main = BUILD / 'obj' / f'run_script-{"own" if own_library else "host"}.o'
+        compile_object([shutil.which('clang'), '-std=c99', '-O1', '-w', '-I', LUA, *SCRIPT_CONFIG, '-c', ROOT / 'tests' / 'lua' / 'run_script.c', '-o', main])
+        # Linked again only when an object changed: other modules run build/lua_host while this class runs
+        # (tools/check.py makes it before they start), and a program that is running cannot be written.
+        if not program.exists() or program.stat().st_mtime_ns < max(path.stat().st_mtime_ns for path in (main, *objects)):
+            run([shutil.which('clang'), main, *objects, '-o', program])
         return program
 
     @unittest.skipUnless(shutil.which('ld.lld'), 'needs ld.lld')
