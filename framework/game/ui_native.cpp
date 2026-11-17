@@ -404,9 +404,12 @@ bool row_art(View& view, Row& row) {
         if (!label || !selector || !visible(selector, uint32_t(t::constant::widget_hidden)) || !current()) return false;
         return current() && fit_message(view, row);
     }
-    if (row.kind == UiKind::choice) return true;
-    const bool less = row.kind == UiKind::integer && uint64_t(row.integer) - uint64_t(row.minimum) >= uint64_t(row.step);
-    const bool more = row.kind == UiKind::integer && uint64_t(row.maximum) - uint64_t(row.integer) >= uint64_t(row.step);
+    uint32_t choices = 0;
+    for (const char* label = row.labels.first(); label; label = row.labels.after(label)) ++choices;
+    const bool less = row.kind == UiKind::choice ? row.choice > 0 :
+        row.kind == UiKind::integer && uint64_t(row.integer) - uint64_t(row.minimum) >= uint64_t(row.step);
+    const bool more = row.kind == UiKind::choice ? row.choice + 1 < choices :
+        row.kind == UiKind::integer && uint64_t(row.maximum) - uint64_t(row.integer) >= uint64_t(row.step);
     const uint64_t left = live(row.left), right = live(row.right);
     if (left && !visible(left, less ? uint32_t(t::constant::widget_shown) : uint32_t(t::constant::widget_hidden))) return false;
     if (!current()) return false;
@@ -739,7 +742,7 @@ bool screen_action(void* pointer, uint64_t host, uint32_t which) {
     }
     // A screen with controls reads its passive rows past the last control, and before the first, the same way:
     // where focus has no control further that way, Up and Down move through those rows and focus stays.
-    if (selected < before->controls.count && selected < view->rows.count && (which == 0 || which == 1)) {
+    if (!before->settings_tab && selected < before->controls.count && selected < view->rows.count && (which == 0 || which == 1)) {
         const uint32_t previous = view->away ? view->reading : selected;
         bool further = false;
         if (which == 1)
@@ -759,6 +762,7 @@ bool screen_action(void* pointer, uint64_t host, uint32_t which) {
         (before->controls[selected].kind == UiKind::choice || before->controls[selected].kind == UiKind::integer);
     const uint32_t old_choice = editing ? before->controls[selected].selected : 0;
     const int64_t old_integer = editing ? before->controls[selected].integer : 0;
+    const bool exit_settings = which == 5 && before->settings_tab;
     const bool handled = ui_action(which);
     if (handled && which <= 4 && view->used == opened && model(*view))
         ui_sync_screen(view->screen, view);
@@ -769,7 +773,9 @@ bool screen_action(void* pointer, uint64_t host, uint32_t which) {
             ui_feedback_arrow(view->rows[selected].selector, which != 2);
     }
     const bool consumed = handled || which == 0 || which == 1 || which == 2 || which == 3 || which == 4;
-    finish(view); return consumed;
+    // Closing a tab restores the native Settings source. Let this same Back
+    // reach the stock dispatcher so it closes Options instead of showing Game.
+    finish(view); return exit_settings ? false : consumed;
 }
 void screen_buttons(void* pointer, uint64_t buttons) {
     auto* view = static_cast<View*>(pointer); ++view->calls;
@@ -830,12 +836,15 @@ void action(NativeFrame& frame) {
     const uint64_t object = frame.x[r::object];
     const uint32_t which = uint32_t(frame.x[r::action]);
     if (!game::live(object) || game::read_or<uint8_t>(object + t::ui_host::state) != 1) return;
-    bool handled = which < 100 && ui_route_action(game::to_handle(object), which);
-    if (!handled && menu_dispatcher) {
+    const uint64_t handle = game::to_handle(object);
+    bool handled = which < 100 && ui_route_action(handle, which);
+    if (!handled && menu_dispatcher && game::from_handle(handle) == object && game::read_or<uint8_t>(object + t::ui_host::state) == 1) {
         bool result = false;
-        const uint64_t host = game::to_handle(object);
-        if (host) menu_dispatcher(host, which, handled, result);
+        if (handle) menu_dispatcher(handle, which, handled, result);
     }
+    // Restoring a tab can reenter a native refresh and end this host. A Back
+    // only reaches stock Save and Close while its original generation survives.
+    if (game::from_handle(handle) != object || game::read_or<uint8_t>(object + t::ui_host::state) != 1) handled = true;
     // no_action is the original dispatcher's no-op: it still reaches the normal
     // handled-input epilogue. Every unhandled action keeps its original value.
     if (handled) frame.x[r::action] = r::no_action;

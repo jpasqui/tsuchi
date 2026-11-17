@@ -10,6 +10,13 @@
 # `optional` lists entries the code using them asks t::bound about and goes on without, so a build lacking one loses
 # only that one path and no family.
 optional:
+  - data.io_dispatcher               # live archive changes are qualified only on 1.1.1
+  - data.garbage_collecting
+  - functions.find_loaded_object
+  - functions.flush_async_loading
+  - functions.io_chunk_exists
+  - structs.container_io
+  - structs.container_map
   - structs.function.func            # core/engine_hooks.cpp asks t::present; without them hook.engine_function is unsupported
   - structs.function.event_graph
   - structs.function.event_graph_entry
@@ -255,7 +262,7 @@ families:
   compiled_mods:
     files: [base/compiled_mods.cpp]
   containers:
-    files: [base/containers.cpp]
+    files: [base/containers.cpp, base/container_live.cpp]
   console_variables:
     files: [game/console_variables.cpp]
   external_mods:

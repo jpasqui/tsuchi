@@ -33,6 +33,7 @@ DeleteTree delete_tree = nullptr;
 int64_t (*clock_seconds)() = nullptr;
 bool ready = false, cleaned = false, started = false;
 List<ps::Receipt> listed; // the installed ones, as last read
+uint64_t listed_revision = 1;
 
 // Why an install failed, as its status names it. Set by the worker before the job ends, or by the game thread.
 enum class Failure : uint32_t { none, network, http, size, digest, storage, archive, unsupported, manifest, required, conflict, different, receipt };
@@ -165,6 +166,10 @@ bool in_use(const char* folder) {
     const size_t n = strlen(prefix);
     for (uint32_t i = 0; i < mod_count(); ++i)
         if (const ModRecord* record = mod_at(i); record && strlen(record->folder) >= n && !memcmp(record->folder, prefix, n)) return true;
+    // A code-free package can mount after the startup loader catalogue froze.
+    // Its files must remain until exit even though it has no loader record yet.
+    for (uint32_t i = 0; i < listed.count; ++i) if (!strcmp(listed[i].folder, folder))
+        for (uint32_t m = 0; m < listed[i].count; ++m) if (container_mounted_for(listed[i].mods[m])) return true;
     return false;
 }
 
@@ -265,7 +270,7 @@ TSUCHI_Result installed(Texts& out) {
     if (result == TSUCHI_UNSUPPORTED) { found.clear(); return TSUCHI_OK; } // no SD card: no packages
     for (uint32_t i = 0; result == TSUCHI_OK && i < found.count; ++i)
         if (!add_folders(found[i], out)) result = TSUCHI_NO_MEMORY;
-    if (result == TSUCHI_OK) { listed.clear(); listed = found; }
+    if (result == TSUCHI_OK) { listed.clear(); listed = found; ++listed_revision; }
     else found.clear();
     return result;
 }
@@ -700,27 +705,81 @@ void packages_start() {
 TSUCHI_Result refresh_installed_packages() {
     List<ps::Receipt> found;
     const auto result = current(found);
-    if (result == TSUCHI_OK) { listed.clear(); listed = found; }
+    if (result == TSUCHI_OK) { listed.clear(); listed = found; ++listed_revision; }
     else found.clear();
     return result;
 }
 uint32_t installed_package_count() { return listed.count; }
 const ps::Receipt* installed_package(uint32_t index) { return index < listed.count ? &listed[index] : nullptr; }
+uint64_t installed_packages_revision() { return listed_revision; }
+TSUCHI_Result installed_mod_description(uint32_t package, uint32_t mod, ModRecord& out) {
+    if (package >= listed.count || mod >= listed[package].count) return TSUCHI_NOT_FOUND;
+    const auto& receipt = listed[package];
+    char where[256];
+    if (!path(where, sizeof where, receipt.folder, "/mods/") || !append(where, sizeof where, receipt.mods[mod]) ||
+        !append(where, sizeof where, "/mod.json")) return TSUCHI_CAPACITY;
+    SdScope scope;
+    uint64_t bytes = 0;
+    auto result = game::file_size(where, bytes);
+    char* text = nullptr;
+    if (result == TSUCHI_OK && bytes > 1024 * 1024) result = TSUCHI_CAPACITY;
+    if (result == TSUCHI_OK) result = game::read_whole_file(where, text, bytes);
+    if (result == TSUCHI_OK) result = describe_mod_manifest(out, receipt.mods[mod], text, bytes);
+    release(text);
+    return result;
+}
 const ps::Receipt* package_holding(const char* id, uint32_t* index) {
     for (uint32_t i = 0; i < listed.count; ++i)
         if (ps::has_mod(listed[i], id)) { if (index) *index = i; return &listed[i]; }
     return nullptr;
 }
 bool package_install_running() { return install_state.active; }
+bool installed_mod_removed(const ModRecord& record) {
+    constexpr size_t prefix = sizeof kPackagesFolder - 1;
+    return strlen(record.folder) > prefix && !memcmp(record.folder, kPackagesFolder, prefix) &&
+        record.folder[prefix] == '/' && !package_holding(record.id);
+}
+bool installed_asset_mod(const char* id) {
+    const auto* receipt = package_holding(id);
+    return receipt && receipt->kind == uint32_t(ps::Kind::assets) && receipt->count == 1;
+}
+TSUCHI_Result apply_installed_asset_choice(const char* id, bool enabled, Text& problem) {
+    const auto* receipt = package_holding(id);
+    if (!receipt || !installed_asset_mod(id)) return TSUCHI_UNSUPPORTED;
+    char where[128];
+    if (!path(where, sizeof where, receipt->folder, "/mods/") || !append(where, sizeof where, id)) return TSUCHI_CAPACITY;
+    if (container_mounted_for(id)) {
+        if (!container_folder_matches(id, where)) {
+            problem.set("An earlier version still owns this archive identity. Restart to use the installed version.");
+            return TSUCHI_BUSY;
+        }
+        return set_container_enabled(id, enabled, problem);
+    }
+    if (!enabled) return TSUCHI_OK;
+    return mount_downloaded_assets(id, where, problem);
+}
 TSUCHI_Result remove_installed_package(uint32_t index) {
     if (install_state.active) return TSUCHI_BUSY;
     const ps::Receipt* r = installed_package(index);
     if (!r || !initialize()) return TSUCHI_NOT_FOUND;
     char folder[33];
     memcpy(folder, r->folder, sizeof folder);
+    bool reactivate = false;
+    char asset[kModIdBytes]{};
+    if (r->kind == uint32_t(ps::Kind::assets) && r->count == 1 && container_live_switchable(r->mods[0])) {
+        memcpy(asset, r->mods[0], strlen(r->mods[0]) + 1);
+        reactivate = container_active_for(asset) && !container_change_pending(asset);
+        Text problem;
+        const auto result = set_container_enabled(asset, false, problem);
+        problem.clear();
+        if (result != TSUCHI_OK && !(result == TSUCHI_NOT_READY && container_change_pending(asset))) return result;
+    }
     {
         SdScope scope;
-        if (!mark_removed(folder)) return TSUCHI_IO;
+        if (!mark_removed(folder)) {
+            if (reactivate) { Text problem; set_container_enabled(asset, true, problem); problem.clear(); }
+            return TSUCHI_IO;
+        }
     }
     if (!in_use(folder)) delete_package(folder);
     return refresh_installed_packages();

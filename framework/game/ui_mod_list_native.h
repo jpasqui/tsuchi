@@ -9,6 +9,7 @@ struct UiModListRow {
     const char* status;
     bool has_settings = false;
     bool button = false; // a mod's entry on the page: its name shows in the box, and Confirm chooses it
+    const char* state_label = nullptr; // selected switch value: On, Off, Restart, or a short failure state
 };
 struct UiModListNativeCallbacks {
     uint32_t (*count)();

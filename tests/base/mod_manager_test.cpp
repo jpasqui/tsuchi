@@ -72,6 +72,21 @@ int main() {
     assert(manager.move("leaf", "") == TSUCHI_NOT_READY);
     assert(manager.save(write_ok) == TSUCHI_NOT_READY);
     assert(!manager.pending() && !manager.changed());
+    {
+        auto& removed = installed("gone.lib"); auto& dependant = installed("gone.user");
+        edge(dependant, "requires", removed.id);
+        assert(saved.load("p4a1:gone.lib:gone.user:", "") == TSUCHI_OK && manager.begin(saved) == TSUCHI_OK);
+        const ModRecord* omitted[] = {&removed};
+        assert(manager.additional(nullptr, 0, omitted, 1) == TSUCHI_OK);
+        assert(manager.propose(removed.id, true) == TSUCHI_NOT_FOUND && manager.move(removed.id, "") == TSUCHI_NOT_FOUND);
+        assert(manager.propose(dependant.id, true) == TSUCHI_NOT_READY && !manager.pending());
+        assert(manager.begin(saved) == TSUCHI_OK && manager.propose(removed.id, true) == TSUCHI_NOT_FOUND);
+        ModRecord foreign{}; const ModRecord* wrong[] = {&foreign};
+        assert(manager.additional(nullptr, 0, wrong, 1) == TSUCHI_INVALID && manager.propose(removed.id, true) == TSUCHI_NOT_FOUND);
+        assert(manager.additional(nullptr, 0) == TSUCHI_OK); // installed again
+        assert(manager.propose(dependant.id, true) == TSUCHI_OK && manager.changes().count == 2 && manager.confirm() == TSUCHI_OK);
+        manager.cleanup(); saved.clear(); reset();
+    }
     installed("base"); auto& middle = installed("middle"); auto& leaf = installed("leaf");
     edge(middle, "requires", "base"); edge(leaf, "requires", "middle");
     assert(saved.load("p4a1:base:middle:leaf:absent.mod:", "p4o1:absent.mod:") == TSUCHI_OK);

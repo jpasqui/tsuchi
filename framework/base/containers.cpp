@@ -1,4 +1,5 @@
 #include "containers.h"
+#include "container_live.h"
 #include "cityhash.h"
 
 #include <string.h>
@@ -373,6 +374,53 @@ struct Holder {
 };
 List<Holder> holders; // every mod whose container is mounted, for as long as the game runs
 List<Holder> asset_holders;
+
+struct PackageVersion { uint64_t id, original = 0, entry = 0; char16_t* path = nullptr; bool captured = false; };
+struct LiveMount {
+    char id[kModIdBytes]{};
+    uint64_t container = 0, store = 0;
+    List<PackageVersion> versions;
+    ContainerReaderState reader;
+    bool eligible = false, active = true;
+    bool pending = false;
+    bool desired = true;
+    uint32_t probe = 0;
+};
+List<LiveMount*> live_mounts; // stable allocations: the synchronous mount callback borrows one
+LiveMount* mounting_live = nullptr;
+uint64_t live_revision = 1;
+
+LiveMount* prepare_live_mount(const char* id, const ContainerToc& toc, bool eligible) {
+    auto* layer = static_cast<LiveMount*>(allocate(sizeof(LiveMount)));
+    if (!layer) return nullptr;
+    *layer = LiveMount{};
+    memcpy(layer->id, id, strlen(id) + 1);
+    layer->container = toc.id; layer->eligible = eligible;
+    if (!layer->versions.reserve(toc.packages.count) || !live_mounts.reserve(live_mounts.count + 1)) {
+        layer->versions.clear(); release(layer); return nullptr;
+    }
+    for (uint32_t i = 0; i < toc.packages.count; ++i) {
+        PackageVersion version{toc.packages[i]};
+        Texts path;
+        if (layer->eligible && container_package_path(toc, toc.packages[i], path) && strlen(path.data) < 1024) {
+            const size_t length = strlen(path.data);
+            bool ascii = true;
+            for (size_t c = 0; c < length; ++c) if (uint8_t(path.data[c]) >= 128) ascii = false;
+            if (ascii) version.path = static_cast<char16_t*>(allocate((length + 1) * 2));
+            if (version.path) for (size_t c = 0; c <= length; ++c) version.path[c] = char16_t(uint8_t(path.data[c]));
+        }
+        path.clear();
+        if (!version.path) layer->eligible = false;
+        layer->versions.add(version);
+    }
+    return layer;
+}
+void drop_live_mount(LiveMount* layer) {
+    if (layer) {
+        for (uint32_t i = 0; i < layer->versions.count; ++i) release(layer->versions[i].path);
+        layer->versions.clear(); release(layer);
+    }
+}
 
 bool ends_with(const char* text, const char* end) {
     const size_t length = strlen(text), tail = strlen(end);
@@ -763,7 +811,7 @@ bool open_library(ModRecord& record, const char* pak, const char* name, const ch
 // Includes culture aliases, which the startup conflict log does not need. Dynamic bundles allow
 // only a package's own identity mapping, as retoc writes, without changing another lookup.
 TSUCHI_Result header_claims(const uint8_t* header, size_t size, const ContainerToc& toc,
-                            List<uint64_t>& claims, bool no_redirects) {
+                            List<uint64_t>& claims, bool no_redirects, bool* reversible) {
     Reader read{header, size};
     const uint64_t header_id = read.u64();
     // Older patch tools retain the source container's header ID while giving
@@ -800,6 +848,7 @@ TSUCHI_Result header_claims(const uint8_t* header, size_t size, const ContainerT
     }
     read.skip(store_bytes);
     const uint32_t cultures = read.u32();
+    if (reversible && cultures) *reversible = false;
     if (no_redirects && cultures) return TSUCHI_INVALID;
     for (uint32_t i = 0; i < cultures && read.ok; ++i) {
         read.skip_string();
@@ -814,6 +863,7 @@ TSUCHI_Result header_claims(const uint8_t* header, size_t size, const ContainerT
     if (!read.has(16ull * redirects)) return TSUCHI_INVALID;
     for (uint32_t i = 0; i < redirects; ++i) {
         const uint64_t from = read.u64(), to = read.u64();
+        if (reversible && from != to) *reversible = false;
         if (no_redirects) {
             if (from != to || !has_id(listed, from)) return TSUCHI_INVALID;
             continue; // The owned package is counted once below, not as an alias.
@@ -898,7 +948,9 @@ TSUCHI_Result startup_header(const ContainerToc& toc, const HeaderSpan& span, co
 }
 
 TSUCHI_Result remember_packages(const ContainerToc& toc, const char* cas, uint64_t limit,
-                              List<uint64_t>& claims, bool no_redirects, uint8_t* header_hash = nullptr) {
+                              List<uint64_t>& claims, bool no_redirects, uint8_t* header_hash = nullptr,
+                              bool* reversible = nullptr) {
+    if (reversible) *reversible = true;
     const auto add_packages = [&] {
         if (toc.packages.count > UINT32_MAX - claims.count || !claims.reserve(claims.count + toc.packages.count)) return TSUCHI_NO_MEMORY;
         for (uint32_t i = 0; i < toc.packages.count; ++i) claims.add(toc.packages[i]);
@@ -932,7 +984,7 @@ TSUCHI_Result remember_packages(const ContainerToc& toc, const char* cas, uint64
         result = game::read_file_part(cas, toc.header_at, header, span.bytes, got);
         if (result == TSUCHI_OK && got != span.bytes) result = TSUCHI_INVALID;
     }
-    if (result == TSUCHI_OK) result = header_claims(header, size_t(span.bytes), toc, claims, no_redirects);
+    if (result == TSUCHI_OK) result = header_claims(header, size_t(span.bytes), toc, claims, no_redirects, reversible);
     if (result == TSUCHI_OK && header_hash) sha256(header, size_t(span.bytes), header_hash);
     release(header);
     if (result != TSUCHI_OK) return result;
@@ -1065,15 +1117,25 @@ bool mount_one(ModRecord& record, const char* pak, uint32_t order) {
     List<uint64_t> claims;
     memcpy(name + stem, ".ucas", 6);
     Texts cas;
+    bool reversible = false;
     bool known = container_path(cas, record, name);
-    known = known && remember_packages(entry.toc, cas.data, kMostHeaderBytes, claims, false) == TSUCHI_OK;
+    known = known && remember_packages(entry.toc, cas.data, kMostHeaderBytes, claims, false, nullptr, &reversible) == TSUCHI_OK;
     cas.clear();
     known = known && taken.count < UINT32_MAX && taken.reserve(taken.count + 1) &&
         claims.count <= UINT32_MAX - packages.count && packages.reserve(packages.count + claims.count);
-    if (raise >= order || !engine_mount(record, pak, order - raise, entry.toc.packages)) {
+    Texts pak_path;
+    const bool plain_pak = container_path(pak_path, record, pak) && empty_asset_pak(pak_path.data) == TSUCHI_OK;
+    pak_path.clear();
+    LiveMount* live = prepare_live_mount(record.id, entry.toc, known && reversible && plain_pak);
+    __atomic_store_n(&mounting_live, live, __ATOMIC_RELEASE);
+    const bool mounted_ok = raise < order && engine_mount(record, pak, order - raise, entry.toc.packages);
+    __atomic_store_n(&mounting_live, static_cast<LiveMount*>(nullptr), __ATOMIC_RELEASE);
+    if (!mounted_ok) {
+        drop_live_mount(live);
         claims.clear();
         return drop(), block_mod(record, "the game could not mount its container ", pak), false;
     }
+    if (live) live_mounts.add(live);
     if (known) {
         taken.add(entry.toc.id);
         for (uint32_t i = 0; i < claims.count; ++i) packages.add(claims[i]);
@@ -1136,12 +1198,29 @@ void tell_common(const Mounted& earlier, const Mounted& later) {
 
 } // namespace
 
-void refresh_mounted_package_entry(uint64_t slot, uint64_t entry) {
+void refresh_mounted_package_entry(uint64_t slot, uint64_t entry, uint64_t store) {
     const List<uint64_t>* active = __atomic_load_n(&mounting_packages, __ATOMIC_ACQUIRE);
     if (!active || slot < 8 || !entry || (slot & 7) || (entry & 7)) return;
     uint64_t id = 0;
     if (!game::read(slot - 8, id) || !game::readable(entry, 32)) return;
     for (uint32_t i = 0; i < active->count; ++i) if ((*active)[i] == id) {
+        if (auto* layer = __atomic_load_n(&mounting_live, __ATOMIC_ACQUIRE); layer && store) {
+            layer->store = store;
+            for (uint32_t j = 0; j < layer->versions.count; ++j) if (layer->versions[j].id == id) {
+                auto& version = layer->versions[j];
+                version.original = game::read_or<uint64_t>(slot);
+                // The oldest snapshot is the stock entry even if an earlier
+                // overriding layer was turned off before this mount.
+                bool prior = false;
+                for (uint32_t l = 0; l < live_mounts.count && !prior; ++l)
+                    for (uint32_t p = 0; p < live_mounts[l]->versions.count; ++p) {
+                        const auto& old = live_mounts[l]->versions[p];
+                        if (old.id == id && old.captured) { version.original = old.original; prior = true; break; }
+                    }
+                version.entry = entry; version.captured = true;
+                break;
+            }
+        }
         game::write(slot, entry);
         return;
     }
@@ -1164,6 +1243,8 @@ TSUCHI_Result read_startup_container_claims(const ContainerToc& toc, const char*
 void mount_mod_containers() {
     // Called only once by the runtime. Keeping this reset here also permits isolated host fixtures.
     taken.clear(), packages.clear();
+    for (uint32_t i = 0; i < live_mounts.count; ++i) drop_live_mount(live_mounts[i]);
+    live_mounts.clear();
     asset_holders.clear();
     libraries.clear();
     census = TSUCHI_OK;
@@ -1468,6 +1549,127 @@ bool container_mounted_for(const char* id) {
     for (uint32_t i = 0; i < asset_holders.count; ++i)
         if (!strcmp(asset_holders[i].id, id)) return true;
     return false;
+}
+bool container_folder_matches(const char* id, const char* folder) {
+    for (uint32_t i = 0; i < holders.count; ++i)
+        if (!strcmp(holders[i].id, id) && !strcmp(holders[i].folder, folder)) return true;
+    return false;
+}
+uint64_t container_choices_revision() { return live_revision; }
+
+bool container_live_switchable(const char* id) {
+    if (!id || !t::present(t::data::io_dispatcher) || !t::present(t::data::garbage_collecting) ||
+        !t::bound(t::fn::find_loaded_object) || !t::bound(t::fn::flush_async_loading)) return false;
+    LiveMount* found = nullptr;
+    for (uint32_t i = 0; i < live_mounts.count; ++i) if (!strcmp(live_mounts[i]->id, id)) {
+        if (found) return false;
+        found = live_mounts[i];
+    }
+    if (!found || !found->eligible || !found->store || !found->versions.count) return false;
+    for (uint32_t i = 0; i < found->versions.count; ++i) if (!found->versions[i].captured) return false;
+    return true;
+}
+bool container_active_for(const char* id) {
+    bool found = false;
+    for (uint32_t i = 0; i < live_mounts.count; ++i) if (!strcmp(live_mounts[i]->id, id)) {
+        found = true;
+        if (live_mounts[i]->active) return true;
+    }
+    return !found && container_mounted_for(id);
+}
+bool container_change_pending(const char* id) {
+    for (uint32_t i = 0; i < live_mounts.count; ++i)
+        if (!strcmp(live_mounts[i]->id, id) && live_mounts[i]->pending) return true;
+    return false;
+}
+TSUCHI_Result set_container_enabled(const char* id, bool enabled, Text& problem) {
+    if (!container_live_switchable(id)) {
+        problem.set("This container needs a restart to change its active content.");
+        return TSUCHI_UNSUPPORTED;
+    }
+    if (asset_mounting || __atomic_load_n(&mounting_packages, __ATOMIC_ACQUIRE)) return TSUCHI_BUSY;
+    LiveMount* target = nullptr;
+    for (uint32_t i = 0; i < live_mounts.count; ++i) if (!strcmp(live_mounts[i]->id, id)) target = live_mounts[i];
+    if (target->active == enabled) {
+        if (target->pending) ++live_revision;
+        target->pending = false; target->probe = 0; return TSUCHI_OK;
+    }
+    asset_mounting = true;
+    struct Guard { ~Guard() { asset_mounting = false; } } guard;
+    if (!enabled) {
+        // Code that still runs until restart may request another asset later.
+        // Its required provider cannot disappear from underneath that context.
+        for (uint32_t i = 0; i < mod_count(); ++i) {
+            const auto& user = *mod_at(i);
+            const auto* needs = user.manifest ? user.manifest->find("requires") : nullptr;
+            if (user.state == ModState::running && strcmp(user.id, id) && needs && needs->find(id)) {
+                target->pending = false;
+                problem.set("A running mod requires these assets. Restart to apply their saved choices together.");
+                return TSUCHI_UNSUPPORTED;
+            }
+        }
+    }
+    // Enabling also waits: old stock objects may still stream their original
+    // bulk chunks. Neither direction may mix a loaded object's old metadata
+    // with a different archive's bulk data.
+    t::fn::flush_async_loading(-1);
+    bool loaded = game::global<uint8_t>(t::data::garbage_collecting, 1) != 0;
+    for (uint32_t i = 0; !loaded && i < target->versions.count; ++i)
+        loaded = t::fn::find_loaded_object(nullptr, nullptr, target->versions[i].path, false) != nullptr;
+    if (loaded) {
+        if (!target->pending || target->desired != enabled) ++live_revision;
+        target->pending = true; target->desired = enabled; target->probe = 0;
+        problem.set("Reload affected maps or close their menus to finish changing this asset mod.");
+        return TSUCHI_NOT_READY;
+    }
+    List<ContainerLookup> changes;
+    if (!changes.reserve(target->versions.count)) return TSUCHI_NO_MEMORY;
+    for (uint32_t p = 0; p < target->versions.count; ++p) {
+        const auto& version = target->versions[p];
+        uint64_t before = version.original, after = version.original;
+        for (uint32_t l = 0; l < live_mounts.count; ++l) {
+            const auto* layer = live_mounts[l];
+            for (uint32_t j = 0; j < layer->versions.count; ++j) {
+                const auto& candidate = layer->versions[j];
+                if (candidate.id != version.id || !candidate.captured) continue;
+                if (layer->active) before = candidate.entry;
+                if (layer == target ? enabled : layer->active) after = candidate.entry;
+            }
+        }
+        changes.add({version.id, before, after});
+    }
+    const auto result = change_container_reader(target->container, target->store, target->reader,
+                                                enabled, changes.items, changes.count);
+    changes.clear();
+    if (result == TSUCHI_OK) {
+        target->active = enabled; target->pending = false; target->probe = 0;
+        ++live_revision;
+        mod_note(id, enabled ? "Asset container active for new loads." :
+            "Asset container unmounted from new reads; existing objects and pending reads retain their data.");
+    } else {
+        if (target->pending) ++live_revision;
+        target->pending = false; target->probe = 0;
+        problem.set("The archive could not change live. Its current content is still active; restart to apply the saved choice.");
+    }
+    return result;
+}
+void poll_container_changes() {
+    // At most one cached-path hash lookup per frame, only while a change waits.
+    // No filesystem work or periodic global object scan is used.
+    static uint32_t next = 0;
+    if (!live_mounts.count || asset_mounting || !t::present(t::data::garbage_collecting) ||
+        game::global<uint8_t>(t::data::garbage_collecting, 1)) return;
+    for (uint32_t checked = 0; checked < live_mounts.count; ++checked) {
+        if (next >= live_mounts.count) next = 0;
+        auto& layer = *live_mounts[next++];
+        if (!layer.pending) continue;
+        if (layer.probe < layer.versions.count &&
+            t::fn::find_loaded_object(nullptr, nullptr, layer.versions[layer.probe].path, false)) layer.probe = 0;
+        else if (++layer.probe >= layer.versions.count) {
+            Text problem; set_container_enabled(layer.id, layer.desired, problem); problem.clear();
+        }
+        break;
+    }
 }
 
 bool container_mounted_from(const char* prefix) {

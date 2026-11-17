@@ -410,6 +410,11 @@ Setting* find_setting(Settings& settings, const char* key) {
         if (!strcmp(settings.list[i].key(), key)) return &settings.list[i];
     return nullptr;
 }
+const Setting* find_setting(const Settings& settings, const char* key) {
+    for (uint32_t i = 0; i < settings.list.count; ++i)
+        if (!strcmp(settings.list[i].key(), key)) return &settings.list[i];
+    return nullptr;
+}
 
 TSUCHI_Result setting_toggle(const Setting& setting, bool& out) {
     if (setting.kind != SettingKind::toggle) return TSUCHI_INVALID;

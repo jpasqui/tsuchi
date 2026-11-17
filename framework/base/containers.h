@@ -9,8 +9,11 @@
 // the mod that starts later wins over the one before it. Every mounted container is
 // read first: two mods with a package in common are told so in both their logs.
 //
-// A blocked mod's container is not mounted. A container stays mounted until the game
-// is closed, since the engine cannot take one back.
+// Code-free downloaded IoStore assets can be turned off and on in this process
+// when their pak has no loose files, shader libraries or nonidentity redirects.
+// A package still used by loaded objects waits for those objects to unload, so
+// streaming reads keep the matching data. Reader/cache/file ownership is retained
+// until exit; only lookup publication changes. Other containers require restart.
 //
 // A mod's shader library, `ShaderArchive-<name>-<format>.ushaderbytecode` in its
 // container's `.pak`, is opened by the engine right after the container is mounted, and stays
@@ -69,13 +72,21 @@ uint32_t container_order_raise(const char* pak_name);
 void mount_mod_containers();
 // Framework-only late activation of a validated code-free downloaded container.
 // Makes packages available to subsequent loads; it does not replace live UObjects
-// or promise unmount. Same container identities are refused while retained.
+// in memory. Same container identities are refused while retained; toggles reuse
+// the existing reader instead of mounting another copy.
 TSUCHI_Result validate_downloaded_assets(const char* id,const char* folder,Text& problem);
 TSUCHI_Result mount_downloaded_assets(const char* id,const char* folder,Text& problem);
 
 // Called under the engine's package-store lock before its first-entry check. Only entries
 // belonging to the container currently mounted by Tsuchi may replace existing metadata.
-void refresh_mounted_package_entry(uint64_t slot, uint64_t entry);
+void refresh_mounted_package_entry(uint64_t slot, uint64_t entry, uint64_t package_store = 0);
+// Code-free downloaded assets can retire/reactivate their future lookups. Loaded
+// UObjects are unaffected; native reader/file ownership remains until process exit.
+bool container_live_switchable(const char* id);
+bool container_active_for(const char* id);
+bool container_change_pending(const char* id);
+void poll_container_changes();
+TSUCHI_Result set_container_enabled(const char* id, bool enabled, Text& problem);
 
 // Reads startup package identities and aliases through bounded header spans. Plain and Zlib
 // blocks are accepted; a header is at most 64 MiB, and each stored/decoded block at most 1 MiB.
@@ -106,6 +117,8 @@ bool container_mounted_for(const char* id);
 // Whether the framework mounted a container from a mod folder whose path starts with `prefix`. The
 // engine reads that folder until the game is closed.
 bool container_mounted_from(const char* prefix);
+bool container_folder_matches(const char* id, const char* folder);
+uint64_t container_choices_revision();
 // Writes to the log of each mod that was blocked as it started, with its container mounted, that the
 // container stays mounted. Called once, after the mods have started.
 void tell_containers_left_mounted();
