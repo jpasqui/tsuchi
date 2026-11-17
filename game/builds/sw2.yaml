@@ -51,8 +51,7 @@ data:
   academy_score_response_invoke: 0x36840d0
   academy_delivery_update: 0x3735e90
   academy_delivery_entry: 0x3736a2c
-  dialog_result_table: absent
-  dialog_result_header: absent
+  dialog_result_table: 123529032
   title_input_delegate_table: 124590576
   title_direction_delegate_table: 124590464
   academy_schedule: 134226088
@@ -169,6 +168,7 @@ constants:
   fade_role_title: 1
   play_mode_one: 1
   dialog_result_message: 0x45
+  dialog_result_header: 0x1F00000001
   title_confirm_key: 0x16
   title_back_key: 0x17
   title_menu_state: 5
@@ -381,7 +381,7 @@ structs:
   academy_local_reply:
     size: 40
     fields: {state: 0, owned_data: 24}
-  dialog_result: {size: absent, fields: {self: absent, header: absent, message: absent, dialog_kind: absent, as_flow: absent}}
+  dialog_result: {size: 0x50, fields: {self: 0x18, header: 0x28, message: 0x38, dialog_kind: 0x3C, as_flow: 0x4D}}
   title_presenter: {fields: {cursor: 0x80, view: 0x88, input: 0xA8, state: 0xB0}}
   title_view: {fields: {description: 0x570, buttons: 0x578, count: 0x580, room: 0x584, hidden_select: 0x5EB, hide: 0x5EC, hidden: 0x5F0, hidden_other: 0x5F4}}
   title_button: {fields: {id: 0x300, label: 0x528, mark: 0x540}}
@@ -820,7 +820,7 @@ structs:
       player: 480
   dialog_widget:
     fields:
-      kind: absent
+      kind: 1524
       text: 1416
   academy_data:
     fields:

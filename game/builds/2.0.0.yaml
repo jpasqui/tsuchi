@@ -19,7 +19,6 @@ data:
   save_slot_paths: 154992992
   dialog_answer_return: 155002096
   dialog_result_table: 144920152
-  dialog_result_header: 133735560
   title_input_delegate_table: 145869456
   title_direction_delegate_table: 145869344
   academy_points_session_gate: absent
@@ -169,6 +168,7 @@ constants:
   fade_role_title: 1
   play_mode_one: 1
   dialog_result_message: 0x45
+  dialog_result_header: 0x1F00000001
   title_confirm_key: 0x16
   title_back_key: 0x17
   title_menu_state: 5

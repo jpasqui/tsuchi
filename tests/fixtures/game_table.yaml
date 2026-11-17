@@ -56,7 +56,6 @@ data:
   save_slot_paths: 0x9438
   dialog_answer_return: 0x9418
   dialog_result_table: 0x9420
-  dialog_result_header: 0x9428
   title_input_delegate_table: 0x9100
   title_direction_delegate_table: 0x9108
   academy_schedule: absent
@@ -177,6 +176,7 @@ constants:
   fade_role_title: 1
   play_mode_one: 4
   dialog_result_message: 0x45
+  dialog_result_header: 0x1F00000001
   title_confirm_key: 0x16
   title_back_key: 0x17
   title_menu_state: 5
