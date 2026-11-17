@@ -29,7 +29,19 @@ checks can review them.
 Dependency updates are grouped by ecosystem. Branch pushes use the pull request's checks,
 and a new ordinary CI run cancels an older run for the same ref to avoid duplicate builds.
 
-Run `python tools/check.py` before you commit. To reproduce the stricter CI gate, run:
+Run `python tools/check.py` before you commit. It runs the test modules side by side, one process
+per core, the slowest first. Tests that write the same files across modules are listed in
+`TOGETHER` in `tools/check.py` and share one process. The checks keep an object they compiled while its
+source, headers and flags stay the same, so a run after a small change compiles only what the
+change touched. `build_module.py` on its own still builds every object.
+
+```sh
+python tools/check.py test_ui_title test_all.Generated   # only these modules, classes or tests
+python tools/check.py -j 4                               # four processes at once
+python tools/check.py --serial                           # one process, one test after another
+```
+
+To reproduce the stricter CI gate, run:
 
 ```sh
 python tools/check.py --ci --report build/ci/checks.json

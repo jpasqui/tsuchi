@@ -30,14 +30,42 @@ class CIRunner(unittest.TestCase):
         strict.assert_called_once_with(['--report', 'build/ci/custom.json'])
         discovery.assert_not_called()
 
-    def test_canonical_default_keeps_original_full_discovery_command(self):
+    def test_serial_keeps_original_full_discovery_command(self):
         with patch.object(check.subprocess, 'run') as discovery, patch.object(ci, 'main') as strict:
             discovery.return_value.returncode = 7
-            code = check.main([])
+            code = check.main(['--serial'])
         self.assertEqual(code, 7)
         discovery.assert_called_once_with([sys.executable, '-m', 'unittest', 'discover',
                                           '-s', 'tests', '-p', 'test_*.py', '-v'], cwd=check.ROOT)
         strict.assert_not_called()
+
+    def test_canonical_default_runs_every_check_side_by_side(self):
+        with patch.object(check, 'side_by_side', return_value=3) as parallel, patch.object(ci, 'main') as strict:
+            self.assertEqual(check.main([]), 3)
+            self.assertEqual(check.main(['-j', '2', 'test_ci']), 3)
+        self.assertEqual(parallel.call_args_list[0].args, ([], os.cpu_count() or 4))
+        self.assertEqual(parallel.call_args_list[1].args, (['test_ci'], 2))
+        strict.assert_not_called()
+
+    def test_tests_that_write_the_same_files_share_one_process(self):
+        group = ['mod_b', 'mod_a.Class.test_two', 'mod_c.Class']
+        ids = ['mod_a.Class.test_one', 'mod_a.Class.test_two', 'mod_b.Kind.test_x', 'mod_c.Class.test_y',
+               'mod_c.Other.test_z', 'mod_c.Third.test_u', 'mod_d.Alone.test_w', 'mod_d.Second.test_v']
+        with patch.object(check, 'TOGETHER', [group]), patch.object(check, 'BY_CLASS', ('mod_d',)):
+            units = check.units(ids)
+        self.assertEqual(units[0], ('mod_b and 2 more', ['mod_b.Kind.test_x', 'mod_a.Class.test_two', 'mod_c.Class.test_y'], 3))
+        # The rest of a module stays in one process, as its classes may share a folder; BY_CLASS splits a module by class.
+        self.assertEqual(units[1:], [('mod_a', ['mod_a.Class.test_one'], 1), ('mod_c', ['mod_c.Other.test_z', 'mod_c.Third.test_u'], 2),
+                                     ('mod_d.Alone', ['mod_d.Alone.test_w'], 1), ('mod_d.Second', ['mod_d.Second.test_v'], 1)])
+
+    def test_every_name_kept_together_is_a_test_there_is(self):
+        """A test renamed away from TOGETHER would quietly run beside what it shares files with."""
+        ids, errors = check.load([])
+        self.assertEqual(errors, [])
+        for names in check.TOGETHER:
+            for name in names:
+                with self.subTest(name=name):
+                    self.assertTrue(any(test == name or test.startswith(name + '.') for test in ids), name)
 
     def test_unexpected_skip_fails_despite_unittest_success(self):
         result = unittest.TestResult()
