@@ -41,6 +41,7 @@ TSUCHI_Result write_value(const Place& place, const Value& value) {
     return write(place.address, uint8_t(value.boolean)) ? TSUCHI_OK : TSUCHI_NOT_READY;
 }
 TSUCHI_Result struct_at(const Place&, uint64_t&, uint64_t&) { return TSUCHI_UNSUPPORTED; }
+TSUCHI_Result read_name(const Place&, Name&) { return TSUCHI_INVALID; } // no array here, so no row identity
 }
 }
 

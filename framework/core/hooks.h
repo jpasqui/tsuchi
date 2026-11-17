@@ -130,6 +130,8 @@ const NativeHooks* native_hooks_backend();
 // How the service's `remove` reaches script hooks (dynamic_hooks.h), which have ids of their own. It's tried
 // first; TSUCHI_NOT_FOUND from it goes on to the other kinds.
 void set_dynamic_remove(TSUCHI_Result (*remove)(TSUCHI_Mod*, uint64_t));
+// The same for engine function hooks (engine_hooks.h). It's tried after the dynamic hooks.
+void set_engine_remove(TSUCHI_Result (*remove)(TSUCHI_Mod*, uint64_t));
 
 struct HookStats {
     uint32_t thunks_limit, thunks_used, live_records, retired_records, frames_active, frames_peak;

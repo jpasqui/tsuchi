@@ -15,3 +15,5 @@ uint64_t engine_frame_number() { return 0; }
 bool each_dynamic_frame(void (*)()) { return true; }
 TSUCHI_Result hook_slot_entry(const char*, uint64_t&, uint64_t&) { return TSUCHI_NOT_FOUND; }
 }
+// Nor engine function hooks.
+#include "no_engine_hooks.cpp"

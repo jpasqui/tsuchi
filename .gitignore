@@ -10,3 +10,7 @@ private/world-effects-drafts/
 private/
 .venv/
 dist/
+# Design notes and working rules kept on one machine.
+/DESIGN.md
+/AGENTS.md
+/STYLE.md

@@ -99,6 +99,10 @@ bool object_property(const Place& place);
 // gets the bytes it takes; TSUCHI_CAPACITY when that is more than `capacity`,
 // and nothing is written.
 TSUCHI_Result read_text(const Place& place, char* out, size_t capacity, size_t* needed);
+// The name a name field holds, as the game stores it: two names are the same when both numbers
+// are, which ignores case as the engine does and reads no text. TSUCHI_INVALID for a field of
+// another kind or for a fixed-length field taken whole.
+TSUCHI_Result read_name(const Place& place, Name& out);
 // What a piece of the engine's text shows, the same way: text as the engine hands it around, which a widget
 // keeps what it shows as. TSUCHI_INVALID for a field that holds no such text. This asks the game, which the
 // reads above never do, so it is the framework's own to use and no part of what `reflect` reads.

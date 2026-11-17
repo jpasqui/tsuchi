@@ -12,6 +12,7 @@ identity:
 data:
   garbage_collecting: absent
   io_dispatcher: absent
+  script_natives: absent
   options_direction_delegate_table: 145848672
   options_input_delegate_table: 145848784
   dialog_answer_yes: 155002064
@@ -21,7 +22,6 @@ data:
   save_slot_paths: 154992992
   dialog_answer_return: 155002096
   dialog_result_table: 144920152
-  dialog_result_header: 133735560
   title_input_delegate_table: 145869456
   title_direction_delegate_table: 145869344
   academy_points_session_gate: absent
@@ -136,6 +136,7 @@ data:
   gimmick_warp_stage_function: 21777120
   content_icon_size: 155059432
 constants:
+  script_end_parms: 22
   academy_points_session_instruction: 0x54000ae1
   academy_points_provider_instruction: 0x54000a81
   academy_points_blocked_instruction: 0x37000a4a
@@ -171,6 +172,7 @@ constants:
   fade_role_title: 1
   play_mode_one: 1
   dialog_result_message: 0x45
+  dialog_result_header: 0x1F00000001
   title_confirm_key: 0x16
   title_back_key: 0x17
   title_menu_state: 5
@@ -988,6 +990,25 @@ structs:
   function:
     fields:
       flags: 176
+      func: absent              # not checked in this build's code yet
+      event_graph: absent
+      event_graph_entry: absent
+  script_frame:
+    fields:
+      node: absent
+      object: absent
+      code: absent
+      locals: absent
+      most_recent_property: absent
+      most_recent_address: absent
+      out_parms: absent
+      property_chain: absent
+  out_parm:
+    size: absent
+    fields:
+      property: absent
+      address: absent
+      next: absent
   class_type:
     fields:
       default_object: 280

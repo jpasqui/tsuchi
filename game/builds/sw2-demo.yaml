@@ -12,6 +12,7 @@ identity:
 data:
   garbage_collecting: absent
   io_dispatcher: absent
+  script_natives: absent
   academy_points_session_gate: absent
   academy_points_provider_gate: absent
   academy_points_blocked_gate: absent
@@ -53,8 +54,7 @@ data:
   title_answer_load: absent
   save_slot_paths: absent
   dialog_answer_return: absent
-  dialog_result_table: absent
-  dialog_result_header: absent
+  dialog_result_table: 123324032
   title_input_delegate_table: absent
   title_direction_delegate_table: absent
   academy_schedule: absent
@@ -136,6 +136,7 @@ data:
   gimmick_warp_stage_function: 52913312
   content_icon_size: 134154048
 constants:
+  script_end_parms: 22
   academy_points_session_instruction: 0x54000ae1
   academy_points_provider_instruction: 0x54000a81
   academy_points_blocked_instruction: 0x37000a4a
@@ -171,6 +172,7 @@ constants:
   fade_role_title: 1
   play_mode_one: 1
   dialog_result_message: 0x45
+  dialog_result_header: 0x1F00000001
   title_confirm_key: 0x16
   title_back_key: 0x17
   title_menu_state: 5
@@ -408,7 +410,7 @@ structs:
   presenter_table: {fields: {reset: absent}}
   options_view: {fields: {state: absent, buttons: absent, count: absent, room: absent, selected: absent}}
   title_flow: {fields: {state: absent, answered: absent, answer: absent, slot: absent}}
-  dialog_result: {size: absent, fields: {self: absent, header: absent, message: absent, dialog_kind: absent, as_flow: absent}}
+  dialog_result: {size: 0x50, fields: {self: 0x18, header: 0x28, message: 0x38, dialog_kind: 0x3C, as_flow: 0x4D}}
   title_presenter: {fields: {cursor: absent, view: absent, input: absent, state: absent}}
   title_view: {fields: {description: absent, buttons: absent, count: absent, room: absent, hidden_select: absent, hide: absent, hidden: absent, hidden_other: absent}}
   title_button: {fields: {id: absent, label: absent, mark: absent}}
@@ -847,7 +849,7 @@ structs:
       player: 480
   dialog_widget:
     fields:
-      kind: absent
+      kind: 1524
       text: 1416
   academy_data:
     fields:
@@ -855,7 +857,7 @@ structs:
       test_courses: absent
   ui_manager:
     fields:
-      open_dialog: absent
+      open_dialog: 2440
       academy_data: absent
       academy_training_courses: absent
       academy_courses: absent
@@ -988,6 +990,25 @@ structs:
   function:
     fields:
       flags: 176
+      func: absent              # not checked in this build's code yet
+      event_graph: absent
+      event_graph_entry: absent
+  script_frame:
+    fields:
+      node: absent
+      object: absent
+      code: absent
+      locals: absent
+      most_recent_property: absent
+      most_recent_address: absent
+      out_parms: absent
+      property_chain: absent
+  out_parm:
+    size: absent
+    fields:
+      property: absent
+      address: absent
+      next: absent
   class_type:
     fields:
       default_object: 280

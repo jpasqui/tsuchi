@@ -16,6 +16,7 @@ build_names: [game_container, shader_format]
 data:
   garbage_collecting: 0x9860
   io_dispatcher: 0x9840
+  script_natives: 0x2400
   academy_points_session_gate: absent
   academy_points_provider_gate: absent
   academy_points_blocked_gate: absent
@@ -58,7 +59,6 @@ data:
   save_slot_paths: 0x9438
   dialog_answer_return: 0x9418
   dialog_result_table: 0x9420
-  dialog_result_header: 0x9428
   title_input_delegate_table: 0x9100
   title_direction_delegate_table: 0x9108
   academy_schedule: absent
@@ -144,6 +144,7 @@ data:
   status_words: 17920
   content_icon_size: 17928
 constants:
+  script_end_parms: 0x16
   academy_points_session_instruction: 0x54000ae1
   academy_points_provider_instruction: 0x54000a81
   academy_points_blocked_instruction: 0x37000a4a
@@ -179,6 +180,7 @@ constants:
   fade_role_title: 1
   play_mode_one: 4
   dialog_result_message: 0x45
+  dialog_result_header: 0x1F00000001
   title_confirm_key: 0x16
   title_back_key: 0x17
   title_menu_state: 5
@@ -797,7 +799,12 @@ structs:
   struct_type:
     fields: {super: 0x48, properties: 0x60, bytes: 0x68, alignment: 0x6C}
   function:
-    fields: {flags: 0x70}
+    fields: {flags: 0x70, func: 0x80, event_graph: 0x88, event_graph_entry: 0x90}
+  script_frame:
+    fields: {node: 0x8, object: 0x10, code: 0x18, locals: 0x20, out_parms: 0x30, most_recent_property: 0x38, most_recent_address: 0x40, property_chain: 0x48}
+  out_parm:
+    size: 0x20
+    fields: {property: 0x8, address: 0x0, next: 0x18}
   class_type:
     fields: {default_object: 0x78}
   property:
