@@ -215,11 +215,16 @@ Holds don't notify the game or rewrite copies already stored in save data.
 
 Paths may traverse structs, but can't cross object references. Pass empty text
 for `identity` outside an array. An array path can contain one index, such as
-`GeneratorList[0].RebirthInfo.RebirthInterval`. Supply an integer identity field
-relative to that row, such as `GenerateInfo.DebugUniqueId`. The identity must be
-unique in the array and unchanged for the hold's lifetime. Tsuchi finds the row by
-identity again after a reorder or reallocation; a missing row ends restoration
-without writing to another row. Nested arrays aren't supported.
+`GeneratorList[0].RebirthInfo.RebirthInterval`. Supply an identity field
+relative to that row, such as `GenerateInfo.DebugUniqueId`. The identity is an
+integer field or a name field, so use a name when the rows share their integers.
+For example, the three rows of `PointerCollTreeTarget` on a `GBank_C` actor's
+`PointerAssist` component share their integers, and each row has its own
+`FixedCollTreeName`. The identity must be unique in the array and unchanged for
+the hold's lifetime, and names that differ only by case count as the same name.
+Tsuchi finds the row by identity again after a reorder or reallocation; a
+missing row ends restoration without writing to another row. Nested arrays
+aren't supported.
 
 ## Lifetime
 

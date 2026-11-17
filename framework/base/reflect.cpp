@@ -459,6 +459,11 @@ TSUCHI_Result write_value(const Place& place, const Value& value) {
     return kind == PropertyKind::unknown ? TSUCHI_NOT_FOUND : TSUCHI_UNSUPPORTED;
 }
 
+TSUCHI_Result read_name(const Place& place, Name& out) {
+    if ((!place.element && count_of(place.property) > 1) || kind_of(place.property) != PropertyKind::name) return TSUCHI_INVALID;
+    return read(place.address, out) ? TSUCHI_OK : TSUCHI_NOT_FOUND;
+}
+
 TSUCHI_Result read_text(const Place& place, char* out, size_t capacity, size_t* needed) {
     if (needed) *needed = 0;
     const PropertyKind kind = kind_of(place.property);
