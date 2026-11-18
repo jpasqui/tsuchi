@@ -30,7 +30,7 @@ static_assert(sizeof(MemoryInfo) == 40, "SVC memory information");
 bool query(uint64_t address, MemoryInfo& info) {
     register uint64_t r0 asm("x0") = reinterpret_cast<uint64_t>(&info);
     register uint64_t r2 asm("x2") = address;
-    asm volatile("svc #6" : "+r"(r0) : "r"(r2) : "x1", "x3", "memory");
+    asm volatile("svc #6" : "+r"(r0), "+r"(r2) : : "x1", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "cc", "memory");
     last_result = uint32_t(r0);
     return r0 == 0;
 }
@@ -39,7 +39,7 @@ bool information(uint32_t kind, uint32_t handle, uint64_t& value) {
     register uint64_t r1 asm("x1") = kind;
     register uint64_t r2 asm("x2") = handle;
     register uint64_t r3 asm("x3") = 0;
-    asm volatile("svc #0x29" : "+r"(r0), "+r"(r1) : "r"(r2), "r"(r3) : "memory");
+    asm volatile("svc #0x29" : "+r"(r0), "+r"(r1), "+r"(r2), "+r"(r3) : : "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "cc", "memory");
     last_result = uint32_t(r0);
     value = r1;
     return r0 == 0;
@@ -47,7 +47,7 @@ bool information(uint32_t kind, uint32_t handle, uint64_t& value) {
 void close_handle(uint32_t handle) {
     if (!handle) return;
     register uint64_t r0 asm("x0") = handle;
-    asm volatile("svc #0x16" : "+r"(r0) : : "memory");
+    asm volatile("svc #0x16" : "+r"(r0) : : "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "cc", "memory");
 }
 uint32_t* ipc_buffer() {
     uint64_t address;
@@ -65,14 +65,14 @@ alignas(4096) uint8_t receiver_stack[16384];
     register uint64_t r2 asm("x2") = 1;
     register uint64_t r3 asm("x3") = 0;
     register uint64_t r4 asm("x4") = 2000000000;
-    asm volatile("svc #0x43" : "+r"(r0), "+r"(r1) : "r"(r2), "r"(r3), "r"(r4) : "memory");
+    asm volatile("svc #0x43" : "+r"(r0), "+r"(r1), "+r"(r2), "+r"(r3), "+r"(r4) : : "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "cc", "memory");
     if (!r0) {
         const uint32_t* message = ipc_buffer();
         if ((message[1] & 0x80000000u) && message[2] == 2 && message[3] && message[3] != kSelf)
             __atomic_store_n(&process, message[3], __ATOMIC_RELEASE);
     }
     close_handle(server); // closing the session wakes the sender
-    asm volatile("svc #0x0a" : : : "memory");
+    asm volatile("svc #0x0a" :  : : "x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "cc", "memory");
     __builtin_unreachable();
 }
 
@@ -91,7 +91,7 @@ uint32_t process_handle() {
     register uint64_t r1 asm("x1") = 0;
     register uint64_t r2 asm("x2") = 0;
     register uint64_t r3 asm("x3") = 0;
-    asm volatile("svc #0x40" : "+r"(r0), "+r"(r1), "+r"(r2) : "r"(r3) : "memory");
+    asm volatile("svc #0x40" : "+r"(r0), "+r"(r1), "+r"(r2), "+r"(r3) : : "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "cc", "memory");
     last_result = uint32_t(r0);
     if (r0) return 0;
     server = uint32_t(r1);
@@ -102,12 +102,12 @@ uint32_t process_handle() {
     r3 = reinterpret_cast<uint64_t>(receiver_stack + sizeof receiver_stack);
     register uint64_t r4 asm("x4") = 0x2c;
     register uint64_t r5 asm("x5") = uint64_t(-2);
-    asm volatile("svc #8" : "+r"(r0), "+r"(r1) : "r"(r2), "r"(r3), "r"(r4), "r"(r5) : "memory");
+    asm volatile("svc #8" : "+r"(r0), "+r"(r1), "+r"(r2), "+r"(r3), "+r"(r4), "+r"(r5) : : "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "cc", "memory");
     last_result = uint32_t(r0);
     if (r0) { close_handle(server); close_handle(client); return 0; }
     const uint32_t thread = uint32_t(r1);
     r0 = thread;
-    asm volatile("svc #9" : "+r"(r0) : : "memory");
+    asm volatile("svc #9" : "+r"(r0) : : "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "cc", "memory");
     last_result = uint32_t(r0);
     if (r0) { close_handle(thread); close_handle(server); close_handle(client); return 0; }
     uint8_t saved[0x100];
@@ -116,7 +116,7 @@ uint32_t process_handle() {
     const uint32_t message[] = {0, 0x80000000u, 2, kSelf};
     memcpy(ipc_buffer(), message, sizeof message);
     r0 = client;
-    asm volatile("svc #0x21" : "+r"(r0) : : "memory");
+    asm volatile("svc #0x21" : "+r"(r0) : : "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "cc", "memory");
     last_result = uint32_t(r0);
     memcpy(ipc_buffer(), saved, sizeof saved);
     close_handle(client);
@@ -124,7 +124,7 @@ uint32_t process_handle() {
     r1 = reinterpret_cast<uint64_t>(&thread);
     r2 = 1;
     r3 = 2000000000;
-    asm volatile("svc #0x18" : "+r"(r0), "+r"(r1) : "r"(r2), "r"(r3) : "memory");
+    asm volatile("svc #0x18" : "+r"(r0), "+r"(r1), "+r"(r2), "+r"(r3) : : "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "cc", "memory");
     last_result = uint32_t(r0);
     // The stack remains alive even if the wait was refused or timed out.
     close_handle(thread);
@@ -217,8 +217,8 @@ uint32_t map_process(uint64_t destination, uint32_t handle, uint64_t source, uin
     register uint64_t r1 asm("x1") = handle;
     register uint64_t r2 asm("x2") = source;
     register uint64_t r3 asm("x3") = bytes;
-    if (unmap) asm volatile("svc #0x75" : "+r"(r0) : "r"(r1), "r"(r2), "r"(r3) : "memory");
-    else asm volatile("svc #0x74" : "+r"(r0) : "r"(r1), "r"(r2), "r"(r3) : "memory");
+    if (unmap) asm volatile("svc #0x75" : "+r"(r0), "+r"(r1), "+r"(r2), "+r"(r3) : : "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "cc", "memory");
+    else asm volatile("svc #0x74" : "+r"(r0), "+r"(r1), "+r"(r2), "+r"(r3) : : "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "cc", "memory");
     return last_result = uint32_t(r0);
 }
 
@@ -227,8 +227,8 @@ uint32_t map_code(uint32_t handle, uint64_t destination, uint64_t source, uint64
     register uint64_t r1 asm("x1") = destination;
     register uint64_t r2 asm("x2") = source;
     register uint64_t r3 asm("x3") = bytes;
-    if (unmap) asm volatile("svc #0x78" : "+r"(r0) : "r"(r1), "r"(r2), "r"(r3) : "memory");
-    else asm volatile("svc #0x77" : "+r"(r0) : "r"(r1), "r"(r2), "r"(r3) : "memory");
+    if (unmap) asm volatile("svc #0x78" : "+r"(r0), "+r"(r1), "+r"(r2), "+r"(r3) : : "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "cc", "memory");
+    else asm volatile("svc #0x77" : "+r"(r0), "+r"(r1), "+r"(r2), "+r"(r3) : : "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "cc", "memory");
     return last_result = uint32_t(r0);
 }
 
@@ -237,7 +237,7 @@ uint32_t set_rx(uint32_t handle, uint64_t address, uint64_t bytes) {
     register uint64_t r1 asm("x1") = address;
     register uint64_t r2 asm("x2") = bytes;
     register uint64_t r3 asm("x3") = 5;
-    asm volatile("svc #0x73" : "+r"(r0) : "r"(r1), "r"(r2), "r"(r3) : "memory");
+    asm volatile("svc #0x73" : "+r"(r0), "+r"(r1), "+r"(r2), "+r"(r3) : : "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "cc", "memory");
     return last_result = uint32_t(r0);
 }
 

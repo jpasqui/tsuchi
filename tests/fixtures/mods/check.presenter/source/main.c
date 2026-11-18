@@ -17,7 +17,7 @@ static int64_t limit = 30, taps_wanted = -1;
 static uint64_t wall(void) {
 #if defined(__aarch64__)
     register uint64_t ticks __asm__("x0");
-    __asm__ volatile("svc 0x1E" : "=r"(ticks) : : "x1", "x2", "x3", "x4", "x5", "x6", "x7", "memory");
+    __asm__ volatile("svc 0x1E" : "=r"(ticks) : : "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "cc", "memory");
     return ticks;
 #else
     static uint64_t ticks;

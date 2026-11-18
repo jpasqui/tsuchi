@@ -120,7 +120,7 @@ bool start_worker(void(*entry)(void*),void* context){
 }
 uint64_t system_tick(){
  register uint64_t ticks asm("x0");
- asm volatile("svc #0x1e":"=r"(ticks)::"x1","x2","x3","x4","x5","x6","x7","memory");
+ asm volatile("svc #0x1e" : "=r"(ticks) : : "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "cc", "memory");
  return ticks;
 }
 constexpr uint32_t kEntropyRounds=8,kEntropySamples=4096;
@@ -139,7 +139,7 @@ void sample_timing(uint16_t* out,uint32_t count){
 bool entropy_seed(uint8_t out[32]){
  auto& pool=entropy_pool;pool.seconds=uint64_t(unix_seconds());pool.tick=system_tick();
  // Kernel values mix into the seed, but emulator output earns no entropy credit.
- for(uint64_t i=0;i<4;++i){register uint64_t result asm("x0")=0;register uint64_t word asm("x1")=11;register uint64_t handle asm("x2")=0;register uint64_t subid asm("x3")=i;asm volatile("svc #0x29":"+r"(result),"+r"(word):"r"(handle),"r"(subid):"x4","x5","x6","x7","memory");pool.words[i]=uint32_t(result)?0:word;}
+ for(uint64_t i=0;i<4;++i){register uint64_t result asm("x0")=0;register uint64_t word asm("x1")=11;register uint64_t handle asm("x2")=0;register uint64_t subid asm("x3")=i;asm volatile("svc #0x29" : "+r"(result), "+r"(word), "+r"(handle), "+r"(subid) : : "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "cc", "memory");pool.words[i]=uint32_t(result)?0:word;}
  uint32_t credit=0,rounds=0;
  while(rounds<kEntropyRounds&&(rounds<2||credit<https::https_entropy::required_bits)){
   uint16_t* samples=pool.samples+rounds*kEntropySamples;sample_timing(samples,kEntropySamples);
@@ -168,14 +168,14 @@ void wait_for_work(const uint32_t* word,uint32_t expected){
  register uint64_t type asm("x1")=2;
  register uint64_t value asm("x2")=int64_t(int32_t(expected));
  register int64_t timeout asm("x3")=-1;
- asm volatile("svc #0x34":"+r"(address):"r"(type),"r"(value),"r"(timeout):"x4","x5","x6","x7","memory");
+ asm volatile("svc #0x34" : "+r"(address), "+r"(type), "+r"(value), "+r"(timeout) : : "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "cc", "memory");
 }
 void wake_for_work(const uint32_t* word){
  register uint64_t address asm("x0")=reinterpret_cast<uint64_t>(word);
  register uint64_t type asm("x1")=0;
  register uint64_t value asm("x2")=0;
  register int64_t count asm("x3")=-1;
- asm volatile("svc #0x35":"+r"(address):"r"(type),"r"(value),"r"(count):"x4","x5","x6","x7","memory");
+ asm volatile("svc #0x35" : "+r"(address), "+r"(type), "+r"(value), "+r"(count) : : "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "cc", "memory");
 }
 int tcp_open(const https::HttpsJob& job,const char* host,uint16_t port,uint64_t deadline,int* out){
  init_diagnostic[4].store(1);init_diagnostic[5].store(0);init_diagnostic[6].store(0);

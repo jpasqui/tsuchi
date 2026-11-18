@@ -40,7 +40,7 @@ void tsuchi_lua_write_error(const char*, const char*) {}
 // 19.2 million ticks a second from when the console started, and is asked directly.
 unsigned long long tsuchi_libc_ticks() {
     register uint64_t ticks __asm__("x0");
-    __asm__ volatile("svc 0x1E" : "=r"(ticks) : : "x1", "x2", "x3", "x4", "x5", "x6", "x7", "memory");
+    __asm__ volatile("svc 0x1E" : "=r"(ticks) : : "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "cc", "memory");
     static uint64_t first = 0;
     if (!first) first = ticks;
     return (ticks - first) * 5 / 96;
