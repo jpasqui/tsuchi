@@ -92,6 +92,9 @@ bool add_manifest_section(const ManifestSection& section);
 bool add_manifest_key_off(const char* key, const char* family);
 // The same declaration paths are used by the content service. Validation does not change the game.
 TSUCHI_Result manifest_part(const char* key, TSUCHI_Mod* mod, const Json& part, Text& problem, bool apply);
+// True while a section of a mod's manifest is being begun from the manifest itself, as the mod starts or starts
+// again, and not from what its code declares.
+bool declaring_from_manifest();
 // What is done for a mod that has its context, before its code runs.
 void set_before_start(void (*prepare)(ModRecord& record));
 void set_setting_override_changed(void (*changed)(ModRecord&, const Setting&));

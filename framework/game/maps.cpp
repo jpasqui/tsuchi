@@ -352,8 +352,13 @@ TSUCHI_Result maps_begin(TSUCHI_Mod* mod, const Json& section, Text& problem) {
         Part part{next_part, mod, entry, nullptr, nullptr, 0, {}, {}, false, false, {}};
         const ModRecord* record = find_mod(mod_id(mod));
         // prepare_mods commits prepared only after its early sections return. Startup adopts that
-        // context; declarations made by its code must keep the separate late dynamic path.
-        part.initial = record && record->context == mod && record->state == ModState::ready && !record->prepared;
+        // context; declarations made by its code must keep the separate late dynamic path. A mod started again
+        // (from the mod list, or as its development folder changes) declares its manifest's entries again: they
+        // join the initial streaming of every later LoadMap, as they did before the restart, and take the late
+        // path only in the world that is loaded now.
+        part.initial = record && record->context == mod &&
+            ((record->state == ModState::ready && !record->prepared) ||
+             (record->state == ModState::running && declaring_from_manifest() && initial_hook));
         if (part.initial && entry->find("levels") && entry->find("levels")->count && !initial_hook)
             return refuse(problem, TSUCHI_NOT_READY, "\"maps\": initial levels need the matching incoming LoadMap hook");
         if (entry->find("changes") && !initialize_hook)
@@ -1597,6 +1602,17 @@ void on_initialize(uint64_t level, int32_t budget, bool reconstruct, void* conte
     next_initialize(level, budget, reconstruct, context);
 }
 
+// Whether every part of the loaded map that brings levels has them in the world.
+bool levels_in() {
+    for (uint32_t p = 0; p < parts.count; ++p) {
+        const Part& part = parts[p];
+        if (part.failed || !on_map(part)) continue;
+        const Json* levels = part.map->find("levels");
+        if (levels && levels->count && !part.ready) return false;
+    }
+    return true;
+}
+
 void step() {
     if (!parts.count) return;
     const uint64_t world = game::loaded_world();
@@ -1611,6 +1627,9 @@ void step() {
     ++world_steps;
     if (early_moves.count) check_early_moves();
     if (late_removals.count) check_late_removals();
+    // The mods' placement lists go in at the first step at which every part of the map has its levels in: at once
+    // for levels that came with the map's own loading. Waiting for the next look would show the map without them.
+    if (placements_waiting(world_now) && levels_in()) placements_look(world_now, world_path.get(), part_failed);
     // A look goes over every object the engine has, so it is taken twice a second while the map settles and
     // every four seconds after that, for sublevels that come later.
     if (world_steps < 30 || world_steps % (world_steps < 900 ? 15 : 120)) return;

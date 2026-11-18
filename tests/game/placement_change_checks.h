@@ -1,5 +1,5 @@
 // The "placement_changes" of a maps entry, included inside the placement fixture block: rows of the game's own
-// placement lists moved and removed as the game reads them, the asset itself never written.
+// placement lists moved, removed and given other option blobs as the game reads them, the asset itself never written.
 {
     namespace x = t::engine_transform;
     for (const char* id : made) disk.files.erase(mods_at + id + "/mod.json");
@@ -76,15 +76,22 @@
     plain("change.number", "1.0.0", map + R"({"/G/C/Objects": {"remove": [28674]}}}])");
     plain("change.word", "1.0.0", map + R"({"/G/C/Objects": {"move": {"pot": {"location": [0, 0, 0], "rotation": [0, 0, 0]}}}}}])");
     plain("change.both", "1.0.0", map + R"({"/G/C/Objects": {"move": {"28673": {"location": [0, 0, 0], "rotation": [0, 0, 0]}}, "remove": ["28673"]}}}])");
-    plain("change.key", "1.0.0", map + R"({"/G/C/Objects": {"set": {}}}}])");
+    plain("change.key", "1.0.0", map + R"({"/G/C/Objects": {"rename": {}}}}])");
+    plain("change.blob", "1.0.0", map + R"({"/G/C/Objects": {"set": {"28673": {"AI.Sideways": "00"}}}}}])");
+    plain("change.hex", "1.0.0", map + R"({"/G/C/Objects": {"set": {"28673": {"AI.Static": "0g"}}}}}])");
+    plain("change.gone", "1.0.0", map + R"({"/G/C/Objects": {"set": {"28673": {"AI.Static": "00"}}, "remove": ["28673"]}}}])");
     plain("change.twice", "1.0.0", map + R"({"/G/C/Objects": {"remove": ["1"]}, "/g/c/objects": {"remove": ["2"]}}}])");
     plain("change.dot", "1.0.0", map + R"({"/G/C/Objects.Objects": {"remove": ["1"]}}}])");
-    const char* const changers[] = {"change.a", "change.b", "change.c", "change.d", "change.e", "change.number", "change.word", "change.both", "change.key", "change.twice", "change.dot"};
+    const char* const changers[] = {"change.a", "change.b", "change.c", "change.d", "change.e", "change.number", "change.word", "change.both", "change.key",
+                                    "change.blob", "change.hex", "change.gone", "change.twice", "change.dot"};
     CHECK(tsuchi::find_mods() == TSUCHI_OK);
     CHECK(problem("change.number") == "mod.json: \"maps\": \"placement_changes\": /G/C/Objects: \"remove\": a value is no row: a row is named by its placement number, in decimal digits and as text, such as \"17179869271\"");
     CHECK(problem("change.word") == "mod.json: \"maps\": \"placement_changes\": /G/C/Objects: \"move\": pot is no row: a row is named by its placement number, in decimal digits and as text, such as \"17179869271\"");
     CHECK(problem("change.both") == "mod.json: \"maps\": \"placement_changes\": /G/C/Objects both moves and removes row 28673");
-    CHECK(problem("change.key") == "mod.json: \"maps\": \"placement_changes\" holds the game's placement lists by the path of each package, each with rows to \"move\" and rows to \"remove\"");
+    CHECK(problem("change.key") == "mod.json: \"maps\": \"placement_changes\" holds the game's placement lists by the path of each package, each with rows to \"move\", rows to \"remove\" and rows to \"set\"");
+    CHECK(problem("change.blob") == "mod.json: \"maps\": \"placement_changes\": /G/C/Objects, row 28673: AI.Sideways is no option blob: a blob is a field of the row's ActorSerializeParameter and its half, such as \"AI.Static\"");
+    CHECK(problem("change.hex") == "mod.json: \"maps\": \"placement_changes\": /G/C/Objects, row 28673: AI.Static is the blob's bytes as hex text, two digits each, at most a megabyte");
+    CHECK(problem("change.gone") == "mod.json: \"maps\": \"placement_changes\": /G/C/Objects both sets and removes row 28673");
     CHECK(problem("change.twice") == "mod.json: \"maps\": \"placement_changes\" names /g/c/objects twice");
     CHECK(problem("change.dot") == std::string("mod.json: \"maps\": \"placement_changes\": /G/C/Objects.Objects") + tsuchi::content_path::kNoPackage);
     tsuchi::start_mods();
@@ -170,6 +177,54 @@
     // puts it, 7003 back where its list has it, and 7101 is read again.
     tsuchi::mod_stop(tsuchi::find_mod("change.b")->context);
     CHECK(build_now() == "build: 7001@100/100 7003@30/30 7101@40/40 " && unchanged() && !told("[change.a] maps: /G/C/Objects, row 28673: "));
+    // A mod gives row 7003 a blob of its own and moves it: the game reads the row with the mod's bytes in its
+    // ActorSerializeParameter.AI.Static, and the rest of the row as the list has it. The asset is as it was.
+    {
+        TSUCHI_Mod* giver = tsuchi::mod_create("change.given", 1);
+        const char* declared = R"([{"map": "/G/Cave_P", "placement_changes": {"/G/C/Objects": {
+            "move": {"28675": {"location": [333, 0, 0], "rotation": [0, 0, 0]}}, "set": {"28675": {"AI.Static": "0A0b0c"}}}}}])";
+        const tsuchi::Json* section = tsuchi::read_json(declared, std::strlen(declared));
+        tsuchi::Text wrong;
+        CHECK(giver && section && tsuchi::manifest_part("maps", giver, *section, wrong, true) == TSUCHI_OK);
+        const uint32_t given_before = tsuchi::placement_change_counts().rows_given;
+        std::string read_blob;
+        uint64_t asset_blob = ~uint64_t(0);
+        list_reads.peek = [&](uint64_t lists) {
+            const uint64_t held = fake::get<uint64_t>(fake::get<uint64_t>(lists + t::array::data));
+            const uint64_t list = fake::get<uint64_t>(fake::get<uint64_t>(held + list_reads.held_at + t::array::data));
+            const uint64_t rows = fake::get<uint64_t>(list + kRowsAt);
+            for (int32_t i = 0; i < fake::get<int32_t>(list + kRowsAt + t::array::count); ++i) {
+                const uint64_t row = rows + uint64_t(i) * g::size;
+                if (fake::get<uint64_t>(row + g::placement) != 0x7003) continue;
+                const uint64_t data = fake::get<uint64_t>(row + kRowSerializeAt);
+                const int32_t count = fake::get<int32_t>(row + kRowSerializeAt + t::array::count);
+                if (data && count > 0) read_blob.assign(reinterpret_cast<const char*>(data), size_t(count));
+            }
+        };
+        CHECK(build_now() == "build: 7001@100/100 7003@333/333 7101@40/40 " && unchanged());
+        list_reads.peek = {};
+        // The list's own row keeps its own bytes.
+        asset_blob = fake::get<uint64_t>(fake::get<uint64_t>(objects + kRowsAt) + 2 * g::size + kRowSerializeAt);
+        CHECK(read_blob == std::string("\x0a\x0b\x0c", 3) && asset_blob && fake::get<uint8_t>(asset_blob) == 0xA1 &&
+              fake::get<int32_t>(fake::get<uint64_t>(objects + kRowsAt) + 2 * g::size + kRowSerializeAt + t::array::count) == 3);
+        CHECK(tsuchi::placement_change_counts().rows_given == given_before + 1);
+        CHECK(told("[change.given] maps: /G/C/Objects, row 28675 was given this mod's options as the game read the list for /G/Cave_P\n") &&
+              told("[change.given] maps: /G/C/Objects, row 28675 was moved as the game read the list for /G/Cave_P\n"));
+        // A blob the rows do not have: none of that mod's changes to the list are made.
+        TSUCHI_Mod* stray = tsuchi::mod_create("change.stray", 1);
+        const char* strayed = R"([{"map": "/G/Cave_P", "placement_changes": {"/G/C/Objects": {
+            "move": {"28673": {"location": [7, 7, 7], "rotation": [0, 0, 0]}}, "set": {"28673": {"Life.Dynamic": "00"}}}}}])";
+        const tsuchi::Json* stray_section = tsuchi::read_json(strayed, std::strlen(strayed));
+        wrong.clear();
+        CHECK(stray && stray_section && tsuchi::manifest_part("maps", stray, *stray_section, wrong, true) == TSUCHI_OK);
+        CHECK(build_now() == "build: 7001@100/100 7003@333/333 7101@40/40 " && unchanged());
+        CHECK(told("[change.stray] maps: the placement list /G/C/Objects has no option blob Life.Dynamic in its rows as the game reads it for /G/Cave_P, so none of this mod's changes to the list were made\n"));
+        tsuchi::mod_stop(stray);
+        tsuchi::mod_stop(giver);
+        CHECK(build_now() == "build: 7001@100/100 7003@30/30 7101@40/40 " && unchanged() && !told("[change.given]"));
+        tsuchi::release_json(stray_section);
+        tsuchi::release_json(section);
+    }
     // In the night, only the night entry's.
     fake::put<uint8_t>(clock + t::clock::night, 1);
     CHECK(build_now() == "build: 7001@10/10 7002@20/20 7003@30/30 7101@9/9 " && unchanged() && !told("[change.a]"));
