@@ -8320,6 +8320,8 @@ struct Placing {
 } placing;
 constexpr uint32_t kRowClassAt = 0x50, kRowPlaceAt = 0x80; // where a row names its class, and where the test keeps its place
 constexpr uint32_t kRowBytesAt = 0x90; // one owned serializer byte array in the made-up row
+// The made-up row's owned byte array is its ActorSerializeParameter.AI.Static.
+constexpr uint32_t kRowSerializeAt = kRowBytesAt;
 uint64_t game_day(void*) { return 7; }
 void game_generator_copy(void* to, void* from) {
     std::memcpy(to, from, t::generator::size);
@@ -9478,6 +9480,15 @@ void installing() {
         fake::put<uint64_t>(row_type, fake::engine().vtable);
         fake::put<int32_t>(row_type + t::struct_type::bytes, int32_t(g::size)), fake::put<int32_t>(row_type + t::struct_type::alignment, 8);
         fake::field(row_type, u"SoftRefActorClass", u"SoftObjectProperty", kRowClassAt, int32_t(t::soft_object::size), actor_base_class);
+        // A row's option blobs: ActorSerializeParameter.AI.Static, the row's owned byte array.
+        const uint64_t blob_pair = fake::memory(0x80), serialize_type = fake::memory(0x80);
+        for (const uint64_t made : {blob_pair, serialize_type}) {
+            fake::put<uint64_t>(made, fake::engine().vtable);
+            fake::put<int32_t>(made + t::struct_type::bytes, 0x10), fake::put<int32_t>(made + t::struct_type::alignment, 8);
+        }
+        fake::field(blob_pair, u"Static", u"ArrayProperty", 0, 0x10, fake::loose_field(u"ByteProperty", 1));
+        fake::field(serialize_type, u"AI", u"StructProperty", 0, 0x10, blob_pair);
+        fake::field(row_type, u"ActorSerializeParameter", u"StructProperty", int32_t(kRowSerializeAt), 0x10, serialize_type);
         fake::field(list_type, u"ActorGeneratorList", u"ArrayProperty", kRowsAt, 0x10, fake::loose_field(u"StructProperty", int32_t(g::size), row_type));
         struct Row {
             uint64_t number;
@@ -9598,18 +9609,21 @@ void installing() {
         };
 
         // The map made fresh. Nothing is given while a level asked for has not been tried, nor while the game has
-        // not made the map's generators.
+        // not made the map's generators; once both are so, the lists go in at the next step.
         const uint64_t den = world_in(u"/G/Den_P", u"Den_P"), far = world_in(u"/G/Far_P", u"Far_P");
         uint64_t keeper = keeper_of(0, true);
         enter(den);
-        steps(314);
+        steps(299);
+        CHECK(placing.log.empty() && generators_of(keeper) == 2 && !told("/G/Mods/Broken"));
+        fake::put<uint8_t>(keeper + k::built, 0);
+        steps(15);
         CHECK(placing.log.empty() && generators_of(keeper) == 2 && told("[place.broken] maps: /G/Mods/Broken could not be loaded into /G/Den_P"));
         fake::put<uint8_t>(keeper + k::built, 1);
         steps(30);
         CHECK(placing.log.empty() && generators_of(keeper) == 2 && counted() == "0/0/0/0 lists, 0/0/0 rows, 0 actors");
         fake::put<uint8_t>(keeper + k::built, uint8_t(t::constant::generators_built));
         placing.short_of = 0x2005;
-        steps(15);
+        steps(1);
         // Each mod's lists in the order the mods started, and one mod's in the order its manifest has them: a row
         // is copied to the end of the map's generators, its actors are made and started, and the mark comes last.
         CHECK(placing.log == "grow copy spawn:2001 start copy spawn:2002 start start copy grow copy spawn:2005 copy spawn:3001 start copy ");
@@ -9658,13 +9672,12 @@ void installing() {
         CHECK(placing.log == "grow copy spawn:2005 " && generators_of(keeper) == 7 && counted() == "2/2/8/2 lists, 3/2/8 rows, 4 actors");
         CHECK(told("[place.one] maps: /G/M/More, row 4 was not placed in /G/Den_P: the game made fewer actors for it than it asks for\n") && !told("Pots") && !told("Gates"));
 
-        // Another map: its own mod's list, at the first look, since no level is waited for there. With no generator
+        // Another map: its own mod's list, at the first step, since no level is waited for there. With no generator
         // of the game's to go by, the rows keep the part of the level their list gives them.
         placing.log.clear();
         keeper = keeper_of(0, true);
         fake::put<int32_t>(keeper + k::generators + t::array::count, 0);
         enter(far);
-        steps(29);
         CHECK(placing.log.empty());
         steps(1);
         CHECK(placing.log == "copy spawn:4001 start copy " && generators_of(keeper) == 2 && counted() == "3/2/8/2 lists, 4/2/8 rows, 5 actors");

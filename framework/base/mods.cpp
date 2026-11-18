@@ -769,6 +769,8 @@ bool run_code(ModRecord& record) {
     return true; // a mod may have code of every kind, each started in the order the kinds were added, or none: then it is its manifest and its files
 }
 
+bool from_manifest = false; // a section is being begun from the mod's manifest
+
 // Does what the mod's manifest declares, before any code of the mod's.
 bool begin_declared(ModRecord& record, bool before_world) {
     const uint64_t generation = discovery_generation;
@@ -778,7 +780,9 @@ bool begin_declared(ModRecord& record, bool before_world) {
         const Json* part = record.manifest->find(section.key);
         if (!part) continue;
         Text problem;
+        from_manifest = true;
         const TSUCHI_Result result = section.begin(record.context, *part, problem);
+        from_manifest = false;
         // A part that gives no reason of its own is told by what it answered. Only no_memory means memory ran out.
         if (generation == discovery_generation && !forget_pending && result != TSUCHI_OK) {
             if (problem.get()[0]) blocked(record, "mod.json: ", problem.get());
@@ -1256,6 +1260,8 @@ void start_mods() {
 bool add_mod_runtime(const ModRuntime& runtime) { return runtimes.add(runtime) != nullptr; }
 bool add_manifest_section(const ManifestSection& section) { return sections.add(section) != nullptr; }
 bool add_manifest_key_off(const char* key, const char* family) { return keys_off.add({key, family}) != nullptr; }
+bool declaring_from_manifest() { return from_manifest; }
+
 TSUCHI_Result manifest_part(const char* key, TSUCHI_Mod* mod, const Json& part, Text& problem, bool apply) {
     for (uint32_t i = 0; i < sections.count; ++i) {
         const ManifestSection section = sections[i];

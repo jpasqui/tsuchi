@@ -29,9 +29,15 @@ void placements_start(TSUCHI_Mod* context);
 bool placements_begin(uint64_t part, TSUCHI_Mod* mod, const Json& entry);
 // The part's mod has stopped: it gives no more lists.
 void placements_end(uint64_t part);
-// A look at the loaded world, taken once every level asked for is in it. Gives the lists of every part on the
-// map, once for a world, when the game has made the map's generators. `failed` tells whether a part is one whose
-// levels could not be loaded.
+// A look at the loaded world, taken at the first step at which every level asked for is in it. Gives the lists of
+// every part on the map, once for a world, when the game has made the map's generators. `failed` tells whether a
+// part is one whose levels could not be loaded.
 void placements_look(uint64_t world, const char* map, bool (*failed)(uint64_t part));
+// The game makes a map's generators again, from its lists or from the save. The lists are looked at again in the
+// world they were given in: a list whose mark the new generators have is passed over, and one whose mark they lack
+// is given again.
+void placements_again();
+// Whether a list of a running mod has still to be looked at in the world: cheap, for a check at every step.
+bool placements_waiting(uint64_t world);
 
 } // namespace tsuchi

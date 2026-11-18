@@ -1,9 +1,15 @@
-// The "placement_changes" of a `maps` entry: rows of the game's own placement lists to move or to remove.
+// The "placement_changes" of a `maps` entry: rows of the game's own placement lists to move, to remove, or to give
+// other options.
 //
 //   "maps": [{"map": "/Game/.../Cave000_F00_P", "placement_changes": {
 //       "/Game/.../ActorPlacementInfo/AP_Cave000_F00_P_Objects": {
 //           "move": {"17179869271": {"location": [121, -50, 0], "rotation": [0, 28.6, 0]}},
-//           "remove": ["17179869268"]}}}]
+//           "remove": ["17179869268"],
+//           "set": {"17179869300": {"AI.Static": "0300000000004843"}}}}}]
+//
+// A row's options are the blobs of its ActorSerializeParameter, each a field of it and a half of that field ("AI.Static"
+// is ActorSerializeParameter.AI.Static), as the game's own serializers write them at the row's versions. "set" gives a
+// row a blob in hex in place of the one the list has; every other part of the row stays the list's.
 //
 // The game makes its gameplay objects from generators, and a map's generators from its placement lists, not from
 // its levels: moving or removing a level's actor does nothing to them. A list is an ActorPlacementInfoAsset, and a
@@ -17,7 +23,8 @@
 // at a copy that lacks the removed rows and has the moved ones in their new places, and is pointed back at its
 // own rows when the game is done. So the game reads a list that says what the mods say, and the asset itself is
 // never written. The copy holds the rows' bytes, and the arrays inside them stay the asset's: the game only reads
-// them, and the copy is let go of without destroying anything.
+// them, and the copy is let go of without destroying anything. A blob a mod gives is an array of the framework's own
+// in the copy, which the game reads as it reads the asset's, and which is let go of with the copy.
 //
 // What the game made from a changed list is the game's own from then on: it saves the generators it made, so a
 // save keeps a removed row's object unplaced and a moved one where it was moved, with or without the mod. A save
@@ -33,6 +40,7 @@
 #include "host.h"
 #include "json.h"
 #include "list.h"
+#include "map_placements.h"
 #include "map_tools.h"
 #include "names.h"
 #include "objects.h"
@@ -52,6 +60,7 @@ using maps::join;
 using maps::tell;
 
 constexpr int32_t kMostRows = 65536, kMostLists = 4096;
+constexpr size_t kMostBlobHex = 2u << 20; // a blob of a megabyte, as hex
 
 // One part of a running mod that changes the game's lists.
 struct Wanted {
@@ -92,6 +101,32 @@ bool three_numbers(const Json* value) {
     return true;
 }
 
+// A blob's name: a field of ActorSerializeParameter, a dot, and Static or Dynamic.
+bool blob_name(const char* name) {
+    const char* dot = name;
+    while (*dot && *dot != '.') ++dot;
+    if (!*dot || dot == name || dot - name > 63) return false;
+    for (const char* c = name; c < dot; ++c)
+        if (!((*c >= 'a' && *c <= 'z') || (*c >= 'A' && *c <= 'Z') || (*c >= '0' && *c <= '9') || *c == '_')) return false;
+    return !strcmp(dot + 1, "Static") || !strcmp(dot + 1, "Dynamic");
+}
+
+int hex_digit(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+// A blob's bytes in hex: an even count of digits, and something.
+bool blob_hex(const Json* value) {
+    if (!value || value->kind != Json::Kind::text || !value->bytes || value->bytes % 2 || value->bytes > kMostBlobHex || strlen(value->text) != value->bytes)
+        return false;
+    for (size_t i = 0; i < value->bytes; ++i)
+        if (hex_digit(value->text[i]) < 0) return false;
+    return true;
+}
+
 // A number as text, for a line of a log.
 const char* decimal64(char out[21], uint64_t value) {
     char digits[20];
@@ -104,16 +139,26 @@ const char* decimal64(char out[21], uint64_t value) {
     return out;
 }
 
-// The change a list's entry makes to one row: its move, the entry's remove list for a removal, or null.
-const Json* change_of(const Json& list, uint64_t number) {
+// The change a list's entry makes to one row: its move, its blobs, or its removal. Nothing for a row it leaves.
+struct Change {
+    const Json* move = nullptr;
+    const Json* set = nullptr; // the row's blobs, by name
+    bool removed = false;
+    bool any() const { return move || set || removed; }
+};
+Change change_of(const Json& list, uint64_t number) {
+    Change change;
     uint64_t named = 0;
     if (const Json* move = list.find("move"))
-        for (const Json* row = move->first; row; row = row->next)
-            if (row_number(row->name, strlen(row->name), named) && named == number) return row;
+        for (const Json* row = move->first; row && !change.move; row = row->next)
+            if (row_number(row->name, strlen(row->name), named) && named == number) change.move = row;
+    if (const Json* set = list.find("set"))
+        for (const Json* row = set->first; row && !change.set; row = row->next)
+            if (row_number(row->name, strlen(row->name), named) && named == number) change.set = row;
     if (const Json* remove = list.find("remove"))
-        for (const Json* row = remove->first; row; row = row->next)
-            if (row_number(row->text, row->bytes, named) && named == number) return remove;
-    return nullptr;
+        for (const Json* row = remove->first; row && !change.removed; row = row->next)
+            if (row_number(row->text, row->bytes, named) && named == number) change.removed = true;
+    return change;
 }
 
 // ---- Reading the game's lists ---------------------------------------------------------------------------------
@@ -148,12 +193,13 @@ struct Swap {
     uint64_t array, data;
     int32_t count, max;
     void* block;
+    void* blobs; // the bytes of the blobs the mods give the rows of the copy
 };
 // One row a mod changes, and whose change it is.
 struct Decision {
     uint64_t number;
     uint32_t from;     // the mod's place in `wanted`
-    const Json* move;  // its move, or null for a removal
+    Change change;
 };
 
 // What one read of the lists does: the parts that change the map, the swaps made, and the lists seen.
@@ -173,6 +219,7 @@ struct Read {
             game::write(swap.array + t::array::count, swap.count);
             game::write(swap.array + t::array::max, swap.max);
             release(swap.block);
+            release(swap.blobs);
         }
         parts.clear(), swaps.clear(), lists.clear(), seen.clear();
     }
@@ -259,8 +306,43 @@ void set_out(Read& read, uint64_t asset) {
         };
         if (const Json* move = list->find("move"))
             for (const Json* row = move->first; row; row = row->next) check(row->name, strlen(row->name));
+        if (const Json* set = list->find("set"))
+            for (const Json* row = set->first; row; row = row->next) check(row->name, strlen(row->name));
         if (const Json* remove = list->find("remove"))
             for (const Json* row = remove->first; row; row = row->next) check(row->text, row->bytes);
+    }
+    // Where each blob a mod names is in a row, from the first row's: a byte array of ActorSerializeParameter. A mod's
+    // changes to the list are refused whole when one of its blobs is not one the rows have.
+    struct Blob { const char* name; uint64_t offset; };
+    List<Blob> blobs;
+    const auto blob_at = [&](const char* name, uint64_t& offset) {
+        for (uint32_t b = 0; b < blobs.count; ++b)
+            if (!strcmp(blobs[b].name, name)) return offset = blobs[b].offset, true;
+        static const char kSerialize[] = "ActorSerializeParameter.";
+        char path[sizeof kSerialize + 64];
+        const size_t named = strlen(name);
+        if (!rows.count || !row_type || named > 63) return false;
+        memcpy(path, kSerialize, sizeof kSerialize - 1);
+        memcpy(path + sizeof kSerialize - 1, name, named + 1);
+        game::Place blob{};
+        if (game::find_place(row_type, row_at(0), path, blob) != TSUCHI_OK || blob.element || blob.address < row_at(0) ||
+            blob.address + 0x10 > row_at(0) + g::size || !readable_array(array_at(blob.address), 1, 1 << 24))
+            return false;
+        offset = blob.address - row_at(0);
+        if (!blobs.add(Blob{name, offset})) read.memory = false;
+        return true;
+    };
+    for (uint32_t c = 0; c < changers.count; ++c) {
+        const Json* set = changers[c].whole ? changers[c].list->find("set") : nullptr;
+        for (const Json* row = set ? set->first : nullptr; row && changers[c].whole; row = row->next)
+            for (const Json* blob = row->first; blob && changers[c].whole; blob = blob->next) {
+                uint64_t offset = 0;
+                if (blob_at(blob->name, offset)) continue;
+                ++counts.lists_refused;
+                changers[c].whole = false;
+                tell(wanted[changers[c].from].mod, "maps: the placement list ", package, " has no option blob ", blob->name, " in its rows as the game reads it for ",
+                     read.map, ", so none of this mod's changes to the list were made");
+            }
     }
     // Each row's change: the later mod's, where two change one row, and both mods' logs say so.
     List<Decision> decisions;
@@ -269,9 +351,8 @@ void set_out(Read& read, uint64_t asset) {
         if (!changers[c].whole) continue;
         for (int32_t i = 0; i < rows.count; ++i) {
             const uint64_t number = read_or<uint64_t>(row_at(i) + g::placement);
-            const Json* change = change_of(*changers[c].list, number);
-            if (!change) continue;
-            const Json* move = change->kind == Json::Kind::object ? change : nullptr;
+            const Change change = change_of(*changers[c].list, number);
+            if (!change.any()) continue;
             Decision* earlier = nullptr;
             for (uint32_t d = 0; d < decisions.count && !earlier; ++d)
                 if (decisions[d].number == number) earlier = &decisions[d];
@@ -281,8 +362,8 @@ void set_out(Read& read, uint64_t asset) {
                 decimal64(said, number);
                 tell(wanted[earlier->from].mod, "maps: ", package, ", row ", said, ": ", later, " changes it too, and the game uses that change, as that mod started later");
                 tell(wanted[changers[c].from].mod, "maps: ", package, ", row ", said, ": this mod's change is used in place of ", before, "'s, as this mod started later");
-                earlier->from = changers[c].from, earlier->move = move;
-            } else if (!decisions.add(Decision{number, changers[c].from, move})) {
+                earlier->from = changers[c].from, earlier->change = change;
+            } else if (!decisions.add(Decision{number, changers[c].from, change})) {
                 read.memory = false;
             }
         }
@@ -296,13 +377,18 @@ void set_out(Read& read, uint64_t asset) {
     };
     // The list as the mods say it is: a copy of its rows without the removed ones, and with the moved ones moved.
     int32_t kept = 0;
+    uint64_t blob_bytes = 0;
     for (int32_t i = 0; i < rows.count; ++i) {
         const Decision* decision = decided(read_or<uint64_t>(row_at(i) + g::placement));
-        kept += !decision || decision->move;
+        kept += !decision || !decision->change.removed;
+        if (decision && !decision->change.removed && decision->change.set)
+            for (const Json* blob = decision->change.set->first; blob; blob = blob->next) blob_bytes += blob->bytes / 2;
     }
     void* block = allocate(uint64_t(kept) * g::size + 16);
-    if (!block || !read.swaps.reserve(read.swaps.count + 1)) {
+    void* given = blob_bytes ? allocate(blob_bytes) : nullptr;
+    if (!block || (blob_bytes && !given) || !read.swaps.reserve(read.swaps.count + 1)) {
         release(block);
+        release(given);
         read.memory = false;
         for (uint32_t d = 0; d < decisions.count; ++d)
             if (d == 0 || decisions[d].from != decisions[d - 1].from)
@@ -311,12 +397,13 @@ void set_out(Read& read, uint64_t asset) {
         return;
     }
     const uint64_t copy = (reinterpret_cast<uint64_t>(block) + 15) & ~uint64_t(15);
+    uint8_t* bytes = static_cast<uint8_t*>(given);
     int32_t at = 0;
     for (int32_t i = 0; i < rows.count; ++i) {
         const uint64_t row = row_at(i), number = read_or<uint64_t>(row + g::placement);
         const Decision* decision = decided(number);
         decimal64(said, number);
-        if (decision && !decision->move) {
+        if (decision && decision->change.removed) {
             ++counts.rows_removed;
             tell(wanted[decision->from].mod, "maps: ", package, ", row ", said, " was removed as the game read the list for ", read.map);
             continue;
@@ -324,12 +411,31 @@ void set_out(Read& read, uint64_t asset) {
         const uint64_t to = copy + uint64_t(at++) * g::size;
         memcpy(reinterpret_cast<void*>(to), reinterpret_cast<const void*>(row), g::size);
         if (!decision) continue;
-        put_move(to, *decision->move);
-        ++counts.rows_moved;
-        tell(wanted[decision->from].mod, "maps: ", package, ", row ", said, " was moved as the game read the list for ", read.map);
+        if (decision->change.move) {
+            put_move(to, *decision->change.move);
+            ++counts.rows_moved;
+            tell(wanted[decision->from].mod, "maps: ", package, ", row ", said, " was moved as the game read the list for ", read.map);
+        }
+        if (decision->change.set) {
+            // Each blob is an array of the framework's, in place of the list's, in the row's copy.
+            for (const Json* blob = decision->change.set->first; blob; blob = blob->next) {
+                uint64_t offset = 0;
+                blob_at(blob->name, offset);
+                const int32_t count = int32_t(blob->bytes / 2);
+                for (int32_t b = 0; b < count; ++b) bytes[b] = uint8_t(hex_digit(blob->text[2 * b]) << 4 | hex_digit(blob->text[2 * b + 1]));
+                const uint64_t array = to + offset;
+                memcpy(reinterpret_cast<void*>(array + t::array::data), &bytes, sizeof bytes);
+                memcpy(reinterpret_cast<void*>(array + t::array::count), &count, sizeof count);
+                memcpy(reinterpret_cast<void*>(array + t::array::max), &count, sizeof count);
+                bytes += count;
+            }
+            ++counts.rows_given;
+            tell(wanted[decision->from].mod, "maps: ", package, ", row ", said, " was given this mod's options as the game read the list for ", read.map);
+        }
     }
     decisions.clear();
-    read.swaps.add(Swap{place.address, rows.data, rows.count, rows.max, block});
+    blobs.clear();
+    read.swaps.add(Swap{place.address, rows.data, rows.count, rows.max, block, given});
     game::write(place.address + t::array::data, copy);
     game::write(place.address + t::array::count, kept);
     game::write(place.address + t::array::max, kept);
@@ -397,6 +503,8 @@ bool begin_read(Read& read, uint64_t world, uint64_t lists) {
 
 // The game makes a map's generators from its lists.
 void on_build(void* keeper, void* world, void* lists) {
+    // Generators made anew, as when a day is played again in the same world: the mods' own lists are looked at again.
+    if (!depth) placements_again();
     if (depth || !wanted.count) return next_build(keeper, world, lists);
     ++depth;
     {
@@ -411,6 +519,7 @@ void on_build(void* keeper, void* world, void* lists) {
 // The game makes a map's generators from the save's record, and reads only the rows of lists that the save has
 // no record of yet.
 bool on_restore(void* keeper, void* world, uint32_t mode) {
+    if (!depth) placements_again();
     if (depth || !wanted.count) return next_restore(keeper, world, mode);
     ++depth;
     bool restored = false;
@@ -435,7 +544,7 @@ bool on_restore(void* keeper, void* world, uint32_t mode) {
 bool placement_changes_well_formed(const Json& entry, Text& wrong) {
     const Json* lists = entry.find("placement_changes");
     if (!lists) return true;
-    static const char kShape[] = "\"maps\": \"placement_changes\" holds the game's placement lists by the path of each package, each with rows to \"move\" and rows to \"remove\"";
+    static const char kShape[] = "\"maps\": \"placement_changes\" holds the game's placement lists by the path of each package, each with rows to \"move\", rows to \"remove\" and rows to \"set\"";
     if (lists->kind != Json::Kind::object || !lists->count) return wrong.set(kShape), false;
     for (const Json* list = lists->first; list; list = list->next) {
         if (const char* why = content_path::wrong(list->name, strlen(list->name), content_path::Names::package))
@@ -443,7 +552,10 @@ bool placement_changes_well_formed(const Json& entry, Text& wrong) {
         for (const Json* other = lists->first; other != list; other = other->next)
             if (content_path::same(other->name, list->name)) return join(wrong, "\"maps\": \"placement_changes\" names ", list->name, " twice"), false;
         const Json* move = list->kind == Json::Kind::object ? list->find("move") : nullptr, *remove = list->kind == Json::Kind::object ? list->find("remove") : nullptr;
-        if (list->kind != Json::Kind::object || !list->count || list->count != uint32_t(!!move + !!remove)) return wrong.set(kShape), false;
+        const Json* set = list->kind == Json::Kind::object ? list->find("set") : nullptr;
+        if (list->kind != Json::Kind::object || !list->count || list->count != uint32_t(!!move + !!remove + !!set)) return wrong.set(kShape), false;
+        if (set && (set->kind != Json::Kind::object || !set->count))
+            return join(wrong, "\"maps\": \"placement_changes\": ", list->name, ": \"set\" holds rows by their placement numbers, each with its option blobs"), false;
         if (move && (move->kind != Json::Kind::object || !move->count))
             return join(wrong, "\"maps\": \"placement_changes\": ", list->name, ": \"move\" holds rows by their placement numbers, each with where it goes"), false;
         if (remove && (remove->kind != Json::Kind::list || !remove->count))
@@ -461,6 +573,23 @@ bool placement_changes_well_formed(const Json& entry, Text& wrong) {
                 if (row_number(earlier->name, strlen(earlier->name), other) && other == number)
                     return join(wrong, "\"maps\": \"placement_changes\": ", list->name, " moves row ", row->name, " twice"), false;
         }
+        for (const Json* row = set ? set->first : nullptr; row; row = row->next) {
+            if (!row_number(row->name, strlen(row->name), number)) return join(wrong, "\"maps\": \"placement_changes\": ", list->name, ": \"set\": ", row->name, kNumber), false;
+            if (row->kind != Json::Kind::object || !row->count)
+                return join(wrong, "\"maps\": \"placement_changes\": ", list->name, ", row ", row->name,
+                            ": \"set\" gives a row option blobs by name, such as \"AI.Static\", each as hex text"), false;
+            for (const Json* blob = row->first; blob; blob = blob->next) {
+                if (!blob_name(blob->name))
+                    return join(wrong, "\"maps\": \"placement_changes\": ", list->name, ", row ", row->name, ": ", blob->name,
+                                " is no option blob: a blob is a field of the row's ActorSerializeParameter and its half, such as \"AI.Static\""), false;
+                if (!blob_hex(blob))
+                    return join(wrong, "\"maps\": \"placement_changes\": ", list->name, ", row ", row->name, ": ", blob->name,
+                                " is the blob's bytes as hex text, two digits each, at most a megabyte"), false;
+            }
+            for (const Json* earlier = set->first; earlier != row; earlier = earlier->next)
+                if (row_number(earlier->name, strlen(earlier->name), other) && other == number)
+                    return join(wrong, "\"maps\": \"placement_changes\": ", list->name, " sets row ", row->name, " twice"), false;
+        }
         for (const Json* row = remove ? remove->first : nullptr; row; row = row->next) {
             if (row->kind != Json::Kind::text || strlen(row->text) != row->bytes || !row_number(row->text, row->bytes, number))
                 return join(wrong, "\"maps\": \"placement_changes\": ", list->name, ": \"remove\": ", row->kind == Json::Kind::text ? row->text : "a value", kNumber), false;
@@ -470,6 +599,9 @@ bool placement_changes_well_formed(const Json& entry, Text& wrong) {
             for (const Json* moved = move ? move->first : nullptr; moved; moved = moved->next)
                 if (row_number(moved->name, strlen(moved->name), other) && other == number)
                     return join(wrong, "\"maps\": \"placement_changes\": ", list->name, " both moves and removes row ", row->text), false;
+            for (const Json* given = set ? set->first : nullptr; given; given = given->next)
+                if (row_number(given->name, strlen(given->name), other) && other == number)
+                    return join(wrong, "\"maps\": \"placement_changes\": ", list->name, " both sets and removes row ", row->text), false;
         }
     }
     return true;

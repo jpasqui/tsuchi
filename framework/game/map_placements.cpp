@@ -430,6 +430,16 @@ void placements_look(uint64_t world, const char* map, bool (*failed)(uint64_t pa
     }
 }
 
+bool placements_waiting(uint64_t world) {
+    for (uint32_t i = 0; i < wanted.count; ++i)
+        if (wanted[i].done_in != world) return true;
+    return false;
+}
+
+void placements_again() {
+    for (uint32_t i = 0; i < wanted.count; ++i) wanted[i].done_in = 0;
+}
+
 void placements_start(TSUCHI_Mod* context) { self = context; }
 
 PlacementCounts map_placement_counts() { return counts; }

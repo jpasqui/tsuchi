@@ -1,5 +1,5 @@
-// The "placement_changes" of a `maps` entry: rows of the game's own placement lists that a mod moves or removes,
-// so that the game places its own objects where the mod says, or not at all.
+// The "placement_changes" of a `maps` entry: rows of the game's own placement lists that a mod moves, removes or
+// gives other options, so that the game places its own objects where the mod says, as the mod says, or not at all.
 #pragma once
 #include <stdint.h>
 
@@ -14,6 +14,7 @@ struct Text;
 struct PlacementChangeCounts {
     uint32_t lists_changed;        // times the game read a list with a mod's changes in it
     uint32_t rows_moved, rows_removed; // rows the game read moved, and rows it did not read
+    uint32_t rows_given;               // rows the game read with options a mod gave them
     uint32_t lists_refused;        // times a mod's changes to a list were not made: a row it names is not there
     uint32_t from_save;            // times the game made a changed map from the save's record instead
 };
