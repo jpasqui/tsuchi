@@ -101,9 +101,9 @@ If any named actor is absent, Tsuchi refuses the whole sublevel entry and report
 ## Game objects
 
 The game makes its pots, gates, creatures, and treasures from its placement lists, not
-from the map's levels, so a `move` or `remove` in your changes file doesn't reach them. To
-move or remove one of them, change the row of the list that places it with
-`placement_changes`:
+from the map's levels, so a `move`, `remove` or `set` in your changes file doesn't reach
+them. To move or remove one of them, or to change its options, change the row of the list
+that places it with `placement_changes`:
 
 ```json
 "maps": [{
@@ -111,7 +111,8 @@ move or remove one of them, change the row of the list that places it with
   "placement_changes": {
     "/Game/Carrot4/Maps/Madori/Cave/Cave000/Cave000_F00/ActorPlacementInfo/AP_Cave000_F00_P_Objects": {
       "move": {"17179869271": {"location": [121, -49.9, 0], "rotation": [0, 28.6, 0]}},
-      "remove": ["17179869268"]
+      "remove": ["17179869268"],
+      "set": {"17179869300": {"AI.Static": "0300000000004843"}}
     }
   }
 }]
@@ -122,11 +123,20 @@ placement number, which is the `GenerateInfo.DebugUniqueId` of the object's acto
 game's level, written as text in decimal digits. A move takes `location`, `rotation`, and
 an optional `scale`, as in your changes file.
 
+An object's options, such as the color of a Pikmin sprout or the number of gold nuggets in a
+pile, are in its row as blobs: the fields of the row's `ActorSerializeParameter`, each with a
+`Static` and a `Dynamic` half. `set` gives a row blobs in place of the list's, named as
+`AI.Static` is, each written as hex text in the form the game's own code writes it, at the
+row's versions. The rest of the row stays as the list has it. Kadan writes these blobs for you
+when you change an option of one of the game's objects. A row can be moved and given blobs,
+but not removed and given blobs. If a blob you name isn't one the list's rows have, Tsuchi
+makes none of your changes to that list and names the blob in your log.
+
 Tsuchi applies your changes each time the game reads the list, and the game's files stay
 as they are. If several mods change one row, the game uses the change from the mod that
 loads later, and both mods' logs say so. If a row you name isn't in the list, Tsuchi makes
 none of your changes to that list and names the row in your log. Your log also lists each
-row that was moved or removed.
+row that was moved, removed or given options.
 
 The game reads a map's lists only for a save that hasn't been to the map. After that visit,
 the save keeps its own record of every object there, so the save keeps a removed object
