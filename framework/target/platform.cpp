@@ -17,7 +17,7 @@ enum : uint32_t { kRead = 1, kWrite = 2, kExecute = 4 };
 uint64_t query(MemoryInfo* info, uint64_t address) {
     register uint64_t result asm("x0") = reinterpret_cast<uint64_t>(info);
     register uint64_t at asm("x2") = address;
-    asm volatile("svc #6" : "+r"(result) : "r"(at) : "x1", "x3", "memory");
+    asm volatile("svc #6" : "+r"(result), "+r"(at) : : "x1", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "cc", "memory");
     return result;
 }
 
@@ -108,7 +108,7 @@ bool executable(uint64_t address) { return mapped(address, 4, kRead | kExecute, 
 void debug_output(const char* text, uint64_t length) {
     register uint64_t at asm("x0") = reinterpret_cast<uint64_t>(text);
     register uint64_t size asm("x1") = length;
-    asm volatile("svc #0x27" : "+r"(at) : "r"(size) : "x2", "x3", "memory");
+    asm volatile("svc #0x27" : "+r"(at), "+r"(size) : : "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "cc", "memory");
 }
 
 bool process_regions(uint64_t heap_alias_aslr[3]) {
@@ -119,7 +119,7 @@ bool process_regions(uint64_t heap_alias_aslr[3]) {
         register uint64_t value asm("x1") = kinds[i];
         register uint64_t handle asm("x2") = 0xffff8001u; // this process
         register uint64_t sub asm("x3") = 0;
-        asm volatile("svc #0x29" : "+r"(result), "+r"(value) : "r"(handle), "r"(sub) : "memory");
+        asm volatile("svc #0x29" : "+r"(result), "+r"(value), "+r"(handle), "+r"(sub) : : "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "cc", "memory");
         if (result) return false;
         heap_alias_aslr[i] = value;
     }

@@ -235,7 +235,7 @@ extern "C" void tsuchi_initialize() {
     // 20 microseconds: a lock is held for less, and the holder gets its core back in that time.
     set_thread_pause([] {
         register int64_t nanoseconds __asm__("x0") = 20000;
-        asm volatile("svc 0x0B" : "+r"(nanoseconds) : : "x1", "x2", "x3", "x4", "x5", "x6", "x7", "memory");
+        asm volatile("svc 0x0B" : "+r"(nanoseconds) : : "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "cc", "memory");
     });
     set_allocator({module_allocate, module_release});
     t::bind_functions(status.game_base);
@@ -352,7 +352,7 @@ extern "C" void tsuchi_initialize() {
     status.tick_was_stock = hook_entry_was_stock(tick_entry);
     if (serves(t::family::presenter)) presenter_start(self, [] { return uint64_t(tsuchi_libc_ticks()); }, [](uint32_t us) {
         register uint64_t nanoseconds __asm__("x0") = uint64_t(us) * 1000;
-        asm volatile("svc 0x0B" : "+r"(nanoseconds) : : "x1", "x2", "x3", "x4", "x5", "x6", "x7", "memory");
+        asm volatile("svc 0x0B" : "+r"(nanoseconds) : : "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "cc", "memory");
     });
 
     if (serves(t::family::audio)) {

@@ -31,7 +31,7 @@ static inline uint64_t nh_thread(void) { return nh_host_thread(); }
 static inline uint64_t nh_query(NH_MemoryInfo *info, uint64_t address) {
     register uint64_t result __asm__("x0") = (uint64_t)(uintptr_t)info;
     register uint64_t at __asm__("x2") = address;
-    __asm__ volatile("svc #6" : "+r"(result) : "r"(at) : "x1", "x3", "memory");
+    __asm__ volatile("svc #6" : "+r"(result), "+r"(at) : : "x1", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "cc", "memory");
     return result;
 }
 static inline uint64_t nh_thread(void) {
